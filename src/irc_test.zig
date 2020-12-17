@@ -1,5 +1,4 @@
 const std = @import("std");
-const wz = @import("wz");
 
 pub const io_mode = .evented;
 
@@ -24,13 +23,6 @@ pub fn main() !void {
         \\JOIN #{1}
         \\
     , .{ auth, nick });
-
-    defer {
-        writer.print(
-            \\PART #{}
-        , .{channel}) catch {};
-        std.debug.print("BYE\n", .{});
-    }
 
     var buf: [1024]u8 = undefined;
     while (true) {
