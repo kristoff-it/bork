@@ -37,6 +37,7 @@ pub fn main() !void {
             .resize => {
                 _ = @atomicRmw(usize, &Terminal.tick_index, .Sub, 1, .SeqCst);
                 log.writeAll("resize!!!\n") catch unreachable;
+                std.time.sleep(1000 * std.time.ns_per_ms);
                 need_repaint = true;
             },
             .display => |de| {

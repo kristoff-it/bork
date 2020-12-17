@@ -24,19 +24,19 @@ pub fn build(b: *Builder) void {
         run_cmd.addArgs(args);
     }
 
-    const irc_exe = b.addExecutable("irc_test", "src/irc_test.zig");
-    irc_exe.setTarget(target);
-    irc_exe.setBuildMode(mode);
-    irc_exe.install();
+    // const irc_exe = b.addExecutable("irc_test", "src/irc_test.zig");
+    // irc_exe.setTarget(target);
+    // irc_exe.setBuildMode(mode);
+    // irc_exe.install();
 
-    const irc_cmd = irc_exe.run();
-    run_cmd.step.dependOn(b.getInstallStep());
-    if (b.args) |args| {
-        irc_cmd.addArgs(args);
-    }
+    // const irc_cmd = irc_exe.run();
+    // run_cmd.step.dependOn(b.getInstallStep());
+    // if (b.args) |args| {
+    //     irc_cmd.addArgs(args);
+    // }
 
-    const irc_step = b.step("irc", "Run the irc test app");
-    irc_step.dependOn(&irc_cmd.step);
+    // const irc_step = b.step("irc", "Run the irc test app");
+    // irc_step.dependOn(&irc_cmd.step);
 
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);

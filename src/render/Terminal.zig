@@ -32,21 +32,14 @@ pub fn init(alloc: *std.mem.Allocator, log: std.fs.File.Writer, ch: *Channel(Glo
     {
         frames[0] = async addResizeEvent(ch, 0);
         frames[1] = async addResizeEvent(ch, 1);
-        // switch (std.builtin.os.tag) {
-        //     .macos => {},
-        //     .linux => {
-        //         std.os.sigaction(std.os.SIGWINCH, &std.os.Sigaction{
-        //             .sigaction = linuxWinchHandler,
-        //             .mask = std.os.empty_sigset,
-        //             .flags = 0,
-        //         }, null);
-        //     },
-        //     else => {},
-        // }
-
         std.os.sigaction(std.os.SIGWINCH, &std.os.Sigaction{
             .handler = .{ .handler = darwinWinchHandler },
-            .mask = 0,
+            .mask = switch (std.builtin.os.tag) {
+                .macos => 0,
+                .linux => std.os.empty_sigset,
+                .windows => @compileError(":3"),
+                else => @compileError("os not supported"),
+            },
             .flags = 0,
         }, null);
     }
@@ -59,21 +52,6 @@ pub fn init(alloc: *std.mem.Allocator, log: std.fs.File.Writer, ch: *Channel(Glo
     var size = try zbox.size();
     var output = try zbox.Buffer.init(alloc, size.height, size.width);
     errdefer output.deinit();
-
-    // Add top and bottom bars
-    {
-        var i: usize = 1;
-        while (i < size.width) : (i += 1) {
-            output.cellRef(0, i).* = .{
-                .char = ' ',
-                .attribs = .{ .bg_blue = true },
-            };
-            output.cellRef(size.height - 1, i).* = .{
-                .char = ' ',
-                .attribs = .{ .bg_blue = true },
-            };
-        }
-    }
 
     // Setup the buffer for chat history
     var chatBuf = try zbox.Buffer.init(alloc, size.height - 2, size.width);
@@ -101,10 +79,20 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
         self.output.clear();
     }
 
-    // Render the chat history
+    // Add top bar
     {
-        self.chatBuf.clear();
+        var i: usize = 1;
+        while (i < size.width) : (i += 1) {
+            self.output.cellRef(0, i).* = .{
+                .char = ' ',
+                .attribs = .{ .bg_blue = true },
+            };
+        }
+    }
 
+    // Render the chat history
+    history: {
+        self.chatBuf.clear();
         var message = chat.bottom_message;
         var row = self.chatBuf.height;
         var i: usize = 0;
@@ -114,11 +102,20 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
             var lines: usize = 1;
 
             // stop when no more space available.
-            if (lines > row) return;
+            if (lines > row) break :history;
+
             row -= lines;
 
             // write it
+
             try self.chatBuf.cursorAt(row, 1).writer().print("[nick]: {}", .{m.text});
+            self.chatBuf.cellRef(row, 1 + m.text.len + 8).* = .{
+                .image = @embedFile("../../kappa.txt"),
+            };
+
+            self.chatBuf.cellRef(row, 1 + m.text.len + 9).* = .{
+                .char = ' ',
+            };
         }
     }
 
@@ -155,6 +152,7 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
 
     self.output.blit(self.chatBuf, 1, 1);
     try zbox.push(self.output);
+    try self.log.writeAll("render complete\n");
 }
 
 pub var tick_index: usize = 0;
