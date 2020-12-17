@@ -2,7 +2,7 @@ const std = @import("std");
 const options = @import("build_options");
 const network = @import("network.zig");
 const Channel = @import("channel.zig").Channel;
-const Terminal = @import("render/terminal.zig");
+const Terminal = @import("render/Terminal.zig");
 const Chat = @import("Chat.zig");
 const Event = @import("events.zig").Event;
 
