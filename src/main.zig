@@ -1,17 +1,21 @@
 const std = @import("std");
 const options = @import("build_options");
+const Channel = @import("utils/channel.zig").Channel;
 const network = @import("network.zig");
-const Channel = @import("channel.zig").Channel;
-const Terminal = @import("render/Terminal.zig");
+const Terminal = @import("Terminal.zig");
 const Chat = @import("Chat.zig");
-const Event = @import("events.zig").Event;
 
 pub const io_mode = .evented;
 
 var log: std.fs.File.Writer = undefined;
 
+pub const Event = union(enum) {
+    display: Terminal.Event,
+    network: network.Event,
+};
+
 pub fn main() !void {
-    var l = try std.fs.cwd().createFile("log.txt", .{ .truncate = true, .intended_io_mode = .blocking });
+    var l = try std.fs.cwd().createFile("foo.log", .{ .truncate = true, .intended_io_mode = .blocking });
     log = l.writer();
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -20,35 +24,46 @@ pub fn main() !void {
     var buf: [24]Event = undefined;
     var ch = Channel(Event).init(&buf);
 
-    // initialize the display with stdin/out
     var display = try Terminal.init(alloc, log, &ch);
     defer display.deinit();
 
-    var display_runner = async getDisplayEvents(&ch);
     var network_runner = async getNetworkEvents(alloc, &ch);
 
     var chat = Chat{ .log = log };
 
+    var chaos = false;
     while (true) {
         var need_repaint = false;
 
         const event = ch.get();
         switch (event) {
-            .resize => {
-                _ = @atomicRmw(usize, &Terminal.tick_index, .Sub, 1, .SeqCst);
-                log.writeAll("resize!!!\n") catch unreachable;
-                std.time.sleep(1000 * std.time.ns_per_ms);
-                need_repaint = true;
-            },
             .display => |de| {
                 switch (de) {
+                    .chaos => {
+                        chaos = true;
+                        log.writeAll("CHAOS!\n") catch unreachable;
+                    },
+                    .calm => {
+                        log.writeAll("CALM!\n") catch unreachable;
+                        chaos = false;
+                        try display.sizeChanged();
+                        need_repaint = true;
+                    },
+                    .other => |c| {
+                        if (c[0] == 'r' or c[0] == 'R') {
+                            log.writeAll("[key] R\n") catch unreachable;
+                            try display.sizeChanged();
+                            need_repaint = true;
+                            chaos = false;
+                        }
+                    },
                     .up => {
                         need_repaint = chat.scroll(.up, 1);
                     },
                     .down => {
                         need_repaint = chat.scroll(.down, 1);
                     },
-                    .right, .left, .other, .tick, .escape => {},
+                    .right, .left, .tick, .escape => {},
                 }
             },
             .network => |ne| {
@@ -68,17 +83,13 @@ pub fn main() !void {
             },
         }
 
-        if (need_repaint) try display.renderChat(&chat);
+        if (need_repaint and !chaos) {
+            try display.renderChat(&chat);
+        }
     }
 
     // TODO: implement real cleanup
-    try await display_runner;
     try await network_runner;
-}
-fn getDisplayEvents(ch: *Channel(Event)) !void {
-    while (true) {
-        ch.put(Event{ .display = (try Terminal.nextEvent()) orelse continue });
-    }
 }
 
 fn getNetworkEvents(alloc: *std.mem.Allocator, ch: *Channel(Event)) !void {

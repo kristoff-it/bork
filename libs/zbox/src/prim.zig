@@ -19,6 +19,8 @@ usingnamespace @import("util.zig");
 /// Input events
 pub const Event = union(enum) {
     tick,
+    chaos,
+    calm,
     escape,
     up,
     down,
