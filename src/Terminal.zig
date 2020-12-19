@@ -125,16 +125,10 @@ pub fn sizeChanged(self: *Self) !void {
     try self.output.resize(size.height, size.width);
     try self.chatBuf.resize(size.height - 2, size.width);
     self.output.clear();
-    // try zbox.term.clear();
 }
 
 pub fn renderChat(self: *Self, chat: *Chat) !void {
     try self.log.writeAll("render\n");
-    // if (self.output.height != size.height or self.output.width != size.width) {
-    //     try self.output.resize(size.height, size.width);
-    //     try self.chatBuf.resize(size.height - 2, size.width);
-    //     self.output.clear();
-    // }
 
     // Add top bar
     {
@@ -146,6 +140,7 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
             };
         }
     }
+    try self.log.writeAll("###1\n");
 
     // Render the chat history
     {
@@ -165,20 +160,57 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
 
             // write it
 
-            try self.chatBuf.cursorAt(row, 1).writer().print("[nick]: {}", .{m.text});
-            self.chatBuf.cellRef(row, 1 + m.text.len + 8).* = .{
-                .image = @embedFile("../kappa.txt"),
-            };
+            switch (m.kind) {
+                .line => {
+                    try self.log.writeAll("line\n");
+                    var col: usize = 0;
+                    var cursor = self.chatBuf.cursorAt(row, col).writer();
+                    while (col < self.chatBuf.width) : (col += 1) {
+                        try cursor.print("-", .{});
+                    }
 
-            self.chatBuf.cellRef(row, 1 + m.text.len + 9).* = .{
-                .char = ' ',
-            };
+                    const msg = " :( ";
+                    if (self.chatBuf.width > msg.len) {
+                        var column = @divTrunc(self.chatBuf.width, 2) + (self.chatBuf.width % 2) - @divTrunc(msg.len, 2) - (msg.len % 2); // TODO: test this math lmao
+                        try self.chatBuf.cursorAt(row, column).writer().writeAll(msg);
+                    }
+                },
+                .chat => |text| {
+                    try self.log.writeAll("msg ");
+                    try self.log.writeAll(text);
+                    try self.log.writeAll("\n");
+
+                    try self.chatBuf.cursorAt(row, 0).writer().print("[nick]: {}", .{text});
+                    self.chatBuf.cellRef(row, text.len + 8).* = .{
+                        .image = @embedFile("../kappa.txt"),
+                    };
+
+                    self.chatBuf.cellRef(row, text.len + 9).* = .{
+                        .char = ' ',
+                    };
+                },
+            }
         }
     }
 
+    try self.log.writeAll("###2\n");
     // Render the bottom bar
     {
-        if (chat.last_message == chat.bottom_message) {
+        if (chat.disconnected) {
+            const msg = "DISCONNECTED";
+            if (self.output.width > msg.len) {
+                var column = @divTrunc(self.output.width, 2) + (self.chatBuf.width % 2) - @divTrunc(msg.len, 2) - (msg.len % 2); // TODO: test this math lmao
+                try self.output.cursorAt(self.output.height - 1, column).writer().writeAll(msg);
+            }
+
+            var i: usize = 1;
+            while (i < self.output.width) : (i += 1) {
+                self.output.cellRef(self.output.height - 1, i).attribs = .{
+                    .bg_red = true,
+                    .fg_black = true,
+                };
+            }
+        } else if (chat.last_message == chat.bottom_message) {
             var i: usize = 1;
             while (i < self.output.width) : (i += 1) {
                 self.output.cellRef(self.output.height - 1, i).* = .{
@@ -188,22 +220,28 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
             }
         } else {
             const msg = "DETACHED";
+            var column: usize = 0;
             if (self.output.width > msg.len) {
-                var column = @divTrunc(self.output.width, 2) - 4; // TODO: test this math lmao
+                column = @divTrunc(self.output.width, 2) + (self.chatBuf.width % 2) - @divTrunc(msg.len, 2) - (msg.len % 2); // TODO: test this math lmao
                 try self.output.cursorAt(self.output.height - 1, column).writer().writeAll(msg);
             }
 
             var i: usize = 1;
             while (i < self.output.width) : (i += 1) {
-                self.output.cellRef(self.output.height - 1, i).attribs = .{
+                var cell = self.output.cellRef(self.output.height - 1, i);
+                cell.attribs = .{
                     .bg_yellow = true,
                     .fg_black = true,
                     // TODO: why is bold messing around with fg?
                     // .bold = true,
                 };
+                if (i < column or i >= column + msg.len) {
+                    cell.char = ' ';
+                }
             }
         }
     }
+    try self.log.writeAll("###3\n");
 
     {}
 

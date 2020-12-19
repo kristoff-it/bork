@@ -1,18 +1,35 @@
 const std = @import("std");
 const display = @import("zbox");
 
+log: std.fs.File.Writer,
+allocator: *std.mem.Allocator,
 last_message: ?*Message = null,
 bottom_message: ?*Message = null,
-log: std.fs.File.Writer,
+disconnected: bool = false,
 
 const Self = @This();
 pub const Message = struct {
     prev: ?*Message = null,
     next: ?*Message = null,
-    text: []u8,
+    kind: union(enum) {
+        chat: []u8,
+        line,
+    },
 };
 
-
+pub fn setConnectionStatus(self: *Self, status: enum { disconnected, reconnected }) !void {
+    switch (status) {
+        .disconnected => self.disconnected = true,
+        .reconnected => {
+            if (self.disconnected) {
+                self.disconnected = false;
+                var msg = try self.allocator.create(Message);
+                msg.* = Message{ .kind = .line };
+                _ = self.addMessage(msg);
+            }
+        },
+    }
+}
 
 // Returns whether the scroll had any effect.
 pub fn scroll(self: *Self, direction: enum { up, down }, n: usize) bool {

@@ -1,28 +1,229 @@
 const std = @import("std");
-
-pub const Event = struct {
-    msg: []const u8,
+const Channel = @import("utils/channel.zig").Channel;
+const GlobalEventUnion = @import("main.zig").Event;
+pub const Event = union(enum) {
+    message: []u8,
+    connected,
+    disconnected,
+    reconnected,
+    // pub const Message = struct {
+    //     msg: []const u8,
+    // };
 };
 
-sock: std.fs.File,
-reader: std.fs.File.Reader,
-writer: std.fs.File.Writer,
+pub const UserCommand = union(enum) {
+    message: []const u8,
+    ban: []const u8,
+};
+const Command = union(enum) {
+    user: UserCommand,
+    pong,
+};
+
 name: []const u8,
 oauth: []const u8,
+allocator: *std.mem.Allocator,
+ch: *Channel(GlobalEventUnion),
+log: std.fs.File.Writer,
+socket: std.fs.File,
+reader: std.fs.File.Reader,
+writer: std.fs.File.Writer,
+writer_lock: std.event.Lock = .{},
+_atomic_reconnecting: bool = false,
 
 const Self = @This();
-pub fn init(alloc: *std.mem.Allocator, name: []const u8, oauth: []const u8) !Self {
+
+var reconnect_frame: @Frame(_reconnect) = undefined;
+// var messages_frame: @Frame(receiveMessages) = undefined;
+var messages_frame_bytes: []align(16) u8 = undefined;
+var messages_result: void = undefined;
+
+pub fn init(self: *Self, alloc: *std.mem.Allocator, ch: *Channel(GlobalEventUnion), log: std.fs.File.Writer, name: []const u8, oauth: []const u8) !void {
     var socket = try connect(alloc, name, oauth);
-    return Self{
+    self.* = Self{
+        .name = name,
+        .oauth = oauth,
+        .allocator = alloc,
+        .ch = ch,
+        .log = log,
         .socket = socket,
         .reader = socket.reader(),
         .writer = socket.writer(),
     };
+
+    // Allocate
+    messages_frame_bytes = try alloc.alignedAlloc(u8, @alignOf(@Frame(receiveMessages)), @sizeOf(@Frame(receiveMessages)));
+
+    // Start the reader
+    {
+        // messages_frame_bytes = async self.receiveMessages();
+        _ = @asyncCall(messages_frame_bytes, &messages_result, receiveMessages, .{self});
+    }
+}
+
+fn receiveMessages(self: *Self) void {
+    nosuspend self.log.print("reader started\n", .{}) catch {};
+    // yield immediately so callers can go on
+    // with their lives instead of risking being
+    // trapped reading a spammy socket forever
+    std.event.Loop.instance.?.yield();
+    while (true) {
+        var data = self.reader.readUntilDelimiterAlloc(self.allocator, '\n', 4096) catch {
+            self.reconnect(null);
+            return;
+        };
+        self.ch.put(GlobalEventUnion{ .network = .{ .message = data } });
+    }
+}
+
+// Public interface for sending commands (messages, bans, ...)
+pub fn sendCommand(self: *Self, cmd: UserCommand) !void {
+    return self.send(Command{ .user = cmd });
+}
+
+fn send(self: *Self, cmd: Command) !void {
+    if (self.isReconnecting()) {
+        return error.Reconnecting;
+    }
+
+    // NOTE: it could still be possible for a command
+    //       to remain stuck here while we are reconnecting,
+    //       but in most cases we'll be able to correctly
+    //       report that we can't carry out any command.
+    //       if the twitch chat system had unique command ids,
+    //       we could have opted to retry instead of failing
+    //       immediately, but without unique ids you risk
+    //       sending the same command twice.
+    var held = self.writer_lock.acquire();
+    self.writer.print("PRIVMSG #{} : {}\n", self.name, cmd.message) catch |err| {
+        // Try to start the reconnect procedure
+        self.reconnect(held);
+        return err;
+    };
+
+    held.release();
+}
+
+fn isReconnecting(self: *self) bool {
+    return @atomicLoad(bool, &self._atomic_reconnecting, .SeqCst);
+}
+
+// Tries to reconnect forever.
+// As an optimization, writers can pass ownership of the lock directly.
+fn reconnect(self: *Self, writer_held: ?std.event.Lock.Held) void {
+    if (@atomicRmw(bool, &self._atomic_reconnecting, .Xchg, true, .SeqCst)) {
+        if (writer_held) |h| h.release();
+        return;
+    }
+
+    // Start the reconnect procedure
+    reconnect_frame = async self._reconnect(writer_held);
+}
+
+// This function is a perfect example of what runDetached does,
+// with the exception that we don't want to allocate dynamic
+// memory for it.
+fn _reconnect(self: *Self, writer_held: ?std.event.Lock.Held) void {
+    var retries: usize = 0;
+    var backoff = [_]usize{
+        100, 400, 800, 2000, 5000, 10000, //ms
+    };
+
+    // Notify the system the connection is borked
+    self.ch.put(GlobalEventUnion{ .network = .disconnected });
+
+    // Ensure we have the writer lock
+    var held = writer_held orelse self.writer_lock.acquire();
+
+    self.socket.close();
+    // TODO: is closing the socket ok?
+    //       maybe it isn't at all and we need to do
+    //       something different.
+
+    // Sync with the reader. It will at one point notice
+    // that the connection is borked and return.
+    {
+        // await messages_frame;
+        await @ptrCast(anyframe->void, messages_frame_bytes);
+    }
+
+    // Reconnect the socket
+    {
+        // Compiler doesn't like the straight break from while,
+        // nor the labeled block version :(
+
+        // self.socket = while (true) {
+        //     break connect(self.allocator, self.name, self.oauth) catch |err| {
+        //         // TODO: panic on non-transient errors.
+        //         std.time.sleep(backoff[retries] * std.time.ns_per_ms);
+        //         if (retries < backoff.len - 1) {
+        //             retries += 1;
+        //         }
+        //         continue;
+        //     };
+        // };
+
+        // self.socket = blk: {
+        //     while (true) {
+        //         break :blk connect(self.allocator, self.name, self.oauth) catch |err| {
+        //             // TODO: panic on non-transient errors.
+        //             std.time.sleep(backoff[retries] * std.time.ns_per_ms);
+        //             if (retries < backoff.len - 1) {
+        //                 retries += 1;
+        //             }
+        //             continue;
+        //         };
+        //     }
+        // };
+        while (true) {
+            var s = connect(self.allocator, self.name, self.oauth) catch |err| {
+                // TODO: panic on non-transient errors.
+                std.time.sleep(backoff[retries] * std.time.ns_per_ms);
+                if (retries < backoff.len - 1) {
+                    retries += 1;
+                }
+                continue;
+            };
+            self.socket = s;
+            break;
+        }
+    }
+    self.reader = self.socket.reader();
+    self.writer = self.socket.writer();
+
+    // Suspend at the end to avoid a race condition
+    // where the check to resume a potential awaiter
+    // (nobody should be awaiting us) might end up
+    // reading the frame while a second reconnect
+    // attempt is running on the same frame, causing UB.
+    suspend {
+        // Reset the reconnecting flag
+        std.debug.assert(@atomicRmw(
+            bool,
+            &self._atomic_reconnecting,
+            .Xchg,
+            false,
+            .SeqCst,
+        ));
+
+        // Unblock commands
+        held.release();
+
+        // Notify the system all is good again
+        self.ch.put(GlobalEventUnion{ .network = .reconnected });
+
+        // Restart the reader
+        {
+            // messages_frame = async self.receiveMessages();
+            _ = @asyncCall(messages_frame_bytes, &messages_result, receiveMessages, .{self});
+        }
+    }
 }
 
 fn connect(alloc: *std.mem.Allocator, name: []const u8, oauth: []const u8) !std.fs.File {
-    var socket = try std.net.tcpConnectToHost(alloc, "irc.chat.twitch.tv", 6667);
-    errdefer self.socket.close();
+    // var socket = try std.net.tcpConnectToHost(alloc, "irc.chat.twitch.tv", 6667);
+    var socket = try std.net.tcpConnectToHost(alloc, "localhost", 6667);
+    errdefer socket.close();
 
     try socket.writer().print(
         \\PASS {0}
@@ -31,9 +232,10 @@ fn connect(alloc: *std.mem.Allocator, name: []const u8, oauth: []const u8) !std.
         \\CAP REQ :twitch.tv/commands
         \\JOIN #{1}
         \\
-    , .{ auth, nick });
+    , .{ oauth, name });
+
+    // TODO: read what we got back, instead of assuming that
+    //       all went well just because the bytes were shipped.
 
     return socket;
 }
-
-

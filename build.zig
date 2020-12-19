@@ -25,6 +25,7 @@ pub fn build(b: *Builder) void {
     }
 
     // const irc_exe = b.addExecutable("irc_test", "src/irc_test.zig");
+    // irc_exe.addPackagePath("mecha", "libs/mecha/mecha.zig");
     // irc_exe.setTarget(target);
     // irc_exe.setBuildMode(mode);
     // irc_exe.install();
