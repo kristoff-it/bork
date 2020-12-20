@@ -1,14 +1,14 @@
 const std = @import("std");
 const Channel = @import("utils/channel.zig").Channel;
 const GlobalEventUnion = @import("main.zig").Event;
+const Chat = @import("Chat.zig");
+const parser = @import("network/parser.zig");
+
 pub const Event = union(enum) {
-    message: []u8,
+    message: *Chat.Message,
     connected,
     disconnected,
     reconnected,
-    // pub const Message = struct {
-    //     msg: []const u8,
-    // };
 };
 
 pub const UserCommand = union(enum) {
@@ -72,16 +72,20 @@ fn receiveMessages(self: *Self) void {
             self.reconnect(null);
             return;
         };
-        self.ch.put(GlobalEventUnion{ .network = .{ .message = data } });
+
+        switch (parser.parseMessage(data[0 .. data.len - 1], self.allocator, self.log)) {
+            .none => {},
+            .ping => {
+                self.send(.pong);
+            },
+            .message => |msg| self.ch.put(GlobalEventUnion{ .network = .{ .message = msg } }),
+        }
     }
 }
 
 // Public interface for sending commands (messages, bans, ...)
 pub fn sendCommand(self: *Self, cmd: UserCommand) !void {
     return self.send(Command{ .user = cmd });
-}
-
-fn send(self: *Self, cmd: Command) !void {
     if (self.isReconnecting()) {
         return error.Reconnecting;
     }
@@ -94,12 +98,22 @@ fn send(self: *Self, cmd: Command) !void {
     //       we could have opted to retry instead of failing
     //       immediately, but without unique ids you risk
     //       sending the same command twice.
+}
+
+fn send(self: *Self, cmd: Command) void {
     var held = self.writer_lock.acquire();
-    self.writer.print("PRIVMSG #{} : {}\n", self.name, cmd.message) catch |err| {
+    var comm = switch (cmd) {
+        .pong => blk: {
+            nosuspend self.log.print("PONG!\n", .{}) catch {};
+            break :blk self.writer.print("PONG :tmi.twitch.tv\n", .{});
+        },
+        .user => {},
+    };
+
+    if (comm) |_| {} else |err| {
         // Try to start the reconnect procedure
         self.reconnect(held);
-        return err;
-    };
+    }
 
     held.release();
 }
@@ -221,8 +235,8 @@ fn _reconnect(self: *Self, writer_held: ?std.event.Lock.Held) void {
 }
 
 fn connect(alloc: *std.mem.Allocator, name: []const u8, oauth: []const u8) !std.fs.File {
-    // var socket = try std.net.tcpConnectToHost(alloc, "irc.chat.twitch.tv", 6667);
-    var socket = try std.net.tcpConnectToHost(alloc, "localhost", 6667);
+    var socket = try std.net.tcpConnectToHost(alloc, "irc.chat.twitch.tv", 6667);
+    // var socket = try std.net.tcpConnectToHost(alloc, "localhost", 6667);
     errdefer socket.close();
 
     try socket.writer().print(

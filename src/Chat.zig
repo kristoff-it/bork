@@ -12,7 +12,11 @@ pub const Message = struct {
     prev: ?*Message = null,
     next: ?*Message = null,
     kind: union(enum) {
-        chat: []u8,
+        chat: struct {
+            name: []const u8,
+            text: []const u8,
+            time: [5]u8,
+        },
         line,
     },
 };

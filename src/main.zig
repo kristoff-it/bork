@@ -27,8 +27,14 @@ pub fn main() !void {
     var display = try Terminal.init(alloc, log, &ch);
     defer display.deinit();
 
+    const auth = std.os.getenv("TWITCH_OAUTH") orelse @panic("missing TWITCH_OAUTH env variable");
+    if (!std.mem.startsWith(u8, auth, "oauth:"))
+        @panic("TWITCH_OAUTH needs to start with 'oauth:'");
+
+    const nick = "kristoff_it";
+
     var network: Network = undefined;
-    try network.init(alloc, &ch, log, "kristoff_it", "oauth");
+    try network.init(alloc, &ch, log, nick, auth);
 
     var chat = Chat{ .allocator = alloc, .log = log };
 
@@ -83,12 +89,9 @@ pub fn main() !void {
                     try chat.setConnectionStatus(.reconnected);
                     need_repaint = true;
                 },
-                .message => |msg| {
+                .message => |m| {
                     log.writeAll("got msg!\n") catch unreachable;
-
-                    var message = try gpa.allocator.create(Chat.Message);
-                    message.* = Chat.Message{ .kind = .{ .chat = msg } };
-                    need_repaint = chat.addMessage(message);
+                    need_repaint = chat.addMessage(m);
                 },
             },
         }
@@ -100,11 +103,3 @@ pub fn main() !void {
 
     // TODO: implement real cleanup
 }
-
-// fn getNetworkEvents(alloc: *std.mem.Allocator, ch: *Channel(Event)) !void {
-//     var i: usize = 0;
-//     while (true) : (i += 1) {
-//         std.time.sleep(1000 * std.time.ns_per_ms);
-//         const b = try std.fmt.allocPrint(alloc, "msg #{}!\n", .{i});
-//     }
-// }

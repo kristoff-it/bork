@@ -14,6 +14,7 @@ pub fn build(b: *Builder) void {
     const example_log = b.fmt("{}/{}/{}", .{ b.build_root, b.cache_root, "example.log" });
     const exe = b.addExecutable("zig-twitch-chat", "src/main.zig");
     exe.addPackagePath("zbox", "libs/zbox/src/box.zig");
+    exe.addPackagePath("datetime", "libs/datetime/datetime.zig");
     exe.setTarget(target);
     exe.setBuildMode(mode);
     exe.install();

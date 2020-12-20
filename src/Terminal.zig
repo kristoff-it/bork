@@ -55,7 +55,7 @@ pub fn init(alloc: *std.mem.Allocator, log: std.fs.File.Writer, ch: *Channel(Glo
     errdefer output.deinit();
 
     // Setup the buffer for chat history
-    var chatBuf = try zbox.Buffer.init(alloc, size.height - 2, size.width);
+    var chatBuf = try zbox.Buffer.init(alloc, size.height - 2, size.width - 1);
 
     // NOTE: frames can't be copied so copy elision is required
     return Self{
@@ -144,50 +144,134 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
 
     // Render the chat history
     {
+        // NOTE: chat history is rendered bottom-up, starting from the newest
+        //       message visible at the bottom, going up to the oldest.
+        //       within the context of each message, instead, rendering
+        //       is top-down, starting from the first line of the message,
+        //       progressing down to the last.
         self.chatBuf.clear();
         var message = chat.bottom_message;
         var row = self.chatBuf.height;
         var i: usize = 0;
         while (message) |m| : (message = m.prev) {
+            // Break if we dont' have more space
+            if (row == 0) break;
+
             i += 1;
-            // Compute how much space msg will take
-            var lines: usize = 1;
 
-            // stop when no more space available.
-            if (lines > row) break;
+            // Compute how much space msg will take.
+            // NOTE: The message is padded on each line
+            // by 6 spaces (HH:MM )
+            //              123456
+            const padding = 6;
 
-            row -= lines;
+            // TODO: do something when the terminal has less than `padding` columns?
+            const padded_width = self.chatBuf.width - padding;
+            const lines: usize = switch (m.kind) {
+                .line => 1,
+                .chat => |c| blk: {
+                    // Get unicode length of the message
+                    const msg_len = try std.unicode.utf8CountCodepoints(c.text);
+                    break :blk @divTrunc(msg_len, padded_width) + if (msg_len % padded_width == 0)
+                        @as(usize, 0)
+                    else
+                        @as(usize, 1);
+                },
+            };
+
+            const end_row = row;
+            row -= std.math.min(row, lines);
 
             // write it
-
             switch (m.kind) {
                 .line => {
-                    try self.log.writeAll("line\n");
-                    var col: usize = 0;
+                    // NOTE: since line takes only one row and we break when row == 0,
+                    //       we don't have to check for space.
+                    var col: usize = 1;
                     var cursor = self.chatBuf.cursorAt(row, col).writer();
-                    while (col < self.chatBuf.width) : (col += 1) {
+                    while (col < self.chatBuf.width - 1) : (col += 1) {
                         try cursor.print("-", .{});
                     }
 
-                    const msg = " :( ";
+                    const msg = "[RECONNECTED]";
                     if (self.chatBuf.width > msg.len) {
-                        var column = @divTrunc(self.chatBuf.width, 2) + (self.chatBuf.width % 2) - @divTrunc(msg.len, 2) - (msg.len % 2); // TODO: test this math lmao
+                        var column = @divTrunc(self.chatBuf.width, 2) + (self.chatBuf.width % 2) - @divTrunc(msg.len, 2) - (msg.len % 2) - 1; // TODO: test this math lmao
                         try self.chatBuf.cursorAt(row, column).writer().writeAll(msg);
                     }
                 },
-                .chat => |text| {
-                    try self.log.writeAll("msg ");
-                    try self.log.writeAll(text);
-                    try self.log.writeAll("\n");
+                .chat => |c| {
+                    // NOTE: we might not have enough space for the whole message,
+                    //       in which case we need to skip the first line(s) and only
+                    //       print the last (few).
+                    var cp_iter = (try std.unicode.Utf8View.init(c.text)).iterator();
+                    {
+                        var idx = if (lines > end_row)
+                            (lines - end_row) * padded_width
+                        else
+                            @as(usize, 0);
 
-                    try self.chatBuf.cursorAt(row, 0).writer().print("[nick]: {}", .{text});
-                    self.chatBuf.cellRef(row, text.len + 8).* = .{
-                        .image = @embedFile("../kappa.txt"),
-                    };
+                        while (idx > 0) : (idx -= 1) {
+                            _ = cp_iter.nextCodepoint();
+                        }
+                    }
 
-                    self.chatBuf.cellRef(row, text.len + 9).* = .{
-                        .char = ' ',
-                    };
+                    var current_row = row;
+                    while (current_row < end_row) : (current_row += 1) {
+                        var rowCells = self.chatBuf.row(current_row);
+
+                        for (rowCells) |*cell, cell_idx| {
+                            if (cell_idx < padding) {
+                                cell.* = .{
+                                    .char = ' ',
+                                };
+                            } else {
+                                if (cp_iter.nextCodepoint()) |cp| {
+                                    cell.* = .{
+                                        .char = cp,
+                                    };
+                                } else {
+                                    cell.* = .{
+                                        .char = ' ',
+                                    };
+                                }
+                            }
+                        }
+                    }
+
+                    // Do we have space for the nickname?
+                    blk: {
+                        if (row > 0) {
+                            if (m.prev) |prev| {
+                                const same_name = switch (prev.kind) {
+                                    .line => false,
+                                    .chat => |c_prev| std.mem.eql(u8, c.name, c_prev.name),
+                                };
+                                if (same_name) {
+                                    const prev_time = prev.kind.chat.time;
+                                    if (std.meta.eql(prev_time, c.time)) {
+                                        try self.chatBuf.cursorAt(row, 0).writer().writeAll("   >>");
+                                    } else {
+                                        try self.chatBuf.cursorAt(row, 0).writer().writeAll(&c.time);
+                                    }
+                                    break :blk;
+                                }
+                            }
+                            row -= 1;
+                            var nick = c.name[0..std.math.min(self.chatBuf.width, c.name.len)];
+                            try self.chatBuf.cursorAt(row, 0).writer().print(
+                                "{} <{}>",
+                                .{ c.time, nick },
+                            );
+                        }
+                    }
+
+                    // self.chatBuf.cellRef(row, msg.text.len + msg.name.len + 4).* = .{
+                    //     .image = @embedFile("../kappa.txt"),
+                    // };
+
+                    // self.chatBuf.cellRef(row, msg.text.len + msg.name.len + 4 + 1).* = .{
+                    //     .char = ' ',
+                    // };
                 },
             }
         }
