@@ -5,7 +5,7 @@ const Chat = @import("Chat.zig");
 const parser = @import("network/parser.zig");
 
 pub const Event = union(enum) {
-    message: *Chat.Message,
+    message: Chat.Message,
     connected,
     disconnected,
     reconnected,

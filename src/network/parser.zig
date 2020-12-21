@@ -6,7 +6,7 @@ const Chat = @import("../Chat.zig");
 const ParseResult = union(enum) {
     none,
     ping,
-    message: *Chat.Message,
+    message: Chat.Message,
 };
 
 pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, log: std.fs.File.Writer) ParseResult {
@@ -87,20 +87,22 @@ pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, log: std.fs.File.Writ
             now.time.minute,
         }) catch unreachable;
 
-        var chat_message = alloc.create(Chat.Message) catch {
-            // TODO: be smart about allocating
-            nosuspend log.print("parser warning OOM: [{}]\n", .{data}) catch {};
-            return .none;
-        };
-        chat_message.* = Chat.Message{
-            .kind = .{
-                .chat = .{ .name = nick, .text = msg, .time = time },
+        // nosuspend log.print("msg: [{}]\n", .{chat_message.*}) catch {};
+        return ParseResult{
+            .message = Chat.Message{
+                .kind = .{
+                    .chat = .{
+                        .name = nick,
+                        .text = msg,
+                        .time = time,
+                    },
+                },
             },
         };
 
-        // nosuspend log.print("msg: [{}]\n", .{chat_message.*}) catch {};
-        return ParseResult{ .message = chat_message };
-
+        // } else if (std.mem.eql(u8, msgType, "ROOMSTATE")) {
+        // } else if (std.mem.eql(u8, msgType, "ROOMSTATE")) {
+        // } else if (std.mem.eql(u8, msgType, "ROOMSTATE")) {
         // } else if (std.mem.eql(u8, msgType, "ROOMSTATE")) {
     } else {
         nosuspend log.print("parser warning unknown msg type: [{}]\n", .{data}) catch {};

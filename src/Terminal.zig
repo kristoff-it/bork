@@ -8,12 +8,24 @@ const GlobalEventUnion = @import("main.zig").Event;
 pub const Event = zbox.Event;
 pub const getSize = zbox.size;
 
+pub const TerminalMessage = struct {
+    chat_message: Chat.Message,
+    buffer: zbox.Buffer,
+};
+
 // State
+allocator: *std.mem.Allocator,
 log: std.fs.File.Writer,
 output: zbox.Buffer,
 chatBuf: zbox.Buffer,
 ticker: @Frame(startTicking),
 notifs: @Frame(notifyDisplayEvents),
+
+// Static config
+// The message is padded on each line
+// by 6 spaces (HH:MM )
+//              123456
+const padding = 6;
 
 const Self = @This();
 var done_init = false;
@@ -34,7 +46,7 @@ pub fn init(alloc: *std.mem.Allocator, log: std.fs.File.Writer, ch: *Channel(Glo
 
     // 144fps repaints
     {
-        // TODO: debug why some resizings corrupt everything irreversibly
+        // TODO: debug why some resizings corrupt everything irreversibly;
         //       in the meantime users can press R to repaint everything.
 
         // std.os.sigaction(std.os.SIGWINCH, &std.os.Sigaction{
@@ -55,10 +67,11 @@ pub fn init(alloc: *std.mem.Allocator, log: std.fs.File.Writer, ch: *Channel(Glo
     errdefer output.deinit();
 
     // Setup the buffer for chat history
-    var chatBuf = try zbox.Buffer.init(alloc, size.height - 2, size.width - 1);
+    var chatBuf = try zbox.Buffer.init(alloc, size.height - 2, size.width - 2);
 
     // NOTE: frames can't be copied so copy elision is required
     return Self{
+        .allocator = alloc,
         .log = log,
         .chatBuf = chatBuf,
         .output = output,
@@ -71,6 +84,90 @@ pub fn init(alloc: *std.mem.Allocator, log: std.fs.File.Writer, ch: *Channel(Glo
 var dirty: bool = false;
 fn winchHandler(signum: c_int) callconv(.C) void {
     _ = @atomicRmw(bool, &dirty, .Xchg, true, .SeqCst);
+}
+
+// This function allocates a TerminalMessage and returns a pointer
+// to the chat message field. Later, when rendering the application,
+// we'll use @fieldParentPointer() to "navigate up" to the full
+// scruture from the linked list that Chat keeps.
+pub fn prepareMessage(self: *Self, chatMsg: Chat.Message) !*Chat.Message {
+    var term_msg = try self.allocator.create(TerminalMessage);
+
+    term_msg.* = .{
+        .chat_message = chatMsg,
+        .buffer = try zbox.Buffer.init(self.allocator, 1, self.chatBuf.width - padding),
+    };
+    try renderMessage(self.allocator, self.log, term_msg);
+
+    return &term_msg.chat_message;
+}
+
+// NOTE: callers must clear the buffer when necessary (when size changes)
+fn renderMessage(alloc: *std.mem.Allocator, log: std.fs.File.Writer, msg: *TerminalMessage) !void {
+    const width = msg.buffer.width;
+    var height = msg.buffer.height;
+
+    var cursor = msg.buffer.wrappedCursorAt(0, 0).writer();
+    log.writeAll("started rendering msg!\n") catch unreachable;
+    switch (msg.chat_message.kind) {
+        .line => {},
+        .chat => |c| {
+            var it = std.mem.tokenize(c.text, " ");
+            while (it.next()) |word| {
+                log.writeAll(word) catch unreachable;
+                log.writeAll("\n") catch unreachable;
+                const word_len = try std.unicode.utf8CountCodepoints(word);
+                if (word_len >= width) {
+                    // big word, wow
+
+                    // How many rows considering that we might be on a row
+                    // with something already written on it?
+                    const rows = blk: {
+                        const len = word_len + cursor.context.col_num;
+                        const rows = @divTrunc(len, width) + if (len % width == 0)
+                            @as(usize, 0)
+                        else
+                            @as(usize, 1);
+                        break :blk rows;
+                    };
+
+                    // Ensure we have enough rows
+                    {
+                        const missing_rows: isize = @intCast(isize, cursor.context.row_num + rows) - @intCast(isize, height);
+                        if (missing_rows > 0) {
+                            height = height + @intCast(usize, missing_rows);
+                            try msg.buffer.resize(height, width);
+                            cursor = msg.buffer.wrappedCursorAt(
+                                cursor.context.row_num,
+                                cursor.context.col_num,
+                            ).writer();
+                        }
+                    }
+
+                    // Write the word, make use of the wrapping cursor
+                    try cursor.writeAll(word);
+                } else if (word_len <= width - cursor.context.col_num) {
+                    // word fits in this row
+                    try cursor.writeAll(word);
+                } else {
+                    // word fits the width (i.e. it shouldn't be broken up)
+                    // but it doesn't fit, let's add a line for it.
+                    height += 1;
+                    try msg.buffer.resize(height, width);
+
+                    // Add a newline if we're not at the end
+                    if (cursor.context.col_num < width) try cursor.writeAll("\n");
+                    try cursor.writeAll(word);
+                }
+
+                // If we're not at the end of the line, add a space
+                if (cursor.context.col_num < width) {
+                    try cursor.writeAll(" ");
+                }
+            }
+        },
+    }
+    log.writeAll("done rendering msg!\n") catch unreachable;
 }
 
 pub fn startTicking(ch: *Channel(GlobalEventUnion), log: std.fs.File.Writer) void {
@@ -122,9 +219,11 @@ pub fn deinit(self: *Self) void {
 pub fn sizeChanged(self: *Self) !void {
     self.log.writeAll("resizing\n") catch {};
     const size = try zbox.size();
-    try self.output.resize(size.height, size.width);
-    try self.chatBuf.resize(size.height - 2, size.width);
-    self.output.clear();
+    if (size.width != self.output.width or size.height != self.output.height) {
+        try self.output.resize(size.height, size.width);
+        try self.chatBuf.resize(size.height - 2, size.width - 2);
+        self.output.clear();
+    }
 }
 
 pub fn renderChat(self: *Self, chat: *Chat) !void {
@@ -133,7 +232,7 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
     // Add top bar
     {
         var i: usize = 1;
-        while (i < self.output.width) : (i += 1) {
+        while (i < self.output.width - 1) : (i += 1) {
             self.output.cellRef(0, i).* = .{
                 .char = ' ',
                 .attribs = .{ .bg_blue = true },
@@ -156,35 +255,32 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
         while (message) |m| : (message = m.prev) {
             // Break if we dont' have more space
             if (row == 0) break;
-
             i += 1;
-
-            // Compute how much space msg will take.
-            // NOTE: The message is padded on each line
-            // by 6 spaces (HH:MM )
-            //              123456
-            const padding = 6;
 
             // TODO: do something when the terminal has less than `padding` columns?
             const padded_width = self.chatBuf.width - padding;
-            const lines: usize = switch (m.kind) {
-                .line => 1,
-                .chat => |c| blk: {
-                    // Get unicode length of the message
-                    const msg_len = try std.unicode.utf8CountCodepoints(c.text);
-                    break :blk @divTrunc(msg_len, padded_width) + if (msg_len % padded_width == 0)
-                        @as(usize, 0)
-                    else
-                        @as(usize, 1);
-                },
-            };
+            // const lines: usize = switch (m.kind) {
+            //     .line => 1,
+            //     .chat => |c| blk: {
+            //         // Get unicode length of the message
+            //         const msg_len = try std.unicode.utf8CountCodepoints(c.text);
+            //         break :blk @divTrunc(msg_len, padded_width) + if (msg_len % padded_width == 0)
+            //             @as(usize, 0)
+            //         else
+            //             @as(usize, 1);
+            //     },
+            // };
 
-            const end_row = row;
-            row -= std.math.min(row, lines);
+            // const end_row = row;
+            // row -= std.math.min(row, lines);
 
             // write it
             switch (m.kind) {
                 .line => {
+
+                    // Update the row position
+                    row -= 1;
+
                     // NOTE: since line takes only one row and we break when row == 0,
                     //       we don't have to check for space.
                     var col: usize = 1;
@@ -200,43 +296,28 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                     }
                 },
                 .chat => |c| {
-                    // NOTE: we might not have enough space for the whole message,
-                    //       in which case we need to skip the first line(s) and only
-                    //       print the last (few).
-                    var cp_iter = (try std.unicode.Utf8View.init(c.text)).iterator();
-                    {
-                        var idx = if (lines > end_row)
-                            (lines - end_row) * padded_width
-                        else
-                            @as(usize, 0);
+                    var term_message = @fieldParentPtr(TerminalMessage, "chat_message", m);
 
-                        while (idx > 0) : (idx -= 1) {
-                            _ = cp_iter.nextCodepoint();
-                        }
+                    // re-render the message if width changed in the meantime
+                    if (padded_width != term_message.buffer.width) {
+                        try self.log.writeAll("must rerender msg \n");
+
+                        term_message.buffer.deinit();
+                        term_message.buffer = try zbox.Buffer.init(self.allocator, 1, padded_width);
+                        try renderMessage(self.allocator, self.log, term_message);
                     }
 
-                    var current_row = row;
-                    while (current_row < end_row) : (current_row += 1) {
-                        var rowCells = self.chatBuf.row(current_row);
+                    // Update the row position
+                    // NOTE: row stops at zero, but we want to blit at
+                    //       negative coordinates if we have to.
+                    const msg_height = term_message.buffer.height;
+                    self.chatBuf.blit(
+                        term_message.buffer,
+                        @intCast(isize, row) - @intCast(isize, msg_height),
+                        padding,
+                    );
 
-                        for (rowCells) |*cell, cell_idx| {
-                            if (cell_idx < padding) {
-                                cell.* = .{
-                                    .char = ' ',
-                                };
-                            } else {
-                                if (cp_iter.nextCodepoint()) |cp| {
-                                    cell.* = .{
-                                        .char = cp,
-                                    };
-                                } else {
-                                    cell.* = .{
-                                        .char = ' ',
-                                    };
-                                }
-                            }
-                        }
-                    }
+                    row -= std.math.min(msg_height, row);
 
                     // Do we have space for the nickname?
                     blk: {
@@ -249,29 +330,37 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                                 if (same_name) {
                                     const prev_time = prev.kind.chat.time;
                                     if (std.meta.eql(prev_time, c.time)) {
-                                        try self.chatBuf.cursorAt(row, 0).writer().writeAll("   >>");
+                                        var cur = self.chatBuf.cursorAt(row, 0);
+                                        cur.attribs = .{
+                                            .fg_red = true,
+                                        };
+                                        try cur.writer().writeAll("   >>");
                                     } else {
-                                        try self.chatBuf.cursorAt(row, 0).writer().writeAll(&c.time);
+                                        var cur = self.chatBuf.cursorAt(row, 0);
+                                        // cur.attribs = .{
+                                        //     .fg_magenta = true,
+                                        // };
+                                        try cur.writer().writeAll(&c.time);
                                     }
                                     break :blk;
                                 }
                             }
                             row -= 1;
                             var nick = c.name[0..std.math.min(self.chatBuf.width, c.name.len)];
-                            try self.chatBuf.cursorAt(row, 0).writer().print(
+                            var cur = self.chatBuf.cursorAt(row, 0);
+                            cur.attribs = .{
+                                .bold = true,
+                            };
+                            try cur.writer().print(
                                 "{} <{}>",
                                 .{ c.time, nick },
                             );
+
+                            self.chatBuf.cellRef(cur.row_num, self.chatBuf.width - 2).* = .{
+                                .image = @embedFile("../kappa.txt"),
+                            };
                         }
                     }
-
-                    // self.chatBuf.cellRef(row, msg.text.len + msg.name.len + 4).* = .{
-                    //     .image = @embedFile("../kappa.txt"),
-                    // };
-
-                    // self.chatBuf.cellRef(row, msg.text.len + msg.name.len + 4 + 1).* = .{
-                    //     .char = ' ',
-                    // };
                 },
             }
         }
@@ -280,15 +369,16 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
     try self.log.writeAll("###2\n");
     // Render the bottom bar
     {
+        const width = self.output.width - 1;
         if (chat.disconnected) {
             const msg = "DISCONNECTED";
-            if (self.output.width > msg.len) {
-                var column = @divTrunc(self.output.width, 2) + (self.chatBuf.width % 2) - @divTrunc(msg.len, 2) - (msg.len % 2); // TODO: test this math lmao
+            if (width > msg.len) {
+                var column = @divTrunc(width, 2) + (width % 2) - @divTrunc(msg.len, 2) - (msg.len % 2); // TODO: test this math lmao
                 try self.output.cursorAt(self.output.height - 1, column).writer().writeAll(msg);
             }
 
             var i: usize = 1;
-            while (i < self.output.width) : (i += 1) {
+            while (i < width) : (i += 1) {
                 self.output.cellRef(self.output.height - 1, i).attribs = .{
                     .bg_red = true,
                     .fg_black = true,
@@ -296,7 +386,7 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
             }
         } else if (chat.last_message == chat.bottom_message) {
             var i: usize = 1;
-            while (i < self.output.width) : (i += 1) {
+            while (i < width) : (i += 1) {
                 self.output.cellRef(self.output.height - 1, i).* = .{
                     .char = ' ',
                     .attribs = .{ .bg_blue = true },
@@ -305,13 +395,13 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
         } else {
             const msg = "DETACHED";
             var column: usize = 0;
-            if (self.output.width > msg.len) {
-                column = @divTrunc(self.output.width, 2) + (self.chatBuf.width % 2) - @divTrunc(msg.len, 2) - (msg.len % 2); // TODO: test this math lmao
+            if (width > msg.len) {
+                column = @divTrunc(width, 2) + (width % 2) - @divTrunc(msg.len, 2) - (msg.len % 2); // TODO: test this math lmao
                 try self.output.cursorAt(self.output.height - 1, column).writer().writeAll(msg);
             }
 
             var i: usize = 1;
-            while (i < self.output.width) : (i += 1) {
+            while (i < width) : (i += 1) {
                 var cell = self.output.cellRef(self.output.height - 1, i);
                 cell.attribs = .{
                     .bg_yellow = true,

@@ -15,23 +15,31 @@ pub const Event = union(enum) {
 };
 
 pub fn main() !void {
-    var l = try std.fs.cwd().createFile("foo.log", .{ .truncate = true, .intended_io_mode = .blocking });
-    log = l.writer();
-
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     var alloc = &gpa.allocator;
+    const nick = nick: {
+        var it = std.process.ArgIterator.init();
+        var exe_name = try (it.next(alloc) orelse @panic("no executable name as first argument!?")); // burn exe name
+        defer alloc.free(exe_name);
+
+        break :nick try (it.next(alloc) orelse {
+            std.debug.print("Usage: ./twitch-chat your_channel_name\n", .{});
+            return;
+        });
+    };
+
+    const auth = std.os.getenv("TWITCH_OAUTH") orelse @panic("missing TWITCH_OAUTH env variable");
+    if (!std.mem.startsWith(u8, auth, "oauth:"))
+        @panic("TWITCH_OAUTH needs to start with 'oauth:'");
+
+    var l = try std.fs.cwd().createFile("twitch-chat.log", .{ .truncate = true, .intended_io_mode = .blocking });
+    log = l.writer();
 
     var buf: [24]Event = undefined;
     var ch = Channel(Event).init(&buf);
 
     var display = try Terminal.init(alloc, log, &ch);
     defer display.deinit();
-
-    const auth = std.os.getenv("TWITCH_OAUTH") orelse @panic("missing TWITCH_OAUTH env variable");
-    if (!std.mem.startsWith(u8, auth, "oauth:"))
-        @panic("TWITCH_OAUTH needs to start with 'oauth:'");
-
-    const nick = "kristoff_it";
 
     var network: Network = undefined;
     try network.init(alloc, &ch, log, nick, auth);
@@ -91,7 +99,12 @@ pub fn main() !void {
                 },
                 .message => |m| {
                     log.writeAll("got msg!\n") catch unreachable;
-                    need_repaint = chat.addMessage(m);
+
+                    // Terminal wants to pre-render the message
+                    // and keep a small buffer attached to the message
+                    // as a form of caching.
+                    const msg = try display.prepareMessage(m);
+                    need_repaint = chat.addMessage(msg);
                 },
             },
         }
