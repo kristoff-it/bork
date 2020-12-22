@@ -108,56 +108,92 @@ fn renderMessage(alloc: *std.mem.Allocator, log: std.fs.File.Writer, msg: *Termi
     var height = msg.buffer.height;
 
     var cursor = msg.buffer.wrappedCursorAt(0, 0).writer();
+    cursor.context.attribs = .{
+        .normal = true,
+    };
     log.writeAll("started rendering msg!\n") catch unreachable;
     switch (msg.chat_message.kind) {
         .line => {},
         .chat => |c| {
             var it = std.mem.tokenize(c.text, " ");
-            while (it.next()) |word| {
-                log.writeAll(word) catch unreachable;
+            var emote_idx: usize = 0;
+            while (it.next()) |w| {
+                log.writeAll(w) catch unreachable;
                 log.writeAll("\n") catch unreachable;
-                const word_len = try std.unicode.utf8CountCodepoints(word);
-                if (word_len >= width) {
-                    // big word, wow
 
-                    // How many rows considering that we might be on a row
-                    // with something already written on it?
-                    const rows = blk: {
-                        const len = word_len + cursor.context.col_num;
-                        const rows = @divTrunc(len, width) + if (len % width == 0)
-                            @as(usize, 0)
-                        else
-                            @as(usize, 1);
-                        break :blk rows;
-                    };
+                if (emote_idx < c.meta.emotes.len and
+                    c.meta.emotes[emote_idx].end == it.index - 1)
+                {
+                    const emote = @embedFile("../kappa.txt"); // "⚡"; //
+                    const emote_len = 2;
+                    emote_idx += 1;
 
-                    // Ensure we have enough rows
-                    {
-                        const missing_rows: isize = @intCast(isize, cursor.context.row_num + rows) - @intCast(isize, height);
-                        if (missing_rows > 0) {
-                            height = height + @intCast(usize, missing_rows);
-                            try msg.buffer.resize(height, width);
-                            cursor = msg.buffer.wrappedCursorAt(
-                                cursor.context.row_num,
-                                cursor.context.col_num,
-                            ).writer();
-                        }
+                    if (emote_len <= width - cursor.context.col_num) {
+                        // emote fits in this row
+                        msg.buffer.cellRef(
+                            cursor.context.row_num,
+                            cursor.context.col_num,
+                        ).* = .{
+                            .image = emote,
+                        };
+                        cursor.context.col_num += 2;
+                    } else {
+                        // emote doesn't fit, let's add a line for it.
+                        height += 1;
+                        try msg.buffer.resize(height, width);
+
+                        cursor.context.col_num = 2;
+                        cursor.context.row_num += 1;
+                        msg.buffer.cellRef(cursor.context.row_num, 0).* = .{
+                            .image = emote,
+                        };
                     }
-
-                    // Write the word, make use of the wrapping cursor
-                    try cursor.writeAll(word);
-                } else if (word_len <= width - cursor.context.col_num) {
-                    // word fits in this row
-                    try cursor.writeAll(word);
                 } else {
-                    // word fits the width (i.e. it shouldn't be broken up)
-                    // but it doesn't fit, let's add a line for it.
-                    height += 1;
-                    try msg.buffer.resize(height, width);
+                    const word = w;
+                    const word_len = try std.unicode.utf8CountCodepoints(w);
 
-                    // Add a newline if we're not at the end
-                    if (cursor.context.col_num < width) try cursor.writeAll("\n");
-                    try cursor.writeAll(word);
+                    if (word_len >= width) {
+                        // a link or a very big word
+
+                        // How many rows considering that we might be on a row
+                        // with something already written on it?
+                        const rows = blk: {
+                            const len = word_len + cursor.context.col_num;
+                            const rows = @divTrunc(len, width) + if (len % width == 0)
+                                @as(usize, 0)
+                            else
+                                @as(usize, 1);
+                            break :blk rows;
+                        };
+
+                        // Ensure we have enough rows
+                        {
+                            const missing_rows: isize = @intCast(isize, cursor.context.row_num + rows) - @intCast(isize, height);
+                            if (missing_rows > 0) {
+                                height = height + @intCast(usize, missing_rows);
+                                try msg.buffer.resize(height, width);
+                                cursor = msg.buffer.wrappedCursorAt(
+                                    cursor.context.row_num,
+                                    cursor.context.col_num,
+                                ).writer();
+                            }
+                        }
+
+                        // Write the word, make use of the wrapping cursor
+                        try cursor.writeAll(word);
+                    } else if (word_len <= width - cursor.context.col_num) {
+                        // word fits in this row
+                        try cursor.writeAll(word);
+                    } else {
+                        // word fits the width (i.e. it shouldn't be broken up)
+                        // but it doesn't fit, let's add a line for it.
+                        height += 1;
+                        try msg.buffer.resize(height, width);
+
+                        // Add a newline if we're not at the end
+                        if (cursor.context.col_num < width) try cursor.writeAll("\n");
+                        try cursor.writeAll(word);
+                    }
                 }
 
                 // If we're not at the end of the line, add a space
@@ -223,6 +259,8 @@ pub fn sizeChanged(self: *Self) !void {
         try self.output.resize(size.height, size.width);
         try self.chatBuf.resize(size.height - 2, size.width - 2);
         self.output.clear();
+        try zbox.term.clear();
+        try zbox.term.flush();
     }
 }
 
@@ -231,6 +269,8 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
 
     // Add top bar
     {
+        const emoji_column = @divTrunc(self.output.width, 2) - 1; // TODO: test this math lmao
+
         var i: usize = 1;
         while (i < self.output.width - 1) : (i += 1) {
             self.output.cellRef(0, i).* = .{
@@ -238,6 +278,21 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                 .attribs = .{ .bg_blue = true },
             };
         }
+        var cur = self.output.cursorAt(0, emoji_column - 4);
+        cur.attribs = .{
+            .fg_black = true,
+            .bg_blue = true,
+        };
+        // try cur.writer().writeAll("Zig");
+        // cur.col_num = emoji_column + 2;
+        // try cur.writer().writeAll("b0rk");
+        self.output.cellRef(0, emoji_column).* = .{
+            .image = "⚡",
+            .attribs = .{
+                .fg_yellow = true,
+                .bg_blue = true,
+            },
+        };
     }
     try self.log.writeAll("###1\n");
 
@@ -259,20 +314,6 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
 
             // TODO: do something when the terminal has less than `padding` columns?
             const padded_width = self.chatBuf.width - padding;
-            // const lines: usize = switch (m.kind) {
-            //     .line => 1,
-            //     .chat => |c| blk: {
-            //         // Get unicode length of the message
-            //         const msg_len = try std.unicode.utf8CountCodepoints(c.text);
-            //         break :blk @divTrunc(msg_len, padded_width) + if (msg_len % padded_width == 0)
-            //             @as(usize, 0)
-            //         else
-            //             @as(usize, 1);
-            //     },
-            // };
-
-            // const end_row = row;
-            // row -= std.math.min(row, lines);
 
             // write it
             switch (m.kind) {
@@ -291,7 +332,7 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
 
                     const msg = "[RECONNECTED]";
                     if (self.chatBuf.width > msg.len) {
-                        var column = @divTrunc(self.chatBuf.width, 2) + (self.chatBuf.width % 2) - @divTrunc(msg.len, 2) - (msg.len % 2) - 1; // TODO: test this math lmao
+                        var column = @divTrunc(self.chatBuf.width, 2) + (self.chatBuf.width % 2) - @divTrunc(msg.len, 2) - (msg.len % 2); // TODO: test this math lmao
                         try self.chatBuf.cursorAt(row, column).writer().writeAll(msg);
                     }
                 },
@@ -337,9 +378,9 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                                         try cur.writer().writeAll("   >>");
                                     } else {
                                         var cur = self.chatBuf.cursorAt(row, 0);
-                                        // cur.attribs = .{
-                                        //     .fg_magenta = true,
-                                        // };
+                                        cur.attribs = .{
+                                            .feint = true,
+                                        };
                                         try cur.writer().writeAll(&c.time);
                                     }
                                     break :blk;
@@ -356,9 +397,10 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                                 .{ c.time, nick },
                             );
 
-                            self.chatBuf.cellRef(cur.row_num, self.chatBuf.width - 2).* = .{
-                                .image = @embedFile("../kappa.txt"),
-                            };
+                            // Prints a Kappa after every username
+                            // self.chatBuf.cellRef(cur.row_num, self.chatBuf.width - 2).* = .{
+                            //     .image = @embedFile("../kappa.txt"),
+                            // };
                         }
                     }
                 },

@@ -1,0 +1,32 @@
+zbox:
+  root: /src/box.zig
+  src:
+    url: "file://libs/zbox"
+bearssl:
+  root: /bearssl.zig
+  src:
+    github:
+      repo: zig-bearssl
+      user: MasterQ32
+      ref: a1f6b5c843b6528508e9a52f30ef0be808dca1fc
+datetime:
+  root: /datetime.zig
+  src:
+    github:
+      repo: zig-datetime
+      user: frmdstryr
+      ref: master
+mecha:
+  root: /mecha.zig
+  src:
+    github:
+      repo: mecha
+      user: Hejsil
+      ref: f15011fc94c2aaf1a618877d7e8731c496a67c0b
+hzzp:
+  root: /src/main.zig
+  src:
+    github:
+      repo: hzzp
+      user: truemedian
+      ref: e9a8b18a5fc198b8095b95ff3b8902af0765d1b3

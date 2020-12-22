@@ -3,6 +3,7 @@ const Channel = @import("utils/channel.zig").Channel;
 const GlobalEventUnion = @import("main.zig").Event;
 const Chat = @import("Chat.zig");
 const parser = @import("network/parser.zig");
+const EmoteCache = @import("network/EmoteCache.zig");
 
 pub const Event = union(enum) {
     message: Chat.Message,
@@ -23,8 +24,9 @@ const Command = union(enum) {
 name: []const u8,
 oauth: []const u8,
 allocator: *std.mem.Allocator,
-ch: *Channel(GlobalEventUnion),
 log: std.fs.File.Writer,
+ch: *Channel(GlobalEventUnion),
+emote_cache: EmoteCache,
 socket: std.fs.File,
 reader: std.fs.File.Reader,
 writer: std.fs.File.Writer,
@@ -44,8 +46,9 @@ pub fn init(self: *Self, alloc: *std.mem.Allocator, ch: *Channel(GlobalEventUnio
         .name = name,
         .oauth = oauth,
         .allocator = alloc,
-        .ch = ch,
         .log = log,
+        .ch = ch,
+        .emote_cache = EmoteCache.init(alloc, log),
         .socket = socket,
         .reader = socket.reader(),
         .writer = socket.writer(),
@@ -73,12 +76,26 @@ fn receiveMessages(self: *Self) void {
             return;
         };
 
-        switch (parser.parseMessage(data[0 .. data.len - 1], self.allocator, self.log)) {
-            .none => {},
+        const p = parser.parseMessage(data[0 .. data.len - 1], self.allocator, self.log) catch |err| {
+            nosuspend self.log.print("parsing error: {}\n", .{err}) catch {};
+            continue;
+        };
+        switch (p) {
             .ping => {
                 self.send(.pong);
             },
-            .message => |msg| self.ch.put(GlobalEventUnion{ .network = .{ .message = msg } }),
+            .message => |msg| {
+                switch (msg.kind) {
+                    .line => {},
+                    .chat => |c| {
+                        self.emote_cache.fetch(c.meta.emotes) catch |err| {
+                            nosuspend self.log.print("fetching error: {}\n", .{err}) catch {};
+                            continue;
+                        };
+                    },
+                }
+                self.ch.put(GlobalEventUnion{ .network = .{ .message = msg } });
+            },
         }
     }
 }

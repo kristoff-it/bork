@@ -1,4 +1,8 @@
-const Builder = @import("std").build.Builder;
+const std = @import("std");
+const Builder = std.build.Builder;
+const Pkg = std.build.Pkg;
+const pkgs = @import("deps.zig").pkgs;
+const ssl = @import(pkgs.ssl.path);
 
 pub fn build(b: *Builder) void {
     // Standard target options alloirc the person running `zig build` to choose
@@ -13,8 +17,12 @@ pub fn build(b: *Builder) void {
 
     const example_log = b.fmt("{}/{}/{}", .{ b.build_root, b.cache_root, "example.log" });
     const exe = b.addExecutable("zig-twitch-chat", "src/main.zig");
-    exe.addPackagePath("zbox", "libs/zbox/src/box.zig");
-    exe.addPackagePath("datetime", "libs/datetime/datetime.zig");
+
+    // ssl.linkBearSSL(pkgs.bearssl.path, exe, target);
+    inline for (std.meta.fields(@TypeOf(pkgs))) |field| {
+        exe.addPackage(@field(pkgs, field.name));
+    }
+
     exe.setTarget(target);
     exe.setBuildMode(mode);
     exe.install();

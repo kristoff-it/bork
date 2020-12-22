@@ -8,6 +8,7 @@ bottom_message: ?*Message = null,
 disconnected: bool = false,
 
 const Self = @This();
+
 pub const Message = struct {
     prev: ?*Message = null,
     next: ?*Message = null,
@@ -15,10 +16,37 @@ pub const Message = struct {
         chat: struct {
             name: []const u8,
             text: []const u8,
+            meta: Metadata,
             time: [5]u8,
         },
         line,
     },
+
+    pub const Metadata = struct {
+        /// Author's name
+        name: ?[]const u8 = null,
+        /// Total months the user was subbed (null = non sub)
+        sub_months: ?usize = null,
+        /// List of emotes and their positions.
+        /// Must be sorted (asc) by start position.
+        emotes: []Emote = &[0]Emote{},
+        /// Number of chars that need to be replaced with emotes
+        emote_chars: usize = 0,
+        /// The message is entirely comprised of emotes
+        emote_only: ?bool = null,
+
+        pub const Emote = struct {
+            id: u32,
+            start: usize,
+            end: usize,
+            image: ?[]const u8 = null,
+
+            // Used to sort the emote list by starting poisition.
+            pub fn lessThan(context: void, lhs: Emote, rhs: Emote) bool {
+                return lhs.start < rhs.start;
+            }
+        };
+    };
 };
 
 pub fn setConnectionStatus(self: *Self, status: enum { disconnected, reconnected }) !void {
@@ -27,9 +55,13 @@ pub fn setConnectionStatus(self: *Self, status: enum { disconnected, reconnected
         .reconnected => {
             if (self.disconnected) {
                 self.disconnected = false;
-                var msg = try self.allocator.create(Message);
-                msg.* = Message{ .kind = .line };
-                _ = self.addMessage(msg);
+
+                const last = self.last_message orelse return;
+                if (last.kind != .line) {
+                    var msg = try self.allocator.create(Message);
+                    msg.* = Message{ .kind = .line };
+                    _ = self.addMessage(msg);
+                }
             }
         },
     }

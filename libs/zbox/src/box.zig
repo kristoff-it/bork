@@ -54,7 +54,7 @@ pub fn push(buffer: Buffer) (Allocator.Error || ErrorSet.Utf8Encode || ErrorSet.
     try front.resize(buffer.height, buffer.width);
     var row: usize = 0;
 
-    //try term.beginSync();
+    try term.beginSync();
     while (row < buffer.height) : (row += 1) {
         var col: usize = 0;
         var last_touched: usize = 0; // out of bounds, can't match col
@@ -83,6 +83,7 @@ pub fn push(buffer: Buffer) (Allocator.Error || ErrorSet.Utf8Encode || ErrorSet.
             const cell = buffer.cell(row, col);
             front.cellRef(row, col).* = cell;
             if (cell.image.len != 0) {
+                try term.sendSGR(cell.attribs);
                 try term.send(cell.image);
                 col += 1;
                 const c = buffer.cell(row, col);
@@ -97,16 +98,17 @@ pub fn push(buffer: Buffer) (Allocator.Error || ErrorSet.Utf8Encode || ErrorSet.
             }
         }
     }
-    //try term.endSync();
+    try term.endSync();
 
     try term.flush();
 }
 
 /// structure that represents a single textual character on screen
 pub const Cell = struct {
-    char: u21 = ' ',
     attribs: term.SGR = term.SGR{},
+    char: u21 = ' ',
     image: []const u8 = "",
+
     fn eql(self: Cell, other: Cell) bool {
         return self.char == other.char and self.attribs.eql(other.attribs) and self.image.ptr == other.image.ptr;
     }
