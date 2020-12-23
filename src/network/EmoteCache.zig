@@ -28,36 +28,41 @@ pub fn init(allocator: *std.mem.Allocator, log: std.fs.File.Writer) Self {
 // TODO: make this concurrent
 pub fn fetch(self: *Self, emote_list: []Emote) !void {
     for (emote_list) |*emote| {
+        self.log.print("fetching  {} \n", .{emote.*}) catch {};
         const result = try self.cache.getOrPut(emote.id);
         if (!result.found_existing) {
+            self.log.print("need to download \n", .{}) catch {};
             // Need to download the image
             const img = img: {
+                var trust_anchor = ssl.TrustAnchorCollection.init(self.allocator);
+                // errdefer trust_anchor.deinit();
+
+                switch (builtin.os.tag) {
+                    .linux, .macos => {
+                        self.log.print("reading \n", .{}) catch {};
+                        const file = std.fs.openFileAbsolute("/etc/ssl/cert.pem", .{ .read = true, .intended_io_mode = .blocking }) catch |err| {
+                            if (err == error.FileNotFound) {
+                                // try trust_anchor.appendFromPEM(github_pem);
+                                // break :pem;
+                                self.log.print("certs :( \n", .{}) catch {};
+                                return error.CouldNotReadCerts;
+                            } else return err;
+                        };
+                        defer file.close();
+
+                        const certs = try file.readToEndAlloc(self.allocator, 500000);
+                        defer self.allocator.free(certs);
+
+                        try trust_anchor.appendFromPEM(certs);
+                    },
+                    else => {
+                        return error.DunnoHowToTrustAnchor;
+                        // try trust_anchor.appendFromPEM(github_pem);
+                    },
+                }
+                var x509 = ssl.x509.Minimal.init(trust_anchor);
+                self.log.print("got certs \n", .{}) catch {};
                 nosuspend {
-                    var trust_anchor = ssl.TrustAnchorCollection.init(self.allocator);
-                    errdefer trust_anchor.deinit();
-
-                    var x509 = ssl.x509.Minimal.init(trust_anchor);
-                    switch (builtin.os.tag) {
-                        .linux, .macos => pem: {
-                            const file = std.fs.openFileAbsolute("/etc/ssl/cert.pem", .{ .read = true }) catch |err| {
-                                if (err == error.FileNotFound) {
-                                    // try trust_anchor.appendFromPEM(github_pem);
-                                    break :pem;
-                                } else return err;
-                            };
-                            defer file.close();
-
-                            const certs = try file.readToEndAlloc(self.allocator, 500000);
-                            defer self.allocator.free(certs);
-
-                            try trust_anchor.appendFromPEM(certs);
-                        },
-                        else => {
-                            return error.DunnoHowToTrustAnchor;
-                            // try trust_anchor.appendFromPEM(github_pem);
-                        },
-                    }
-
                     var ssl_client = ssl.Client.init(x509.getEngine());
                     ssl_client.relocate();
                     try ssl_client.reset(hostname, false);
@@ -81,16 +86,21 @@ pub fn fetch(self: *Self, emote_list: []Emote) !void {
                         ssl_socket.outStream(),
                     );
 
+                    self.log.print("ssl stuff init!\n", .{}) catch {};
                     const path = try std.fmt.allocPrint(self.allocator, "/emoticons/v1/{}/1.0", .{emote.id});
                     defer self.allocator.free(path);
 
-                    try client.writeStatusLine("GET", path);
-                    try client.writeHeaderValue("Host", hostname);
-                    try client.writeHeaderValue("User-Agent", "Zig");
-                    try client.writeHeaderValue("Accept", "*/*");
-                    try client.finishHeaders();
-                    try ssl_socket.flush();
-
+                    self.log.print("1!\n", .{}) catch {};
+                    client.writeStatusLine("GET", path) catch |err| {
+                        self.log.print("error {}\n", .{err}) catch {};
+                        return error.Error;
+                    };
+                    client.writeHeaderValue("Host", hostname) catch unreachable;
+                    client.writeHeaderValue("User-Agent", "Zig") catch unreachable;
+                    client.writeHeaderValue("Accept", "*/*") catch unreachable;
+                    client.finishHeaders() catch unreachable;
+                    ssl_socket.flush() catch unreachable;
+                    self.log.print("emote request sent!\n", .{}) catch {};
                     // Consume headers
                     while (try client.next()) |event| {
                         switch (event) {
@@ -98,7 +108,7 @@ pub fn fetch(self: *Self, emote_list: []Emote) !void {
                                 200 => {},
                                 302 => @panic("no redirects plz"),
                                 else => {
-                                    self.log.print("got an HTTP return code: {}", .{status.code}) catch {};
+                                    self.log.print("got an HTTP return code: {}\n", .{status.code}) catch {};
                                     return error.HttpFailed;
                                 },
                             },
@@ -107,14 +117,20 @@ pub fn fetch(self: *Self, emote_list: []Emote) !void {
                             else => |val| self.log.print("got other: {}\n", .{val}) catch {},
                         }
                     }
+                    self.log.print("headers consumed!\n", .{}) catch {};
                     break :img try client.reader().readAllAlloc(self.allocator, 1024 * 100);
                 }
             };
 
             var encoded_img = try self.allocator.alloc(u8, std.base64.Base64Encoder.calcSize(img.len));
+            defer self.allocator.free(encoded_img);
             b64.encode(encoded_img, img);
 
-            result.entry.value = encoded_img;
+            result.entry.value = try std.fmt.allocPrint(self.allocator, "{c}]1337;File=inline=1;width=2;height=1;size=2164;:{}{c}\n", .{
+                0x1b,
+                encoded_img,
+                0x07,
+            });
         }
 
         emote.image = result.entry.value;

@@ -124,7 +124,7 @@ fn renderMessage(alloc: *std.mem.Allocator, log: std.fs.File.Writer, msg: *Termi
                 if (emote_idx < c.meta.emotes.len and
                     c.meta.emotes[emote_idx].end == it.index - 1)
                 {
-                    const emote = @embedFile("../kappa.txt"); // "⚡"; //
+                    const emote = c.meta.emotes[emote_idx].image orelse "⚡"; //@embedFile("../kappa.txt"); // ; //
                     const emote_len = 2;
                     emote_idx += 1;
 
