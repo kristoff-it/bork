@@ -141,25 +141,26 @@ const any_tag_value = mecha.many(
 );
 
 const emoteListItem = mecha.combine(.{
-    emote,
-    mecha.oneOf(.{
-        mecha.ascii.char('/'),
-        mecha.eos,
-    }),
-});
-
-const emote = mecha.combine(.{
     mecha.int(u32, 10),
     mecha.ascii.char(':'),
+    mecha.many(mecha.ascii.not(
+        mecha.oneOf(.{
+            mecha.ascii.char('/'),
+            mecha.eos,
+        }),
+    )),
+});
+
+const position = mecha.combine(.{
     mecha.int(usize, 10),
     mecha.ascii.char('-'),
     mecha.int(usize, 10),
 });
 
 pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, log: std.fs.File.Writer) !ParseResult {
-    if (std.mem.startsWith(u8, data, "PING "))
+    if (std.mem.startsWith(u8, data, "PING ")) {
         return ParseResult.ping;
-    if (privmsg(data)) |res| {
+    } else if (privmsg(data)) |res| {
         const msg = res.value;
         var time: [5]u8 = undefined;
         var now = datetime.Datetime.now().shiftTimezone(&datetime.timezones.Europe.Rome);
@@ -172,20 +173,36 @@ pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, log: std.fs.File.Writ
         const emotes = try alloc.alloc(Emote, count);
         errdefer alloc.free(emotes);
 
+        nosuspend log.print("emote count: {}\n", .{count}) catch {};
         var str = msg.tags.emotes;
-        for (emotes) |*em| {
+
+        var i: usize = 0;
+        while (i < emotes.len) {
+            nosuspend log.print("emotes string: [{}]\n", .{str}) catch {};
             const result = emoteListItem(str) orelse return error.InvalidEmoteList;
             str = result.rest;
-            em.* = .{
-                .id = result.value[0],
-                .start = result.value[1],
-                .end = result.value[2],
-            };
+            var it = std.mem.tokenize(result.value[1], ",");
+            while (it.next()) |p| : (i += 1) {
+                const p_res = position(p) orelse return error.InvalidPosition;
+                emotes[i] = .{
+                    .id = result.value[0],
+                    .start = p_res.value[0],
+                    .end = p_res.value[1],
+                };
+            }
+
+            if (i < emotes.len and str.len > 0) {
+                str = str[1..];
+            }
         }
-        if (str.len != 0)
+
+        if (str.len != 0) {
+            nosuspend log.print("rest: [{}]\n", .{str}) catch {};
             return error.InvalidEmoteList;
-        if (!std.sort.isSorted(Emote, emotes, {}, Emote.lessThan))
-            return error.InvalidEmoteList;
+        }
+        // if (!std.sort.isSorted(Emote, emotes, {}, Emote.lessThan))
+        //     return error.InvalidEmoteList;
+        std.sort.sort(Emote, emotes, {}, Emote.lessThan);
 
         nosuspend log.print("message: {}\n", .{msg.message}) catch {};
         return ParseResult{

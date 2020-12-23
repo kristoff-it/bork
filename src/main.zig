@@ -32,7 +32,7 @@ pub fn main() !void {
     if (!std.mem.startsWith(u8, auth, "oauth:"))
         @panic("TWITCH_OAUTH needs to start with 'oauth:'");
 
-    var l = try std.fs.cwd().createFile("twitch-chat.log", .{ .truncate = true, .intended_io_mode = .blocking });
+    var l = try std.fs.cwd().createFile("twitch-chat2.log", .{ .truncate = true, .intended_io_mode = .blocking });
     log = l.writer();
 
     var buf: [24]Event = undefined;
