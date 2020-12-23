@@ -24,16 +24,16 @@ pub const Message = struct {
 
     pub const Metadata = struct {
         /// Author's name
-        name: ?[]const u8 = null,
+        name: []const u8,
         /// Total months the user was subbed (null = non sub)
-        sub_months: ?usize = null,
+        sub_months: usize,
         /// List of emotes and their positions.
         /// Must be sorted (asc) by start position.
         emotes: []Emote = &[0]Emote{},
         /// Number of chars that need to be replaced with emotes
         emote_chars: usize = 0,
         /// The message is entirely comprised of emotes
-        emote_only: ?bool = null,
+        emote_only: bool = false,
 
         pub const Emote = struct {
             id: u32,
