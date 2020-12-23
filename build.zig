@@ -2,7 +2,7 @@ const std = @import("std");
 const Builder = std.build.Builder;
 const Pkg = std.build.Pkg;
 const pkgs = @import("deps.zig").pkgs;
-const ssl = @import(pkgs.ssl.path);
+const bearssl = @import(pkgs.bearssl.path);
 
 pub fn build(b: *Builder) void {
     // Standard target options alloirc the person running `zig build` to choose
@@ -18,7 +18,7 @@ pub fn build(b: *Builder) void {
     const example_log = b.fmt("{}/{}/{}", .{ b.build_root, b.cache_root, "example.log" });
     const exe = b.addExecutable("zig-twitch-chat", "src/main.zig");
 
-    // ssl.linkBearSSL(pkgs.bearssl.path, exe, target);
+    bearssl.linkBearSSL(pkgs.bearssl.path[0 .. pkgs.bearssl.path.len - 12], exe, target);
     inline for (std.meta.fields(@TypeOf(pkgs))) |field| {
         exe.addPackage(@field(pkgs, field.name));
     }
@@ -32,21 +32,6 @@ pub fn build(b: *Builder) void {
     if (b.args) |args| {
         run_cmd.addArgs(args);
     }
-
-    // const irc_exe = b.addExecutable("irc_test", "src/irc_test.zig");
-    // irc_exe.addPackagePath("mecha", "libs/mecha/mecha.zig");
-    // irc_exe.setTarget(target);
-    // irc_exe.setBuildMode(mode);
-    // irc_exe.install();
-
-    // const irc_cmd = irc_exe.run();
-    // run_cmd.step.dependOn(b.getInstallStep());
-    // if (b.args) |args| {
-    //     irc_cmd.addArgs(args);
-    // }
-
-    // const irc_step = b.step("irc", "Run the irc test app");
-    // irc_step.dependOn(&irc_cmd.step);
 
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
