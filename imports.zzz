@@ -1,14 +1,15 @@
 zbox:
   root: /src/box.zig
   src:
-    url: "file://libs/zbox"
+    url: "file://forks/zbox"
 bearssl:
   root: /bearssl.zig
   src:
-    github:
-      repo: zig-bearssl
-      user: MasterQ32
-      ref: a1f6b5c843b6528508e9a52f30ef0be808dca1fc
+    url: "file://forks/BearSSL"
+    #github:
+    #  repo: zig-bearssl
+    #  user: MasterQ32
+    #  ref: a1f6b5c843b6528508e9a52f30ef0be808dca1fc
 datetime:
   root: /datetime.zig
   src:
