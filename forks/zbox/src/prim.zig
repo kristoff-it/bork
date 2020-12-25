@@ -26,6 +26,10 @@ pub const Event = union(enum) {
     down,
     left,
     right,
+    wheelUp,
+    wheelDown,
+    pageUp,
+    pageDown,
     other: []const u8,
 };
 
@@ -191,7 +195,7 @@ pub fn setup(alloc: *Allocator) ErrorSet.Setup!void {
 
     //TODO: check that we are actually dealing with a tty here
     // and either downgrade or error
-    self.tty.in = (try fs.cwd().openFile("/dev/tty", .{ .read = true, .write = false, .intended_io_mode = .evented })).reader();
+    self.tty.in = (try fs.cwd().openFile("/dev/tty", .{ .read = true, .write = false })).reader();
     errdefer self.tty.in.context.close();
     self.tty.out = (try fs.cwd().openFile("/dev/tty", .{ .read = false, .write = true, .intended_io_mode = .blocking })).writer();
     errdefer self.tty.out.context.close();
@@ -227,6 +231,7 @@ pub fn setup(alloc: *Allocator) ErrorSet.Setup!void {
     try truncMode();
     try overwriteMode();
     try keypadMode();
+    try mouseMode();
     try cursorTo(1, 1);
     try flush();
 }
@@ -257,6 +262,7 @@ pub fn ignoreSignalInput() ErrorSet.Termios!void {
 pub fn teardown() void {
     const self = state();
 
+    exitMouseMode() catch {};
     exitAltScreen() catch {};
     flush() catch {};
     os.tcsetattr(self.tty.in.context.handle, .FLUSH, self.original_termios) catch {};
@@ -317,6 +323,7 @@ inline fn state() *TermState {
 fn parseEvent() ?Event {
     const data = state().buffer.in.items;
     const eql = std.mem.eql;
+    const startsWith = std.mem.startsWith;
 
     if (data.len == 0) return Event.tick;
 
@@ -330,6 +337,14 @@ fn parseEvent() ?Event {
         return Event.right
     else if (eql(u8, data, "\x1B[D") or eql(u8, data, "\x1BOD"))
         return Event.left
+    else if (eql(u8, data, "\x1B[5~") or eql(u8, data, "\x1BO5~"))
+        return Event.pageUp
+    else if (eql(u8, data, "\x1B[6~") or eql(u8, data, "\x1BO6~"))
+        return Event.pageDown
+    else if (startsWith(u8, data, "\x1B[Ma") or startsWith(u8, data, "\x1BOMa"))
+        return Event.wheelDown
+    else if (startsWith(u8, data, "\x1B[M`") or startsWith(u8, data, "\x1BOM`"))
+        return Event.wheelUp
     else
         return Event{ .other = data };
 }
@@ -367,6 +382,13 @@ fn truncMode() ErrorSet.BufWrite!void {
 fn keypadMode() ErrorSet.BufWrite!void {
     try sequence("?1h");
     try send("\x1B=");
+}
+
+fn mouseMode() ErrorSet.BufWrite!void {
+    try sequence("?1000h");
+}
+fn exitMouseMode() ErrorSet.BufWrite!void {
+    try sequence("?1000l");
 }
 
 // saves the cursor and then sends a couple of version of the altscreen

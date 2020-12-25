@@ -80,15 +80,20 @@ pub fn main() !void {
                             try display.sizeChanged();
                             need_repaint = true;
                             chaos = false;
+                        } else {
+                            log.print("[key] {}\n", .{c}) catch unreachable;
                         }
                     },
-                    .up => {
+                    .up, .wheelUp, .pageUp => {
                         need_repaint = chat.scroll(.up, 1);
                     },
-                    .down => {
+                    .down, .wheelDown, .pageDown => {
                         need_repaint = chat.scroll(.down, 1);
                     },
-                    .right, .left, .tick, .escape => {},
+                    .escape => {
+                        return;
+                    },
+                    .right, .left, .tick => {},
                 }
             },
             .network => |ne| switch (ne) {
