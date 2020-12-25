@@ -18,10 +18,10 @@ const tm = extern struct {
     tm_zone: [*:0]const u8,
 };
 
-pub fn senseUserTZ(log: std.fs.File.Writer) datetime.Timezone {
+pub fn senseUserTZ() datetime.Timezone {
     const t = time(null);
     const local = localtime(&t);
 
-    log.print("current tz offset: {}\n", .{@divTrunc(local.tm_gmtoff, 60)}) catch {};
+    std.log.debug("current tz offset: {}", .{@divTrunc(local.tm_gmtoff, 60)});
     return datetime.Timezone.create("Custom", @intCast(i16, @divTrunc(local.tm_gmtoff, 60)));
 }

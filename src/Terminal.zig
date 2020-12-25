@@ -15,7 +15,6 @@ pub const TerminalMessage = struct {
 
 // State
 allocator: *std.mem.Allocator,
-log: std.fs.File.Writer,
 output: zbox.Buffer,
 chatBuf: zbox.Buffer,
 ticker: @Frame(startTicking),
@@ -29,11 +28,11 @@ var emulator: enum { iterm, wez, kitty, other } = undefined;
 
 const Self = @This();
 var done_init = false;
-pub fn init(alloc: *std.mem.Allocator, log: std.fs.File.Writer, ch: *Channel(GlobalEventUnion)) !Self {
+pub fn init(alloc: *std.mem.Allocator, ch: *Channel(GlobalEventUnion)) !Self {
     {
         if (done_init) @panic("Terminal should only be initialized once, like a singleton.");
         done_init = true;
-        try log.writeAll("init terminal");
+        std.log.debug("init terminal!", .{});
     }
 
     // Sense the terminal *emulator* we're running in.
@@ -54,7 +53,7 @@ pub fn init(alloc: *std.mem.Allocator, log: std.fs.File.Writer, ch: *Channel(Glo
             emulator = .other;
         }
 
-        try log.print("emulator = {}\n", .{emulator});
+        std.log.debug("emulator = {}!", .{emulator});
     }
 
     // Initialize zbox
@@ -93,10 +92,9 @@ pub fn init(alloc: *std.mem.Allocator, log: std.fs.File.Writer, ch: *Channel(Glo
     // NOTE: frames can't be copied so copy elision is required
     return Self{
         .allocator = alloc,
-        .log = log,
         .chatBuf = chatBuf,
         .output = output,
-        .ticker = async startTicking(ch, log),
+        .ticker = async startTicking(ch),
         .notifs = async notifyDisplayEvents(ch),
     };
 }
@@ -118,7 +116,7 @@ pub fn prepareMessage(self: *Self, chatMsg: Chat.Message) !*Chat.Message {
         .chat_message = chatMsg,
         .buffer = try zbox.Buffer.init(self.allocator, 1, self.chatBuf.width - padding),
     };
-    try renderMessage(self.allocator, self.log, term_msg);
+    try renderMessage(self.allocator, term_msg);
 
     return &term_msg.chat_message;
 }
@@ -142,7 +140,7 @@ fn setCellToEmote(cell: *zbox.Cell, emote: []const u8) void {
 }
 
 // NOTE: callers must clear the buffer when necessary (when size changes)
-fn renderMessage(alloc: *std.mem.Allocator, log: std.fs.File.Writer, msg: *TerminalMessage) !void {
+fn renderMessage(alloc: *std.mem.Allocator, msg: *TerminalMessage) !void {
     const width = msg.buffer.width;
     var height = msg.buffer.height;
 
@@ -150,15 +148,14 @@ fn renderMessage(alloc: *std.mem.Allocator, log: std.fs.File.Writer, msg: *Termi
     cursor.context.attribs = .{
         .normal = true,
     };
-    log.writeAll("started rendering msg!\n") catch unreachable;
+    std.log.debug("started rendering msg!", .{});
     switch (msg.chat_message.kind) {
         .line => {},
         .chat => |c| {
             var it = std.mem.tokenize(c.text, " ");
             var emote_idx: usize = 0;
             while (it.next()) |w| {
-                log.writeAll(w) catch unreachable;
-                log.writeAll("\n") catch unreachable;
+                std.log.debug("word: [{}]", .{w});
 
                 if (emote_idx < c.meta.emotes.len and
                     c.meta.emotes[emote_idx].end == it.index - 1)
@@ -241,10 +238,10 @@ fn renderMessage(alloc: *std.mem.Allocator, log: std.fs.File.Writer, msg: *Termi
             }
         },
     }
-    log.writeAll("done rendering msg!\n") catch unreachable;
+    std.log.debug("done rendering msg!", .{});
 }
 
-pub fn startTicking(ch: *Channel(GlobalEventUnion), log: std.fs.File.Writer) void {
+pub fn startTicking(ch: *Channel(GlobalEventUnion)) void {
     const cooldown = 5;
 
     var chaos_cooldown: isize = -1;
@@ -255,7 +252,7 @@ pub fn startTicking(ch: *Channel(GlobalEventUnion), log: std.fs.File.Writer) voi
             // Flag was true, term is being resized
             ch.put(GlobalEventUnion{ .display = .chaos });
             if (chaos_cooldown > -1) {
-                log.writeAll("ko, restarting!\n") catch unreachable;
+                std.log.debug("ko, restarting", .{});
             }
             chaos_cooldown = cooldown;
             last_size = zbox.size();
@@ -269,20 +266,21 @@ pub fn startTicking(ch: *Channel(GlobalEventUnion), log: std.fs.File.Writer) voi
             } else {
                 last_size = new_size;
                 chaos_cooldown = cooldown;
-                log.writeAll("ko, restarting!\n") catch unreachable;
+                std.log.debug("ko, restarting", .{});
             }
         }
     }
 }
 
 pub fn notifyDisplayEvents(ch: *Channel(GlobalEventUnion)) !void {
+    std.event.Loop.instance.?.yield();
     while (true) {
         ch.put(GlobalEventUnion{ .display = (try zbox.nextEvent()) orelse continue });
     }
 }
 
 pub fn deinit(self: *Self) void {
-    self.log.writeAll("deinit terminal") catch {};
+    std.log.debug("deinit terminal!", .{});
     self.output.deinit();
     zbox.deinit();
     // We're not awaiting .ticker nor .notifs, but if we're deiniting
@@ -290,8 +288,12 @@ pub fn deinit(self: *Self) void {
     // important to cleanup there.
 }
 
+pub fn panic() void {
+    zbox.deinit();
+}
+
 pub fn sizeChanged(self: *Self) !void {
-    self.log.writeAll("resizing\n") catch {};
+    std.log.debug("resizing!", .{});
     const size = try zbox.size();
     if (size.width != self.output.width or size.height != self.output.height) {
         try self.output.resize(size.height, size.width);
@@ -303,7 +305,7 @@ pub fn sizeChanged(self: *Self) !void {
 }
 
 pub fn renderChat(self: *Self, chat: *Chat) !void {
-    try self.log.writeAll("render\n");
+    std.log.debug("render!", .{});
 
     // TODO: this is a very inefficient way of using Kitty
     if (emulator == .kitty) {
@@ -337,7 +339,6 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
             },
         };
     }
-    try self.log.writeAll("###1\n");
 
     // Render the chat history
     {
@@ -384,11 +385,11 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
 
                     // re-render the message if width changed in the meantime
                     if (padded_width != term_message.buffer.width) {
-                        try self.log.writeAll("must rerender msg \n");
+                        std.log.debug("must rerender msg!", .{});
 
                         term_message.buffer.deinit();
                         term_message.buffer = try zbox.Buffer.init(self.allocator, 1, padded_width);
-                        try renderMessage(self.allocator, self.log, term_message);
+                        try renderMessage(self.allocator, term_message);
                     }
 
                     // Update the row position
@@ -451,7 +452,6 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
         }
     }
 
-    try self.log.writeAll("###2\n");
     // Render the bottom bar
     {
         const width = self.output.width - 1;
@@ -500,11 +500,8 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
             }
         }
     }
-    try self.log.writeAll("###3\n");
-
-    {}
 
     self.output.blit(self.chatBuf, 1, 1);
     try zbox.push(self.output);
-    try self.log.writeAll("render complete\n");
+    std.log.debug("render completed!", .{});
 }
