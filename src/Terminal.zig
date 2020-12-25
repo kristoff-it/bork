@@ -20,12 +20,12 @@ output: zbox.Buffer,
 chatBuf: zbox.Buffer,
 ticker: @Frame(startTicking),
 notifs: @Frame(notifyDisplayEvents),
-
 // Static config
 // The message is padded on each line
 // by 6 spaces (HH:MM )
 //              123456
 const padding = 6;
+var emulator: enum { iterm, wez, kitty, other } = undefined;
 
 const Self = @This();
 var done_init = false;
@@ -34,6 +34,27 @@ pub fn init(alloc: *std.mem.Allocator, log: std.fs.File.Writer, ch: *Channel(Glo
         if (done_init) @panic("Terminal should only be initialized once, like a singleton.");
         done_init = true;
         try log.writeAll("init terminal");
+    }
+
+    // Sense the terminal *emulator* we're running in.
+    {
+        // We're interested in sensing:
+        // - iTerm2
+        // - WezTerm
+        // - Kitty
+        const name = std.os.getenv("TERM_PROGRAM") orelse std.os.getenv("TERM") orelse "";
+        if (std.mem.eql(u8, name, "WezTerm")) {
+            emulator = .wez;
+        } else if (std.mem.eql(u8, name, "iTerm.app")) {
+            emulator = .iterm;
+        } else if (std.mem.eql(u8, name, "xterm-kitty")) {
+            emulator = .kitty;
+            zbox.is_kitty = true;
+        } else {
+            emulator = .other;
+        }
+
+        try log.print("emulator = {}\n", .{emulator});
     }
 
     // Initialize zbox
@@ -102,6 +123,24 @@ pub fn prepareMessage(self: *Self, chatMsg: Chat.Message) !*Chat.Message {
     return &term_msg.chat_message;
 }
 
+fn setCellToEmote(cell: *zbox.Cell, emote: []const u8) void {
+    cell.* = switch (emulator) {
+        .wez, .iterm => .{
+            .imageDecorationPre = "\x1b]1337;File=inline=1;preserveAspectRatio=1;height=1;size=2164;:",
+            .image = emote,
+            .imageDecorationPost = "\x07",
+        },
+        .kitty => .{
+            .imageDecorationPre = "\x1b_Gf=100,t=d,a=T,r=1,c=2,q=1;",
+            .image = emote,
+            .imageDecorationPost = "\x1b\\",
+        },
+        .other => .{
+            .char = ' ',
+        },
+    };
+}
+
 // NOTE: callers must clear the buffer when necessary (when size changes)
 fn renderMessage(alloc: *std.mem.Allocator, log: std.fs.File.Writer, msg: *TerminalMessage) !void {
     const width = msg.buffer.width;
@@ -130,12 +169,10 @@ fn renderMessage(alloc: *std.mem.Allocator, log: std.fs.File.Writer, msg: *Termi
 
                     if (emote_len <= width - cursor.context.col_num) {
                         // emote fits in this row
-                        msg.buffer.cellRef(
+                        setCellToEmote(msg.buffer.cellRef(
                             cursor.context.row_num,
                             cursor.context.col_num,
-                        ).* = .{
-                            .image = emote,
-                        };
+                        ), emote);
                         cursor.context.col_num += 2;
                     } else {
                         // emote doesn't fit, let's add a line for it.
@@ -144,9 +181,10 @@ fn renderMessage(alloc: *std.mem.Allocator, log: std.fs.File.Writer, msg: *Termi
 
                         cursor.context.col_num = 2;
                         cursor.context.row_num += 1;
-                        msg.buffer.cellRef(cursor.context.row_num, 0).* = .{
-                            .image = emote,
-                        };
+                        setCellToEmote(msg.buffer.cellRef(
+                            cursor.context.row_num,
+                            0,
+                        ), emote);
                     }
                 } else {
                     const word = w;
@@ -266,6 +304,11 @@ pub fn sizeChanged(self: *Self) !void {
 
 pub fn renderChat(self: *Self, chat: *Chat) !void {
     try self.log.writeAll("render\n");
+
+    // TODO: this is a very inefficient way of using Kitty
+    if (emulator == .kitty) {
+        try zbox.term.send("\x1b_Ga=d\x1b\\");
+    }
 
     // Add top bar
     {

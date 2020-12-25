@@ -128,14 +128,9 @@ pub fn fetch(self: *Self, emote_list: []Emote) !void {
             };
 
             var encoded_img = try self.allocator.alloc(u8, std.base64.Base64Encoder.calcSize(img.len));
-            defer self.allocator.free(encoded_img);
             b64.encode(encoded_img, img);
 
-            result.entry.value = try std.fmt.allocPrint(self.allocator, "{c}]1337;File=inline=1;width=2;height=1;size=2164;:{}{c}\n", .{
-                0x1b,
-                encoded_img,
-                0x07,
-            });
+            result.entry.value = encoded_img;
         }
 
         emote.image = result.entry.value;
