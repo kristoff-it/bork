@@ -116,10 +116,8 @@ pub fn fetch(self: *Self, emote_list: []Emote) !void {
                 }
             };
 
-            var encoded_img = try self.allocator.alloc(u8, std.base64.Base64Encoder.calcSize(img.len));
-            b64.encode(encoded_img, img);
-
-            result.entry.value = encoded_img;
+            var encode_buf = try self.allocator.alloc(u8, std.base64.Base64Encoder.calcSize(img.len));
+            result.entry.value = b64.encode(encode_buf, img);
         }
 
         emote.image = result.entry.value;

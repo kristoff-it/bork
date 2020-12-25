@@ -30,6 +30,7 @@ pub const Event = union(enum) {
     wheelDown,
     pageUp,
     pageDown,
+    CTRL_C,
     other: []const u8,
 };
 
@@ -277,15 +278,16 @@ pub fn teardown() void {
 
     self.tty.in.context.close();
     self.tty.out.context.close();
+
     self.buffer.in.deinit();
     self.buffer.out.deinit();
-
+    
     termState = null;
 }
 
 /// read next message from the tty and parse it. takes
 /// special action for certain events
-pub fn nextEvent() (Allocator.Error || ErrorSet.TtyRead)!?Event {
+pub fn nextEvent() (Allocator.Error || ErrorSet.TtyRead || error{Done})!?Event {
     const max_bytes = 4096;
     var total_bytes: usize = 0;
 
@@ -336,6 +338,8 @@ fn parseEvent() ?Event {
 
     if (eql(u8, data, "\x1B"))
         return Event.escape
+    else if (eql(u8, data, "\x03"))
+        return Event.CTRL_C
     else if (eql(u8, data, "\x1B[A") or eql(u8, data, "\x1BOA"))
         return Event.up
     else if (eql(u8, data, "\x1B[B") or eql(u8, data, "\x1BOB"))

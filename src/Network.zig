@@ -72,6 +72,17 @@ pub fn init(
     }
 }
 
+pub fn deinit(self: *Self) void {
+    // Try to grab the reconnecting flag
+    while (@atomicRmw(bool, &self._atomic_reconnecting, .Xchg, true, .SeqCst)) {
+        std.time.sleep(10 * std.time.ns_per_ms);
+    }
+
+    // Now we can kill the connection and nobody will try to reconnect
+    self.socket.close();
+    std.log.debug("disconnected!", .{});
+}
+
 fn receiveMessages(self: *Self) void {
     std.log.debug("reader started", .{});
     // yield immediately so callers can go on
