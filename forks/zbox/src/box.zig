@@ -28,6 +28,7 @@ usingnamespace @import("util.zig");
 
 // Pizzatime!
 pub var is_kitty = false;
+const Chat = @import("../../../src/Chat.zig");
 
 /// must be called before any buffers are `push`ed to the terminal.
 pub fn init(allocator: *Allocator) ErrorSet.Term.Setup!void {
@@ -121,6 +122,11 @@ pub const Cell = struct {
     imageDecorationPre: []const u8 = "",
     imageDecorationPost: []const u8 = "",
 
+    interactive_element: ?Chat.InteractiveElement = null,
+    message: ?*Chat.Message = null,
+
+    is_transparent: bool = false,
+
     fn eql(self: Cell, other: Cell) bool {
         return self.char == other.char and self.attribs.eql(other.attribs) and self.image.ptr == other.image.ptr;
     }
@@ -154,6 +160,9 @@ pub const Buffer = struct {
         attribs: term.SGR = term.SGR{},
         buffer: *Buffer,
 
+        interactive_element: ?Chat.InteractiveElement = null,
+        message: ?*Chat.Message = null,
+
         const Error = error{ InvalidUtf8, InvalidCharacter };
 
         fn writeFn(self: *WriteCursor, bytes: []const u8) Error!usize {
@@ -180,6 +189,9 @@ pub const Buffer = struct {
                             self.buffer.cellRef(self.row_num, self.col_num).* = .{
                                 .char = cp,
                                 .attribs = self.attribs,
+                                .interactive_element = self.interactive_element,
+                                .message = self.message,
+                                .is_transparent = false,
                             };
                         self.col_num += 1;
                     },
@@ -342,6 +354,10 @@ pub const Buffer = struct {
             }) {
                 if (self_col_idx < 0) continue;
 
+                if (other.cell(other_row_idx, other_col_idx).is_transparent) {
+                    continue;
+                }
+
                 self.cellRef(
                     @intCast(usize, self_row_idx),
                     @intCast(usize, self_col_idx),
@@ -380,7 +396,7 @@ const Size = struct {
     width: usize,
 };
 /// represents the last drawn state of the terminal
-var front: Buffer = undefined;
+pub var front: Buffer = undefined;
 
 // tests ///////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////

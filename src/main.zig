@@ -18,8 +18,7 @@ pub const Event = union(enum) {
 };
 
 pub fn main() !void {
-    defer std.event.Loop.instance.?.finishOneEvent();
-    var l = try std.fs.cwd().createFile("twitch-chat2.log", .{ .truncate = true, .intended_io_mode = .blocking });
+    var l = try std.fs.cwd().createFile("bork.log", .{ .truncate = true, .intended_io_mode = .blocking });
     defer l.close();
     defer std.log.debug("main almost done", .{});
     logfile = l.writer();
@@ -33,7 +32,7 @@ pub fn main() !void {
         defer alloc.free(exe_name);
 
         break :nick try (it.next(alloc) orelse {
-            std.debug.print("Usage: ./twitch-chat your_channel_name\n", .{});
+            std.debug.print("Usage: ./bork your_channel_name\n", .{});
             return;
         });
     };
@@ -89,6 +88,10 @@ pub fn main() !void {
                             else => {},
                         }
                     },
+                    .leftClick => |pos| {
+                        std.log.debug("click at {}", .{pos});
+                        need_repaint = try display.handleClick(pos.row - 1, pos.col - 1);
+                    },
                     .CTRL_C => return,
                     .up, .wheelUp, .pageUp => {
                         need_repaint = chat.scroll(.up, 1);
@@ -143,7 +146,7 @@ pub fn log(
 }
 
 pub fn panic(msg: []const u8, trace: ?*std.builtin.StackTrace) noreturn {
-    // Terminal.panic();
+    nosuspend Terminal.panic();
     log(.emerg, .examples, "{}", .{msg});
     std.builtin.default_panic(msg, trace);
 }
