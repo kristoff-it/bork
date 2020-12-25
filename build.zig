@@ -14,9 +14,7 @@ pub fn build(b: *Builder) void {
     // Standard release options allow the person running `zig build` to select
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
     const mode = b.standardReleaseOptions();
-
-    const example_log = b.fmt("{}/{}/{}", .{ b.build_root, b.cache_root, "example.log" });
-    const exe = b.addExecutable("zig-twitch-chat", "src/main.zig");
+    const exe = b.addExecutable("bork", "src/main.zig");
 
     bearssl.linkBearSSL(pkgs.bearssl.path[0 .. pkgs.bearssl.path.len - 12], exe, target);
     inline for (std.meta.fields(@TypeOf(pkgs))) |field| {
