@@ -23,6 +23,9 @@ pub fn build(b: *Builder) void {
         exe.addPackage(@field(pkgs, field.name));
     }
 
+    // Necessary for using localtime()
+    exe.linkLibC();
+
     exe.setTarget(target);
     exe.setBuildMode(mode);
     exe.install();

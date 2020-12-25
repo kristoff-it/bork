@@ -1,5 +1,6 @@
 const std = @import("std");
 const options = @import("build_options");
+const datetime = @import("datetime");
 const Channel = @import("utils/channel.zig").Channel;
 const Network = @import("Network.zig");
 const Terminal = @import("Terminal.zig");
@@ -12,6 +13,23 @@ var log: std.fs.File.Writer = undefined;
 pub const Event = union(enum) {
     display: Terminal.Event,
     network: Network.Event,
+};
+
+// Cursed definitions for obtaining the user TZ.
+extern fn time(?*usize) usize;
+extern fn localtime(*const usize) *tm;
+const tm = extern struct {
+    tm_sec: c_int, // seconds,  range 0 to 59
+    tm_min: c_int, // minutes, range 0 to 59
+    tm_hour: c_int, // hours, range 0 to 23
+    tm_mday: c_int, // day of the month, range 1 to 31
+    tm_mon: c_int, // month, range 0 to 11
+    tm_year: c_int, // The number of years since 1900
+    tm_wday: c_int, // day of the week, range 0 to 6
+    tm_yday: c_int, // day in the year, range 0 to 365
+    tm_isdst: c_int, // daylight saving time
+    tm_gmtoff: c_long,
+    tm_zone: [*:0]const u8,
 };
 
 pub fn main() !void {
@@ -35,6 +53,15 @@ pub fn main() !void {
     var l = try std.fs.cwd().createFile("twitch-chat2.log", .{ .truncate = true, .intended_io_mode = .blocking });
     log = l.writer();
 
+    // Obtain the current timezone by querying a cursed C API.
+    const tz = tz: {
+        const t = time(null);
+        const local = localtime(&t);
+
+        log.print("current tz offset: {}\n", .{@divTrunc(local.tm_gmtoff, 60)}) catch {};
+        break :tz datetime.Timezone.create("Custom", @intCast(i16, @divTrunc(local.tm_gmtoff, 60)));
+    };
+
     var buf: [24]Event = undefined;
     var ch = Channel(Event).init(&buf);
 
@@ -42,7 +69,7 @@ pub fn main() !void {
     defer display.deinit();
 
     var network: Network = undefined;
-    try network.init(alloc, &ch, log, nick, auth);
+    try network.init(alloc, &ch, log, nick, auth, tz);
 
     var chat = Chat{ .allocator = alloc, .log = log };
 
