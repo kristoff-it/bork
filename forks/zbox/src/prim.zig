@@ -195,9 +195,17 @@ pub fn setup(alloc: *Allocator) ErrorSet.Setup!void {
 
     //TODO: check that we are actually dealing with a tty here
     // and either downgrade or error
-    self.tty.in = (try fs.cwd().openFile("/dev/tty", .{ .read = true, .write = false })).reader();
+    self.tty.in = (try fs.openFileAbsolute("/dev/tty", .{
+        .read = true,
+        .write = false,
+        .intended_io_mode = .blocking,
+    })).reader();
     errdefer self.tty.in.context.close();
-    self.tty.out = (try fs.cwd().openFile("/dev/tty", .{ .read = false, .write = true, .intended_io_mode = .blocking })).writer();
+    self.tty.out = (try fs.openFileAbsolute("/dev/tty", .{
+        .read = false,
+        .write = true,
+        .intended_io_mode = .blocking,
+    })).writer();
     errdefer self.tty.out.context.close();
 
     // store current terminal settings
@@ -295,7 +303,6 @@ pub fn nextEvent() (Allocator.Error || ErrorSet.TtyRead)!?Event {
         }
     }
     const event = parseEvent();
-    debug("event: {}", .{event});
     return event;
 }
 

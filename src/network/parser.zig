@@ -157,7 +157,7 @@ const position = mecha.combine(.{
     mecha.int(usize, 10),
 });
 
-pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, log: std.fs.File.Writer, tz: datetime.Timezone) !ParseResult {
+pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, tz: datetime.Timezone) !ParseResult {
     if (std.mem.startsWith(u8, data, "PING ")) {
         return ParseResult.ping;
     } else if (privmsg(data)) |res| {
@@ -173,12 +173,10 @@ pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, log: std.fs.File.Writ
         const emotes = try alloc.alloc(Emote, count);
         errdefer alloc.free(emotes);
 
-        nosuspend log.print("emote count: {}\n", .{count}) catch {};
         var str = msg.tags.emotes;
 
         var i: usize = 0;
         while (i < emotes.len) {
-            nosuspend log.print("emotes string: [{}]\n", .{str}) catch {};
             const result = emoteListItem(str) orelse return error.InvalidEmoteList;
             str = result.rest;
             var it = std.mem.tokenize(result.value[1], ",");
@@ -197,14 +195,12 @@ pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, log: std.fs.File.Writ
         }
 
         if (str.len != 0) {
-            nosuspend log.print("rest: [{}]\n", .{str}) catch {};
             return error.InvalidEmoteList;
         }
         // if (!std.sort.isSorted(Emote, emotes, {}, Emote.lessThan))
         //     return error.InvalidEmoteList;
         std.sort.sort(Emote, emotes, {}, Emote.lessThan);
 
-        nosuspend log.print("message: {}\n", .{msg.message}) catch {};
         return ParseResult{
             .message = Chat.Message{
                 .kind = .{
@@ -224,6 +220,6 @@ pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, log: std.fs.File.Writ
         };
     }
 
-    nosuspend log.print("unknown: {}\n", .{data}) catch {};
+    std.log.debug("unknown: {}\n", .{data});
     return error.UnknownMessage;
 }

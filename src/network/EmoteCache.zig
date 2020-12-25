@@ -14,7 +14,6 @@ const EmoteData = struct {
     data: []const u8,
 };
 
-log: std.fs.File.Writer,
 allocator: *std.mem.Allocator,
 cache: std.AutoHashMap(u32, []const u8),
 
@@ -22,9 +21,8 @@ const Self = @This();
 // TODO: for people with 8k SUMQHD terminals, let them use bigger size emotes
 const hostname = "static-cdn.jtvnw.net";
 
-pub fn init(allocator: *std.mem.Allocator, log: std.fs.File.Writer) Self {
+pub fn init(allocator: *std.mem.Allocator) Self {
     return Self{
-        .log = log,
         .allocator = allocator,
         .cache = std.AutoHashMap(u32, []const u8).init(allocator),
     };
@@ -33,10 +31,10 @@ pub fn init(allocator: *std.mem.Allocator, log: std.fs.File.Writer) Self {
 // TODO: make this concurrent
 pub fn fetch(self: *Self, emote_list: []Emote) !void {
     for (emote_list) |*emote| {
-        self.log.print("fetching  {} \n", .{emote.*}) catch {};
+        std.log.debug("fetching  {}", .{emote.*});
         const result = try self.cache.getOrPut(emote.id);
         if (!result.found_existing) {
-            self.log.print("need to download \n", .{}) catch {};
+            std.log.debug("need to download", .{});
             // Need to download the image
             const img = img: {
                 var trust_anchor = ssl.TrustAnchorCollection.init(self.allocator);
@@ -44,12 +42,10 @@ pub fn fetch(self: *Self, emote_list: []Emote) !void {
 
                 switch (builtin.os.tag) {
                     .linux, .macos => {
-                        self.log.print("reading \n", .{}) catch {};
                         const file = std.fs.openFileAbsolute("/etc/ssl/cert.pem", .{ .read = true, .intended_io_mode = .blocking }) catch |err| {
                             if (err == error.FileNotFound) {
                                 // try trust_anchor.appendFromPEM(github_pem);
                                 // break :pem;
-                                self.log.print("certs :( \n", .{}) catch {};
                                 return error.CouldNotReadCerts;
                             } else return err;
                         };
@@ -66,7 +62,6 @@ pub fn fetch(self: *Self, emote_list: []Emote) !void {
                     },
                 }
                 var x509 = ssl.x509.Minimal.init(trust_anchor);
-                self.log.print("got certs \n", .{}) catch {};
                 nosuspend {
                     var ssl_client = ssl.Client.init(x509.getEngine());
                     ssl_client.relocate();
@@ -91,13 +86,10 @@ pub fn fetch(self: *Self, emote_list: []Emote) !void {
                         ssl_socket.outStream(),
                     );
 
-                    self.log.print("ssl stuff init!\n", .{}) catch {};
                     const path = try std.fmt.allocPrint(self.allocator, "/emoticons/v1/{}/1.0", .{emote.id});
                     defer self.allocator.free(path);
 
-                    self.log.print("1!\n", .{}) catch {};
                     client.writeStatusLine("GET", path) catch |err| {
-                        self.log.print("error {}\n", .{err}) catch {};
                         return error.Error;
                     };
                     client.writeHeaderValue("Host", hostname) catch unreachable;
@@ -105,7 +97,6 @@ pub fn fetch(self: *Self, emote_list: []Emote) !void {
                     client.writeHeaderValue("Accept", "*/*") catch unreachable;
                     client.finishHeaders() catch unreachable;
                     ssl_socket.flush() catch unreachable;
-                    self.log.print("emote request sent!\n", .{}) catch {};
                     // Consume headers
                     while (try client.next()) |event| {
                         switch (event) {
@@ -113,16 +104,14 @@ pub fn fetch(self: *Self, emote_list: []Emote) !void {
                                 200 => {},
                                 302 => @panic("no redirects plz"),
                                 else => {
-                                    self.log.print("got an HTTP return code: {}\n", .{status.code}) catch {};
                                     return error.HttpFailed;
                                 },
                             },
                             .header => {},
                             .head_done => break,
-                            else => |val| self.log.print("got other: {}\n", .{val}) catch {},
+                            else => |val| std.log.debug("got other: {}", .{val}),
                         }
                     }
-                    self.log.print("headers consumed!\n", .{}) catch {};
                     break :img try client.reader().readAllAlloc(self.allocator, 1024 * 100);
                 }
             };

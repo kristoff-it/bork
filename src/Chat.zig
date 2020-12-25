@@ -1,7 +1,6 @@
 const std = @import("std");
 const display = @import("zbox");
 
-log: std.fs.File.Writer,
 allocator: *std.mem.Allocator,
 last_message: ?*Message = null,
 bottom_message: ?*Message = null,
@@ -69,7 +68,7 @@ pub fn setConnectionStatus(self: *Self, status: enum { disconnected, reconnected
 
 // Returns whether the scroll had any effect.
 pub fn scroll(self: *Self, direction: enum { up, down }, n: usize) bool {
-    self.log.writeAll("scroll\n") catch unreachable;
+    std.log.debug("scroll", .{});
     var i = n;
     var msg = self.bottom_message;
     while (i > 0) : (i -= 1) {
@@ -95,7 +94,7 @@ pub fn scroll(self: *Self, direction: enum { up, down }, n: usize) bool {
 // Automatically scrolls down unless the user scrolled up.
 // Returns whether there was any change in the view.
 pub fn addMessage(self: *Self, msg: *Message) bool {
-    self.log.writeAll("message\n") catch unreachable;
+    std.log.debug("message", .{});
 
     var need_render = false;
     if (self.last_message == self.bottom_message) {

@@ -26,7 +26,6 @@ name: []const u8,
 oauth: []const u8,
 tz: datetime.Timezone,
 allocator: *std.mem.Allocator,
-log: std.fs.File.Writer,
 ch: *Channel(GlobalEventUnion),
 emote_cache: EmoteCache,
 socket: std.fs.File,
@@ -46,7 +45,6 @@ pub fn init(
     self: *Self,
     alloc: *std.mem.Allocator,
     ch: *Channel(GlobalEventUnion),
-    log: std.fs.File.Writer,
     name: []const u8,
     oauth: []const u8,
     tz: datetime.Timezone,
@@ -57,9 +55,8 @@ pub fn init(
         .oauth = oauth,
         .tz = tz,
         .allocator = alloc,
-        .log = log,
         .ch = ch,
-        .emote_cache = EmoteCache.init(alloc, log),
+        .emote_cache = EmoteCache.init(alloc),
         .socket = socket,
         .reader = socket.reader(),
         .writer = socket.writer(),
@@ -76,7 +73,7 @@ pub fn init(
 }
 
 fn receiveMessages(self: *Self) void {
-    nosuspend self.log.print("reader started\n", .{}) catch {};
+    std.log.debug("reader started", .{});
     // yield immediately so callers can go on
     // with their lives instead of risking being
     // trapped reading a spammy socket forever
@@ -87,8 +84,8 @@ fn receiveMessages(self: *Self) void {
             return;
         };
 
-        const p = parser.parseMessage(data[0 .. data.len - 1], self.allocator, self.log, self.tz) catch |err| {
-            nosuspend self.log.print("parsing error: {}\n", .{err}) catch {};
+        const p = parser.parseMessage(data[0 .. data.len - 1], self.allocator, self.tz) catch |err| {
+            std.log.debug("parsing error: [{}]", .{err});
             continue;
         };
         switch (p) {
@@ -100,7 +97,7 @@ fn receiveMessages(self: *Self) void {
                     .line => {},
                     .chat => |c| {
                         self.emote_cache.fetch(c.meta.emotes) catch |err| {
-                            nosuspend self.log.print("fetching error: {}\n", .{err}) catch {};
+                            std.log.debug("fetching error: [{}]", .{err});
                             continue;
                         };
                     },
@@ -132,7 +129,7 @@ fn send(self: *Self, cmd: Command) void {
     var held = self.writer_lock.acquire();
     var comm = switch (cmd) {
         .pong => blk: {
-            nosuspend self.log.print("PONG!\n", .{}) catch {};
+            std.log.debug("PONG!", .{});
             break :blk self.writer.print("PONG :tmi.twitch.tv\n", .{});
         },
         .user => {},

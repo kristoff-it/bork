@@ -10,7 +10,7 @@ const Chat = @import("Chat.zig");
 
 pub const io_mode = .evented;
 
-var log: std.fs.File.Writer = undefined;
+var logfile: std.fs.File.Writer = undefined;
 
 pub const Event = union(enum) {
     display: Terminal.Event,
@@ -18,6 +18,9 @@ pub const Event = union(enum) {
 };
 
 pub fn main() !void {
+    var l = try std.fs.cwd().createFile("twitch-chat2.log", .{ .truncate = true, .intended_io_mode = .blocking });
+    logfile = l.writer();
+
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     var alloc = &gpa.allocator;
 
@@ -36,19 +39,16 @@ pub fn main() !void {
     if (!std.mem.startsWith(u8, auth, "oauth:"))
         @panic("TWITCH_OAUTH needs to start with 'oauth:'");
 
-    var l = try std.fs.cwd().createFile("twitch-chat2.log", .{ .truncate = true, .intended_io_mode = .blocking });
-    log = l.writer();
-
     var buf: [24]Event = undefined;
     var ch = Channel(Event).init(&buf);
 
-    var display = try Terminal.init(alloc, log, &ch);
+    var display = try Terminal.init(alloc, &ch);
     defer display.deinit();
 
     var network: Network = undefined;
-    try network.init(alloc, &ch, log, nick, auth, senseUserTZ(log));
+    try network.init(alloc, &ch, nick, auth, senseUserTZ());
 
-    var chat = Chat{ .allocator = alloc, .log = log };
+    var chat = Chat{ .allocator = alloc };
 
     // Initial paint!
     try display.renderChat(&chat);
@@ -75,13 +75,11 @@ pub fn main() !void {
                         // need_repaint = true;
                     },
                     .other => |c| {
+                        std.log.debug("[key] [{}]", .{c});
                         if (c[0] == 'r' or c[0] == 'R') {
-                            log.writeAll("[key] R\n") catch unreachable;
                             try display.sizeChanged();
                             need_repaint = true;
                             chaos = false;
-                        } else {
-                            log.print("[key] {}\n", .{c}) catch unreachable;
                         }
                     },
                     .up, .wheelUp, .pageUp => {
@@ -107,8 +105,7 @@ pub fn main() !void {
                     need_repaint = true;
                 },
                 .message => |m| {
-                    log.writeAll("got msg!\n") catch unreachable;
-
+                    std.log.debug("got msg!", .{});
                     // Terminal wants to pre-render the message
                     // and keep a small buffer attached to the message
                     // as a form of caching.
@@ -124,4 +121,24 @@ pub fn main() !void {
     }
 
     // TODO: implement real cleanup
+}
+
+pub fn log(
+    comptime level: std.log.Level,
+    comptime scope: @Type(.EnumLiteral),
+    comptime format: []const u8,
+    args: anytype,
+) void {
+    const scope_prefix = "(" ++ @tagName(scope) ++ "): ";
+    const prefix = "[" ++ @tagName(level) ++ "] " ++ scope_prefix;
+    const held = std.debug.getStderrMutex().acquire();
+    defer held.release();
+    const stderr = std.io.getStdErr().writer();
+    nosuspend stderr.print(prefix ++ format ++ "\n", args) catch return;
+}
+
+pub fn panic(msg: []const u8, trace: ?*std.builtin.StackTrace) noreturn {
+    // Terminal.panic();
+    log(.emerg, .examples, "{}", .{msg});
+    std.builtin.default_panic(msg, trace);
 }
