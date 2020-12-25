@@ -9,12 +9,17 @@ const Emote = @import("../Chat.zig").Message.Metadata.Emote;
 const SslStream = ssl.Stream(*std.fs.File.Reader, *std.fs.File.Writer);
 const HttpClient = hzzp.base.client.BaseClient(SslStream.DstInStream, SslStream.DstOutStream);
 
+const EmoteData = struct {
+    path: []const u8,
+    data: []const u8,
+};
+
 log: std.fs.File.Writer,
 allocator: *std.mem.Allocator,
 cache: std.AutoHashMap(u32, []const u8),
 
 const Self = @This();
-// TODO: for people with 8k SUMHD terminals, let them use bigger size emotes
+// TODO: for people with 8k SUMQHD terminals, let them use bigger size emotes
 const hostname = "static-cdn.jtvnw.net";
 
 pub fn init(allocator: *std.mem.Allocator, log: std.fs.File.Writer) Self {

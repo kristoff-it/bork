@@ -1,4 +1,5 @@
 const std = @import("std");
+const datetime = @import("datetime");
 const Channel = @import("utils/channel.zig").Channel;
 const GlobalEventUnion = @import("main.zig").Event;
 const Chat = @import("Chat.zig");
@@ -23,6 +24,7 @@ const Command = union(enum) {
 
 name: []const u8,
 oauth: []const u8,
+tz: datetime.Timezone,
 allocator: *std.mem.Allocator,
 log: std.fs.File.Writer,
 ch: *Channel(GlobalEventUnion),
@@ -40,11 +42,20 @@ var reconnect_frame: @Frame(_reconnect) = undefined;
 var messages_frame_bytes: []align(16) u8 = undefined;
 var messages_result: void = undefined;
 
-pub fn init(self: *Self, alloc: *std.mem.Allocator, ch: *Channel(GlobalEventUnion), log: std.fs.File.Writer, name: []const u8, oauth: []const u8) !void {
+pub fn init(
+    self: *Self,
+    alloc: *std.mem.Allocator,
+    ch: *Channel(GlobalEventUnion),
+    log: std.fs.File.Writer,
+    name: []const u8,
+    oauth: []const u8,
+    tz: datetime.Timezone,
+) !void {
     var socket = try connect(alloc, name, oauth);
     self.* = Self{
         .name = name,
         .oauth = oauth,
+        .tz = tz,
         .allocator = alloc,
         .log = log,
         .ch = ch,
@@ -76,7 +87,7 @@ fn receiveMessages(self: *Self) void {
             return;
         };
 
-        const p = parser.parseMessage(data[0 .. data.len - 1], self.allocator, self.log) catch |err| {
+        const p = parser.parseMessage(data[0 .. data.len - 1], self.allocator, self.log, self.tz) catch |err| {
             nosuspend self.log.print("parsing error: {}\n", .{err}) catch {};
             continue;
         };

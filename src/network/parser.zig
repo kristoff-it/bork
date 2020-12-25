@@ -157,13 +157,13 @@ const position = mecha.combine(.{
     mecha.int(usize, 10),
 });
 
-pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, log: std.fs.File.Writer) !ParseResult {
+pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, log: std.fs.File.Writer, tz: datetime.Timezone) !ParseResult {
     if (std.mem.startsWith(u8, data, "PING ")) {
         return ParseResult.ping;
     } else if (privmsg(data)) |res| {
         const msg = res.value;
         var time: [5]u8 = undefined;
-        var now = datetime.Datetime.now().shiftTimezone(&datetime.timezones.Europe.Rome);
+        var now = datetime.Datetime.now().shiftTimezone(&tz);
         _ = std.fmt.bufPrint(&time, "{d:0>2}:{d:0>2}", .{
             now.time.hour,
             now.time.minute,
