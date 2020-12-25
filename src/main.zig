@@ -45,7 +45,7 @@ pub fn main() !void {
     var buf: [24]Event = undefined;
     var ch = Channel(Event).init(&buf);
 
-    var display = try Terminal.init(alloc, &ch);
+    var display = try Terminal.init(alloc, &ch, nick);
     defer display.deinit();
 
     var network: Network = undefined;

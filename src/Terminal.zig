@@ -14,11 +14,13 @@ pub const TerminalMessage = struct {
 };
 
 // State
+streamer_name: []const u8,
 allocator: *std.mem.Allocator,
 output: zbox.Buffer,
 chatBuf: zbox.Buffer,
 ticker: @Frame(startTicking),
 notifs: @Frame(notifyDisplayEvents),
+
 // Static config
 // The message is padded on each line
 // by 6 spaces (HH:MM )
@@ -28,7 +30,7 @@ var emulator: enum { iterm, wez, kitty, other } = undefined;
 
 const Self = @This();
 var done_init = false;
-pub fn init(alloc: *std.mem.Allocator, ch: *Channel(GlobalEventUnion)) !Self {
+pub fn init(alloc: *std.mem.Allocator, ch: *Channel(GlobalEventUnion), streamer_name: []const u8) !Self {
     {
         if (done_init) @panic("Terminal should only be initialized once, like a singleton.");
         done_init = true;
@@ -91,6 +93,7 @@ pub fn init(alloc: *std.mem.Allocator, ch: *Channel(GlobalEventUnion)) !Self {
 
     // NOTE: frames can't be copied so copy elision is required
     return Self{
+        .streamer_name = streamer_name,
         .allocator = alloc,
         .chatBuf = chatBuf,
         .output = output,
@@ -285,6 +288,7 @@ pub fn notifyDisplayEvents(ch: *Channel(GlobalEventUnion)) !void {
 
 pub fn deinit(self: *Self) void {
     std.log.debug("deinit terminal!", .{});
+    zbox.cursorShow() catch {};
     self.output.deinit();
     zbox.deinit();
 
@@ -349,9 +353,6 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
     {
         // NOTE: chat history is rendered bottom-up, starting from the newest
         //       message visible at the bottom, going up to the oldest.
-        //       within the context of each message, instead, rendering
-        //       is top-down, starting from the first line of the message,
-        //       progressing down to the last.
         self.chatBuf.clear();
         var message = chat.bottom_message;
         var row = self.chatBuf.height;
@@ -436,7 +437,7 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                                 }
                             }
                             row -= 1;
-                            var nick = c.name[0..std.math.min(self.chatBuf.width, c.name.len)];
+                            var nick = c.name[0..std.math.min(self.chatBuf.width - 5, c.name.len)];
                             var cur = self.chatBuf.cursorAt(row, 0);
                             cur.attribs = .{
                                 .bold = true,
@@ -445,6 +446,17 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                                 "{} <{}>",
                                 .{ c.time, nick },
                             );
+
+                            if (c.meta.sub_months > 0 and
+                                !std.mem.eql(u8, self.streamer_name, c.name))
+                            {
+                                var sub_cur = self.chatBuf.cursorAt(
+                                    cur.row_num,
+                                    self.chatBuf.width - 2,
+                                );
+
+                                try sub_cur.writer().print("[S]", .{});
+                            }
 
                             // Prints a Kappa after every username
                             // self.chatBuf.cellRef(cur.row_num, self.chatBuf.width - 2).* = .{
