@@ -61,7 +61,7 @@ pub fn init(alloc: *std.mem.Allocator, ch: *Channel(GlobalEventUnion)) !Self {
     errdefer zbox.deinit();
 
     // die on ctrl+C
-    try zbox.handleSignalInput();
+    // try zbox.handleSignalInput();
     try zbox.cursorHide();
 
     // 144fps repaints
@@ -94,7 +94,7 @@ pub fn init(alloc: *std.mem.Allocator, ch: *Channel(GlobalEventUnion)) !Self {
         .allocator = alloc,
         .chatBuf = chatBuf,
         .output = output,
-        .ticker = async startTicking(ch),
+        .ticker = undefined, //async startTicking(ch),
         .notifs = async notifyDisplayEvents(ch),
     };
 }
@@ -273,9 +273,13 @@ pub fn startTicking(ch: *Channel(GlobalEventUnion)) void {
 }
 
 pub fn notifyDisplayEvents(ch: *Channel(GlobalEventUnion)) !void {
+    defer std.log.debug("notfyDisplayEvents returning", .{});
     std.event.Loop.instance.?.yield();
     while (true) {
-        ch.put(GlobalEventUnion{ .display = (try zbox.nextEvent()) orelse continue });
+        if (try zbox.nextEvent()) |event| {
+            ch.put(GlobalEventUnion{ .display = event });
+            if (event == .CTRL_C) return;
+        }
     }
 }
 
@@ -283,9 +287,10 @@ pub fn deinit(self: *Self) void {
     std.log.debug("deinit terminal!", .{});
     self.output.deinit();
     zbox.deinit();
-    // We're not awaiting .ticker nor .notifs, but if we're deiniting
-    // it means the app is exiting and there's nothing
-    // important to cleanup there.
+
+    // Why is this a deadlock?
+    // await self.notifs catch {};
+    std.log.debug("done await", .{});
 }
 
 pub fn panic() void {

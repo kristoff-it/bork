@@ -18,7 +18,10 @@ pub const Event = union(enum) {
 };
 
 pub fn main() !void {
+    defer std.event.Loop.instance.?.finishOneEvent();
     var l = try std.fs.cwd().createFile("twitch-chat2.log", .{ .truncate = true, .intended_io_mode = .blocking });
+    defer l.close();
+    defer std.log.debug("main almost done", .{});
     logfile = l.writer();
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -47,6 +50,7 @@ pub fn main() !void {
 
     var network: Network = undefined;
     try network.init(alloc, &ch, nick, auth, senseUserTZ());
+    defer network.deinit();
 
     var chat = Chat{ .allocator = alloc };
 
@@ -76,22 +80,23 @@ pub fn main() !void {
                     },
                     .other => |c| {
                         std.log.debug("[key] [{}]", .{c});
-                        if (c[0] == 'r' or c[0] == 'R') {
-                            try display.sizeChanged();
-                            need_repaint = true;
-                            chaos = false;
+                        switch (c[0]) {
+                            'r', 'R' => {
+                                try display.sizeChanged();
+                                need_repaint = true;
+                                chaos = false;
+                            },
+                            else => {},
                         }
                     },
+                    .CTRL_C => return,
                     .up, .wheelUp, .pageUp => {
                         need_repaint = chat.scroll(.up, 1);
                     },
                     .down, .wheelDown, .pageDown => {
                         need_repaint = chat.scroll(.down, 1);
                     },
-                    .escape => {
-                        return;
-                    },
-                    .right, .left, .tick => {},
+                    .escape, .right, .left, .tick => {},
                 }
             },
             .network => |ne| switch (ne) {
@@ -133,8 +138,8 @@ pub fn log(
     const prefix = "[" ++ @tagName(level) ++ "] " ++ scope_prefix;
     const held = std.debug.getStderrMutex().acquire();
     defer held.release();
-    const stderr = std.io.getStdErr().writer();
-    nosuspend stderr.print(prefix ++ format ++ "\n", args) catch return;
+    // const stderr = std.io.getStdErr().writer();
+    nosuspend logfile.print(prefix ++ format ++ "\n", args) catch return;
 }
 
 pub fn panic(msg: []const u8, trace: ?*std.builtin.StackTrace) noreturn {
