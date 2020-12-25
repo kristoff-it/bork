@@ -6,10 +6,6 @@ bearssl:
   root: /bearssl.zig
   src:
     url: "file://forks/BearSSL"
-    #github:
-    #  repo: zig-bearssl
-    #  user: MasterQ32
-    #  ref: a1f6b5c843b6528508e9a52f30ef0be808dca1fc
 datetime:
   root: /datetime.zig
   src:
@@ -31,3 +27,10 @@ hzzp:
       repo: hzzp
       user: truemedian
       ref: e9a8b18a5fc198b8095b95ff3b8902af0765d1b3
+clap:
+  root: /clap.zig
+  src:
+    github:
+      repo: zig-clap
+      user: Hejsil
+      ref: b805a2e39bdc7e428a0bf776ead8004658b921a8

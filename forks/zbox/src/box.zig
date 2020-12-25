@@ -26,6 +26,9 @@ pub const ErrorSet = struct {
 
 usingnamespace @import("util.zig");
 
+// Pizzatime!
+pub var is_kitty = false;
+
 /// must be called before any buffers are `push`ed to the terminal.
 pub fn init(allocator: *Allocator) ErrorSet.Term.Setup!void {
     front = try Buffer.init(allocator, 24, 80);
@@ -68,7 +71,7 @@ pub fn push(buffer: Buffer) (Allocator.Error || ErrorSet.Utf8Encode || ErrorSet.
             }
 
             // go to the next character if these are the same.
-            if (!must_repaint and Cell.eql(
+            if ((!must_repaint and !is_kitty) and Cell.eql(
                 front.cell(row, col),
                 buffer.cell(row, col),
             )) continue;
@@ -84,11 +87,18 @@ pub fn push(buffer: Buffer) (Allocator.Error || ErrorSet.Utf8Encode || ErrorSet.
             front.cellRef(row, col).* = cell;
             if (cell.image.len != 0) {
                 try term.sendSGR(cell.attribs);
+                try term.send(cell.imageDecorationPre);
                 try term.send(cell.image);
-                col += 1;
-                const c = buffer.cell(row, col);
-                front.cellRef(row, col).* = c;
-                last_touched = col;
+                try term.send(cell.imageDecorationPost);
+                if (is_kitty) {
+                    try term.cursorTo(row, col);
+                    try term.send(" ");
+                } else {
+                    col += 1;
+                    const c = buffer.cell(row, col);
+                    front.cellRef(row, col).* = c;
+                    last_touched = col;
+                }
             } else {
                 var codepoint: [4]u8 = undefined;
                 const len = try std.unicode.utf8Encode(cell.char, &codepoint);
@@ -108,6 +118,8 @@ pub const Cell = struct {
     attribs: term.SGR = term.SGR{},
     char: u21 = ' ',
     image: []const u8 = "",
+    imageDecorationPre: []const u8 = "",
+    imageDecorationPost: []const u8 = "",
 
     fn eql(self: Cell, other: Cell) bool {
         return self.char == other.char and self.attribs.eql(other.attribs) and self.image.ptr == other.image.ptr;
