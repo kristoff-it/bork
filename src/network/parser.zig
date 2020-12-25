@@ -44,7 +44,7 @@ const channel = mecha.many(
 );
 
 const Tags = struct {
-    @"badge-info": usize,
+    @"badge-info": ?usize,
     badges: []const u8,
     bits: ?[]const u8,
     @"client-nonce": ?[]const u8,
@@ -111,10 +111,10 @@ const tags = mecha.map(Tags, mecha.toStruct(Tags), mecha.combine(.{
     keyValue("user-type", any_tag_value),
 }));
 
-const @"badge-info" = keyValue("badge-info", mecha.combine(.{
+const @"badge-info" = keyValue("badge-info", mecha.opt(mecha.combine(.{
     mecha.string("subscriber/"),
     mecha.int(usize, 10),
-}));
+})));
 
 const @"emote-only" = keyValue("emote-only", mecha.map(
     bool,
@@ -158,6 +158,7 @@ const position = mecha.combine(.{
 });
 
 pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, tz: datetime.Timezone) !ParseResult {
+    std.log.debug("MSG: {}\n", .{data});
     if (std.mem.startsWith(u8, data, "PING ")) {
         return ParseResult.ping;
     } else if (privmsg(data)) |res| {
@@ -210,7 +211,7 @@ pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, tz: datetime.Timezone
                         .time = time,
                         .meta = .{
                             .name = msg.tags.@"display-name",
-                            .sub_months = msg.tags.@"badge-info",
+                            .sub_months = msg.tags.@"badge-info" orelse 0,
                             .emote_only = msg.tags.@"emote-only" orelse false,
                             .emotes = emotes,
                         },

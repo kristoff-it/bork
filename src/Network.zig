@@ -79,11 +79,13 @@ pub fn deinit(self: *Self) void {
     }
 
     // Now we can kill the connection and nobody will try to reconnect
+    std.os.shutdown(self.socket.handle, .both) catch unreachable;
     self.socket.close();
-    std.log.debug("disconnected!", .{});
+    await @ptrCast(anyframe->void, messages_frame_bytes);
 }
 
 fn receiveMessages(self: *Self) void {
+    defer std.log.debug("receiveMessages done", .{});
     std.log.debug("reader started", .{});
     // yield immediately so callers can go on
     // with their lives instead of risking being
@@ -91,9 +93,11 @@ fn receiveMessages(self: *Self) void {
     std.event.Loop.instance.?.yield();
     while (true) {
         var data = self.reader.readUntilDelimiterAlloc(self.allocator, '\n', 4096) catch {
+            std.log.debug("receiveMessages errored out", .{});
             self.reconnect(null);
             return;
         };
+        std.log.debug("receiveMessages succeded", .{});
 
         const p = parser.parseMessage(data[0 .. data.len - 1], self.allocator, self.tz) catch |err| {
             std.log.debug("parsing error: [{}]", .{err});

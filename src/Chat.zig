@@ -8,6 +8,10 @@ disconnected: bool = false,
 
 const Self = @This();
 
+pub const InteractiveElement = enum {
+    subscriber_badge,
+};
+
 pub const Message = struct {
     prev: ?*Message = null,
     next: ?*Message = null,

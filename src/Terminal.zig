@@ -11,6 +11,7 @@ pub const getSize = zbox.size;
 pub const TerminalMessage = struct {
     chat_message: Chat.Message,
     buffer: zbox.Buffer,
+    subscriber_months_visible: bool = false,
 };
 
 // State
@@ -18,8 +19,8 @@ streamer_name: []const u8,
 allocator: *std.mem.Allocator,
 output: zbox.Buffer,
 chatBuf: zbox.Buffer,
+overlayBuf: zbox.Buffer,
 ticker: @Frame(startTicking),
-notifs: @Frame(notifyDisplayEvents),
 
 // Static config
 // The message is padded on each line
@@ -30,6 +31,7 @@ var emulator: enum { iterm, wez, kitty, other } = undefined;
 
 const Self = @This();
 var done_init = false;
+var notifs: @Frame(notifyDisplayEvents) = undefined;
 pub fn init(alloc: *std.mem.Allocator, ch: *Channel(GlobalEventUnion), streamer_name: []const u8) !Self {
     {
         if (done_init) @panic("Terminal should only be initialized once, like a singleton.");
@@ -90,15 +92,19 @@ pub fn init(alloc: *std.mem.Allocator, ch: *Channel(GlobalEventUnion), streamer_
 
     // Setup the buffer for chat history
     var chatBuf = try zbox.Buffer.init(alloc, size.height - 2, size.width - 2);
+    errdefer chatBuf.deinit();
 
-    // NOTE: frames can't be copied so copy elision is required
+    var overlayBuf = try zbox.Buffer.init(alloc, size.height - 2, size.width - 2);
+    errdefer overlayBuf.deinit();
+
+    notifs = async notifyDisplayEvents(ch);
     return Self{
         .streamer_name = streamer_name,
         .allocator = alloc,
         .chatBuf = chatBuf,
         .output = output,
+        .overlayBuf = overlayBuf,
         .ticker = undefined, //async startTicking(ch),
-        .notifs = async notifyDisplayEvents(ch),
     };
 }
 
@@ -291,9 +297,10 @@ pub fn deinit(self: *Self) void {
     zbox.cursorShow() catch {};
     self.output.deinit();
     zbox.deinit();
+    std.log.debug("done cleaning term", .{});
 
     // Why is this a deadlock?
-    // await self.notifs catch {};
+    await notifs catch {};
     std.log.debug("done await", .{});
 }
 
@@ -307,6 +314,7 @@ pub fn sizeChanged(self: *Self) !void {
     if (size.width != self.output.width or size.height != self.output.height) {
         try self.output.resize(size.height, size.width);
         try self.chatBuf.resize(size.height - 2, size.width - 2);
+        try self.overlayBuf.resize(size.height - 2, size.width - 2);
         self.output.clear();
         try zbox.term.clear();
         try zbox.term.flush();
@@ -354,6 +362,10 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
         // NOTE: chat history is rendered bottom-up, starting from the newest
         //       message visible at the bottom, going up to the oldest.
         self.chatBuf.clear();
+        self.overlayBuf.fill(.{
+            .is_transparent = true,
+        });
+
         var message = chat.bottom_message;
         var row = self.chatBuf.height;
         var i: usize = 0;
@@ -452,16 +464,22 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                             {
                                 var sub_cur = self.chatBuf.cursorAt(
                                     cur.row_num,
-                                    self.chatBuf.width - 2,
+                                    self.chatBuf.width - 3,
                                 );
 
+                                sub_cur.interactive_element = .subscriber_badge;
+                                sub_cur.message = m;
+                                std.log.debug("inter: {}, {}", .{ cur.row_num, self.chatBuf.width - 3 });
                                 try sub_cur.writer().print("[S]", .{});
                             }
 
-                            // Prints a Kappa after every username
-                            // self.chatBuf.cellRef(cur.row_num, self.chatBuf.width - 2).* = .{
-                            //     .image = @embedFile("../kappa.txt"),
-                            // };
+                            if (term_message.subscriber_months_visible) {
+                                try renderSubBadgeOverlay(
+                                    c.meta.sub_months,
+                                    &self.overlayBuf,
+                                    if (cur.row_num >= 3) cur.row_num - 3 else cur.row_num,
+                                );
+                            }
                         }
                     }
                 },
@@ -519,6 +537,51 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
     }
 
     self.output.blit(self.chatBuf, 1, 1);
+    self.output.blit(self.overlayBuf, 1, 1);
     try zbox.push(self.output);
     std.log.debug("render completed!", .{});
+}
+
+pub fn handleClick(self: *Self, row: usize, col: usize) !bool {
+    // Find the element that was clicked,
+    // do the corresponding action.
+    const r = std.math.min(row, zbox.front.height - 1);
+    const c = std.math.min(col, zbox.front.width - 1);
+    const cell = zbox.front.cellRef(r, c);
+    std.log.debug("cell clicked: {}", .{cell.interactive_element});
+    if (cell.interactive_element) |e| {
+        switch (e) {
+            .subscriber_badge => {
+                // Render a small
+                var term_message = @fieldParentPtr(TerminalMessage, "chat_message", cell.message.?);
+                const old = term_message.subscriber_months_visible;
+                term_message.subscriber_months_visible = !old;
+            },
+        }
+        return true;
+    }
+
+    return false;
+}
+
+fn renderSubBadgeOverlay(months: usize, buf: *zbox.Buffer, row: usize) !void {
+    const fmt = "Sub for {} months";
+    const left = buf.width - (fmt.len + 5);
+    const right = buf.width - 4;
+    var cur = buf.cursorAt(row + 1, left);
+    try cur.writer().print(fmt, .{months});
+
+    var i: usize = left - 2;
+    while (i < right) : (i += 1) {
+        buf.cellRef(row, i).* = .{ .char = '═' };
+        buf.cellRef(row + 2, i).* = .{ .char = '═' };
+    }
+
+    buf.cellRef(row, left - 2).* = .{ .char = '╔' };
+    buf.cellRef(row + 1, left - 2).* = .{ .char = '║' };
+    buf.cellRef(row + 2, left - 2).* = .{ .char = '╚' };
+
+    buf.cellRef(row, right).* = .{ .char = '╗' };
+    buf.cellRef(row + 1, right).* = .{ .char = '║' };
+    buf.cellRef(row + 2, right).* = .{ .char = '╝' };
 }

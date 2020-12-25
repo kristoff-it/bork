@@ -31,6 +31,10 @@ pub const Event = union(enum) {
     pageUp,
     pageDown,
     CTRL_C,
+    leftClick: struct {
+        row: usize,
+        col: usize,
+    },
     other: []const u8,
 };
 
@@ -281,7 +285,7 @@ pub fn teardown() void {
 
     self.buffer.in.deinit();
     self.buffer.out.deinit();
-    
+
     termState = null;
 }
 
@@ -356,6 +360,8 @@ fn parseEvent() ?Event {
         return Event.wheelDown
     else if (startsWith(u8, data, "\x1B[M`") or startsWith(u8, data, "\x1BOM`"))
         return Event.wheelUp
+    else if (startsWith(u8, data, "\x1B[M ") or startsWith(u8, data, "\x1BOM "))
+        return Event{ .leftClick = .{ .row = data[5] - 32, .col = data[4] - 32 } }
     else
         return Event{ .other = data };
 }
@@ -397,9 +403,11 @@ fn keypadMode() ErrorSet.BufWrite!void {
 
 fn mouseMode() ErrorSet.BufWrite!void {
     try sequence("?1000h");
+    // try sequence("?1006h");
 }
 fn exitMouseMode() ErrorSet.BufWrite!void {
     try sequence("?1000l");
+    // try sequence("?1006l");
 }
 
 // saves the cursor and then sends a couple of version of the altscreen
