@@ -4,7 +4,7 @@ const os = std.os;
 const b64 = std.base64.standard_encoder;
 const hzzp = @import("hzzp");
 const ssl = @import("bearssl");
-const Emote = @import("../Chat.zig").Message.Metadata.Emote;
+const Emote = @import("../Chat.zig").Message.Comment.Metadata.Emote;
 
 const SslStream = ssl.Stream(*std.fs.File.Reader, *std.fs.File.Writer);
 const HttpClient = hzzp.base.client.BaseClient(SslStream.DstInStream, SslStream.DstOutStream);
@@ -29,10 +29,12 @@ pub fn init(allocator: *std.mem.Allocator) Self {
 }
 
 // TODO: make this concurrent
+// TODO: make so failing one emote doesn't fail the whole job!
 pub fn fetch(self: *Self, emote_list: []Emote) !void {
     for (emote_list) |*emote| {
         std.log.debug("fetching  {}", .{emote.*});
         const result = try self.cache.getOrPut(emote.id);
+        errdefer if (self.cache.remove(emote.id)) |e| self.allocator.free(e.value);
         if (!result.found_existing) {
             std.log.debug("need to download", .{});
             // Need to download the image

@@ -2,7 +2,7 @@ const std = @import("std");
 const mecha = @import("mecha");
 const datetime = @import("datetime");
 const Chat = @import("../Chat.zig");
-const Metadata = Chat.Message.Metadata;
+const Metadata = Chat.Message.Comment.Metadata;
 const Emote = Metadata.Emote;
 
 const ParseResult = union(enum) {

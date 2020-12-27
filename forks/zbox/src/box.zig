@@ -28,7 +28,7 @@ usingnamespace @import("util.zig");
 
 // Pizzatime!
 pub var is_kitty = false;
-const Chat = @import("../../../src/Chat.zig");
+const InteractiveElement = @import("../../../src/Terminal.zig").InteractiveElement;
 
 /// must be called before any buffers are `push`ed to the terminal.
 pub fn init(allocator: *Allocator) ErrorSet.Term.Setup!void {
@@ -122,13 +122,18 @@ pub const Cell = struct {
     imageDecorationPre: []const u8 = "",
     imageDecorationPost: []const u8 = "",
 
-    interactive_element: ?Chat.InteractiveElement = null,
-    message: ?*Chat.Message = null,
+    interactive_element: InteractiveElement = .none,
 
     is_transparent: bool = false,
 
+    // TODO: differing metadata should not issue a terminal reprint,
+    //       it should just cause the cell to be transferred over to
+    //       the front buffer.
     fn eql(self: Cell, other: Cell) bool {
-        return self.char == other.char and self.attribs.eql(other.attribs) and self.image.ptr == other.image.ptr;
+        return self.char == other.char and
+            self.attribs.eql(other.attribs) and
+            self.image.ptr == other.image.ptr and
+            std.meta.eql(self.interactive_element, other.interactive_element);
     }
 };
 
@@ -160,8 +165,7 @@ pub const Buffer = struct {
         attribs: term.SGR = term.SGR{},
         buffer: *Buffer,
 
-        interactive_element: ?Chat.InteractiveElement = null,
-        message: ?*Chat.Message = null,
+        interactive_element: InteractiveElement = .none,
 
         const Error = error{ InvalidUtf8, InvalidCharacter };
 
@@ -190,7 +194,6 @@ pub const Buffer = struct {
                                 .char = cp,
                                 .attribs = self.attribs,
                                 .interactive_element = self.interactive_element,
-                                .message = self.message,
                                 .is_transparent = false,
                             };
                         self.col_num += 1;
