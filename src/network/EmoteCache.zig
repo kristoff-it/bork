@@ -20,7 +20,7 @@ cache: std.AutoHashMap(u32, []const u8),
 const Self = @This();
 // TODO: for people with 8k SUMQHD terminals, let them use bigger size emotes
 const hostname = "static-cdn.jtvnw.net";
-
+const twitch_pem = @embedFile("../../twitch.pem");
 pub fn init(allocator: *std.mem.Allocator) Self {
     return Self{
         .allocator = allocator,
@@ -34,7 +34,7 @@ pub fn fetch(self: *Self, emote_list: []Emote) !void {
     for (emote_list) |*emote| {
         std.log.debug("fetching  {}", .{emote.*});
         const result = try self.cache.getOrPut(emote.id);
-        errdefer if (self.cache.remove(emote.id)) |e| self.allocator.free(e.value);
+        errdefer _ = self.cache.remove(emote.id);
         if (!result.found_existing) {
             std.log.debug("need to download", .{});
             // Need to download the image
@@ -42,27 +42,7 @@ pub fn fetch(self: *Self, emote_list: []Emote) !void {
                 var trust_anchor = ssl.TrustAnchorCollection.init(self.allocator);
                 // errdefer trust_anchor.deinit();
 
-                switch (builtin.os.tag) {
-                    .linux, .macos => {
-                        const file = std.fs.openFileAbsolute("/etc/ssl/cert.pem", .{ .read = true, .intended_io_mode = .blocking }) catch |err| {
-                            if (err == error.FileNotFound) {
-                                // try trust_anchor.appendFromPEM(github_pem);
-                                // break :pem;
-                                return error.CouldNotReadCerts;
-                            } else return err;
-                        };
-                        defer file.close();
-
-                        const certs = try file.readToEndAlloc(self.allocator, 500000);
-                        defer self.allocator.free(certs);
-
-                        try trust_anchor.appendFromPEM(certs);
-                    },
-                    else => {
-                        return error.DunnoHowToTrustAnchor;
-                        // try trust_anchor.appendFromPEM(github_pem);
-                    },
-                }
+                try trust_anchor.appendFromPEM(twitch_pem);
                 var x509 = ssl.x509.Minimal.init(trust_anchor);
                 nosuspend {
                     var ssl_client = ssl.Client.init(x509.getEngine());
