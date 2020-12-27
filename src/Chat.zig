@@ -8,46 +8,44 @@ disconnected: bool = false,
 
 const Self = @This();
 
-pub const InteractiveElement = enum {
-    subscriber_badge,
-};
-
 pub const Message = struct {
     prev: ?*Message = null,
     next: ?*Message = null,
     kind: union(enum) {
-        chat: struct {
-            name: []const u8,
-            text: []const u8,
-            meta: Metadata,
-            time: [5]u8,
-        },
+        chat: Comment,
         line,
     },
 
-    pub const Metadata = struct {
-        /// Author's name
+    pub const Comment = struct {
         name: []const u8,
-        /// Total months the user was subbed (null = non sub)
-        sub_months: usize,
-        /// List of emotes and their positions.
-        /// Must be sorted (asc) by start position.
-        emotes: []Emote = &[0]Emote{},
-        /// Number of chars that need to be replaced with emotes
-        emote_chars: usize = 0,
-        /// The message is entirely comprised of emotes
-        emote_only: bool = false,
+        text: []const u8,
+        meta: Metadata,
+        time: [5]u8,
 
-        pub const Emote = struct {
-            id: u32,
-            start: usize,
-            end: usize,
-            image: ?[]const u8 = null,
+        pub const Metadata = struct {
+            /// Author's name
+            name: []const u8,
+            /// Total months the user was subbed (null = non sub)
+            sub_months: usize,
+            /// List of emotes and their positions.
+            /// Must be sorted (asc) by start position.
+            emotes: []Emote = &[0]Emote{},
+            /// Number of chars that need to be replaced with emotes
+            emote_chars: usize = 0,
+            /// The message is entirely comprised of emotes
+            emote_only: bool = false,
 
-            // Used to sort the emote list by starting poisition.
-            pub fn lessThan(context: void, lhs: Emote, rhs: Emote) bool {
-                return lhs.start < rhs.start;
-            }
+            pub const Emote = struct {
+                id: u32,
+                start: usize,
+                end: usize,
+                image: ?[]const u8 = null,
+
+                // Used to sort the emote list by starting poisition.
+                pub fn lessThan(context: void, lhs: Emote, rhs: Emote) bool {
+                    return lhs.start < rhs.start;
+                }
+            };
         };
     };
 };

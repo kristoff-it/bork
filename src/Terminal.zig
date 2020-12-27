@@ -11,7 +11,21 @@ pub const getSize = zbox.size;
 pub const TerminalMessage = struct {
     chat_message: Chat.Message,
     buffer: zbox.Buffer,
-    subscriber_months_visible: bool = false,
+};
+
+pub const InteractiveElement = union(enum) {
+    none,
+    subscriber_badge: *TerminalMessage,
+    username: *TerminalMessage,
+    button: union(enum) {
+        // Username buttons
+        ban: *TerminalMessage,
+        mod: *TerminalMessage,
+        vip: *TerminalMessage,
+        // Message buttons
+        pin: *TerminalMessage,
+        del: *TerminalMessage,
+    },
 };
 
 // State
@@ -21,6 +35,7 @@ output: zbox.Buffer,
 chatBuf: zbox.Buffer,
 overlayBuf: zbox.Buffer,
 ticker: @Frame(startTicking),
+active_interaction: InteractiveElement = .none,
 
 // Static config
 // The message is padded on each line
@@ -31,6 +46,7 @@ var emulator: enum { iterm, wez, kitty, other } = undefined;
 
 const Self = @This();
 var done_init = false;
+var terminal_inited = false;
 var notifs: @Frame(notifyDisplayEvents) = undefined;
 pub fn init(alloc: *std.mem.Allocator, ch: *Channel(GlobalEventUnion), streamer_name: []const u8) !Self {
     {
@@ -62,7 +78,9 @@ pub fn init(alloc: *std.mem.Allocator, ch: *Channel(GlobalEventUnion), streamer_
 
     // Initialize zbox
     try zbox.init(alloc);
+    _ = @atomicRmw(bool, &terminal_inited, .Xchg, true, .SeqCst);
     errdefer zbox.deinit();
+    errdefer _ = @atomicRmw(bool, &terminal_inited, .Xchg, false, .SeqCst);
 
     // die on ctrl+C
     // try zbox.handleSignalInput();
@@ -305,7 +323,9 @@ pub fn deinit(self: *Self) void {
 }
 
 pub fn panic() void {
-    zbox.deinit();
+    if (@atomicRmw(bool, &terminal_inited, .Xchg, false, .SeqCst)) {
+        zbox.deinit();
+    }
 }
 
 pub fn sizeChanged(self: *Self) !void {
@@ -449,15 +469,58 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                                 }
                             }
                             row -= 1;
-                            var nick = c.name[0..std.math.min(self.chatBuf.width - 5, c.name.len)];
+                            var nick = c.meta.name[0..std.math.min(self.chatBuf.width - 5, c.meta.name.len)];
                             var cur = self.chatBuf.cursorAt(row, 0);
                             cur.attribs = .{
                                 .bold = true,
                             };
-                            try cur.writer().print(
-                                "{} <{}>",
-                                .{ c.time, nick },
-                            );
+
+                            // Time
+                            {
+                                try cur.writer().print(
+                                    "{} ",
+                                    .{c.time},
+                                );
+                            }
+
+                            var nick_left = "«";
+                            var nick_right = "»";
+                            switch (self.active_interaction) {
+                                else => {},
+                                .username => |tm| {
+                                    if (tm == term_message) {
+                                        nick_right = "«";
+                                        nick_left = "»";
+                                    }
+                                },
+                            }
+
+                            // Nickname
+                            var nickname_end_col: usize = undefined;
+                            {
+                                cur.attribs = .{
+                                    .fg_yellow = true,
+                                };
+                                try cur.writer().print("{}", .{nick_left});
+
+                                {
+                                    cur.attribs = .{
+                                        .fg_yellow = false,
+                                    };
+                                    cur.interactive_element = .{
+                                        .username = term_message,
+                                    };
+                                    try cur.writer().print("{}", .{nick});
+                                    nickname_end_col = cur.col_num;
+
+                                    cur.interactive_element = .none;
+                                }
+
+                                cur.attribs = .{
+                                    .fg_yellow = true,
+                                };
+                                try cur.writer().print("{}", .{nick_right});
+                            }
 
                             if (c.meta.sub_months > 0 and
                                 !std.mem.eql(u8, self.streamer_name, c.name))
@@ -467,18 +530,38 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                                     self.chatBuf.width - 3,
                                 );
 
-                                sub_cur.interactive_element = .subscriber_badge;
-                                sub_cur.message = m;
-                                std.log.debug("inter: {}, {}", .{ cur.row_num, self.chatBuf.width - 3 });
+                                sub_cur.interactive_element = .{
+                                    .subscriber_badge = term_message,
+                                };
+
+                                std.log.debug("inter: {}, {}", .{
+                                    cur.row_num,
+                                    self.chatBuf.width - 3,
+                                });
                                 try sub_cur.writer().print("[S]", .{});
                             }
 
-                            if (term_message.subscriber_months_visible) {
-                                try renderSubBadgeOverlay(
-                                    c.meta.sub_months,
-                                    &self.overlayBuf,
-                                    if (cur.row_num >= 3) cur.row_num - 3 else cur.row_num,
-                                );
+                            switch (self.active_interaction) {
+                                else => {},
+                                .subscriber_badge => |tm| {
+                                    if (tm == term_message) {
+                                        try renderSubBadgeOverlay(
+                                            c.meta.sub_months,
+                                            &self.overlayBuf,
+                                            if (cur.row_num >= 3) cur.row_num - 3 else 0,
+                                        );
+                                    }
+                                },
+                                .username => |tm| {
+                                    if (tm == term_message) {
+                                        try renderUserActionsOverlay(
+                                            c,
+                                            &self.overlayBuf,
+                                            cur.row_num,
+                                            nickname_end_col + 1,
+                                        );
+                                    }
+                                },
                             }
                         }
                     }
@@ -548,40 +631,123 @@ pub fn handleClick(self: *Self, row: usize, col: usize) !bool {
     const r = std.math.min(row, zbox.front.height - 1);
     const c = std.math.min(col, zbox.front.width - 1);
     const cell = zbox.front.cellRef(r, c);
-    std.log.debug("cell clicked: {}", .{cell.interactive_element});
-    if (cell.interactive_element) |e| {
-        switch (e) {
-            .subscriber_badge => {
-                // Render a small
-                var term_message = @fieldParentPtr(TerminalMessage, "chat_message", cell.message.?);
-                const old = term_message.subscriber_months_visible;
-                term_message.subscriber_months_visible = !old;
-            },
-        }
-        return true;
+    std.log.debug("cell clicked: {}", .{@tagName(cell.interactive_element)});
+
+    if (self.active_interaction == .none and
+        cell.interactive_element == .none)
+    {
+        return false;
     }
 
-    return false;
+    self.active_interaction = if (std.meta.eql(
+        self.active_interaction,
+        cell.interactive_element,
+    ))
+        .none
+    else
+        cell.interactive_element;
+
+    return true;
 }
 
 fn renderSubBadgeOverlay(months: usize, buf: *zbox.Buffer, row: usize) !void {
-    const fmt = "Sub for {} months";
-    const left = buf.width - (fmt.len + 5);
-    const right = buf.width - 4;
+    const fmt = " Sub for {} months ";
+    const left = buf.width - (fmt.len + 3);
     var cur = buf.cursorAt(row + 1, left);
     try cur.writer().print(fmt, .{months});
 
-    var i: usize = left - 2;
-    while (i < right) : (i += 1) {
-        buf.cellRef(row, i).* = .{ .char = '═' };
-        buf.cellRef(row + 2, i).* = .{ .char = '═' };
+    while (cur.col_num < buf.width - 3) {
+        try cur.writer().print(" ", .{});
     }
 
-    buf.cellRef(row, left - 2).* = .{ .char = '╔' };
-    buf.cellRef(row + 1, left - 2).* = .{ .char = '║' };
-    buf.cellRef(row + 2, left - 2).* = .{ .char = '╚' };
-
-    buf.cellRef(row, right).* = .{ .char = '╗' };
-    buf.cellRef(row + 1, right).* = .{ .char = '║' };
-    buf.cellRef(row + 2, right).* = .{ .char = '╝' };
+    Box.draw(.double, buf, row, left - 1, fmt.len, 3);
 }
+
+fn renderUserActionsOverlay(
+    c: Chat.Message.Comment,
+    buf: *zbox.Buffer,
+    row: usize,
+    col: usize,
+) !void {
+    Box.draw(.single, buf, row - 4, col + 1, 4, 5);
+    const btns = .{
+        .{ "BAN", "fg_red" },
+        .{ "MOD", "fg_yellow" },
+        .{ "VIP", "fg_blue" },
+    };
+
+    var cur: zbox.Buffer.WriteCursor = undefined;
+    inline for (btns) |button, i| {
+        cur = buf.cursorAt(row - 3 + i, col + 2);
+        @field(cur.attribs, button[1]) = true;
+        try cur.writer().print(button[0], .{});
+    }
+    cur.row_num += 1;
+    cur.col_num = col;
+    cur.attribs = .{};
+    try cur.writer().print("─┺", .{});
+
+    //     var cur: zbox.Buffer.WriteCursor = undefined;
+    //     inline for (btns) |button, i| {
+    //         cur = buf.cursorAt(row - 3 + i, 1);
+    //         @field(cur.attribs, button[1]) = true;
+    //         try cur.writer().print(button[0], .{});
+    //     }
+    //     cur.row_num += 1;
+    //     cur.attribs = .{};
+    //     try cur.writer().print("┹─", .{});
+}
+
+fn renderMessageActionsOverlay(
+    c: Chat.Message.Comment,
+    buf: *zbox.Buffer,
+    row: usize,
+) !void {
+    Box.draw(.single, buf, row - 4, 0, 4, 5);
+    const btns = .{
+        .{ "DEL", "fg_red" },
+        .{ "PIN", "fg_blue" },
+    };
+
+    var cur: zbox.Buffer.WriteCursor = undefined;
+    inline for (btns) |button, i| {
+        cur = buf.cursorAt(row - 3 + i, 1);
+        @field(cur.attribs, button[1]) = true;
+        try cur.writer().print(button[0], .{});
+    }
+    cur.row_num += 1;
+    cur.attribs = .{};
+    try cur.writer().print("┹─", .{});
+}
+
+const Box = struct {
+    //                      0    1    2    3    4    5
+    const double = [6]u21{ '╔', '╗', '╚', '╝', '═', '║' };
+    const single = [6]u21{ '┏', '┓', '┗', '┛', '━', '┃' };
+
+    fn draw(comptime set: @Type(.EnumLiteral), buf: *zbox.Buffer, row: usize, col: usize, width: usize, height: usize) void {
+        const char_set = @field(Box, @tagName(set));
+
+        {
+            var i: usize = col;
+            while (i < col + width) : (i += 1) {
+                buf.cellRef(row, i).* = .{ .char = char_set[4] };
+                buf.cellRef(row + height - 1, i).* = .{ .char = char_set[4] };
+            }
+        }
+
+        {
+            var i: usize = row;
+            while (i < row + height - 1) : (i += 1) {
+                buf.cellRef(i, col).* = .{ .char = char_set[5] };
+                buf.cellRef(i, col + width).* = .{ .char = char_set[5] };
+            }
+        }
+
+        buf.cellRef(row, col).* = .{ .char = char_set[0] };
+        buf.cellRef(row, col + width).* = .{ .char = char_set[1] };
+
+        buf.cellRef(row + height - 1, col).* = .{ .char = char_set[2] };
+        buf.cellRef(row + height - 1, col + width).* = .{ .char = char_set[3] };
+    }
+};

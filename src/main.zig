@@ -10,19 +10,13 @@ const Chat = @import("Chat.zig");
 
 pub const io_mode = .evented;
 
-var logfile: std.fs.File.Writer = undefined;
-
 pub const Event = union(enum) {
     display: Terminal.Event,
     network: Network.Event,
 };
 
+var log_level: std.log.Level = .warn;
 pub fn main() !void {
-    var l = try std.fs.cwd().createFile("bork.log", .{ .truncate = true, .intended_io_mode = .blocking });
-    defer l.close();
-    defer std.log.debug("main almost done", .{});
-    logfile = l.writer();
-
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     var alloc = &gpa.allocator;
 
@@ -37,9 +31,33 @@ pub fn main() !void {
         });
     };
 
-    const auth = std.os.getenv("TWITCH_OAUTH") orelse @panic("missing TWITCH_OAUTH env variable");
-    if (!std.mem.startsWith(u8, auth, "oauth:"))
-        @panic("TWITCH_OAUTH needs to start with 'oauth:'");
+    const auth = std.os.getenv("TWITCH_OAUTH") orelse {
+        std.debug.print(
+            \\To connect to Twitch, bork needs to authenticate as you.
+            \\Please place your OAuth token in an env variable named:
+            \\                       TWITCH_OAUTH
+            \\
+            \\Here's an official tool that can quickly generate a token
+            \\for you: https://twitchapps.com/tmi/
+            \\
+            \\It might be a good idea to save the token in a dotfile
+            \\and then refer to your token through it:
+            \\
+            \\       TWITCH_OAUTH="$(cat ~/.twitch_oauth)" ./bork
+            \\
+            \\Or, even better, consider adding this line to your shell
+            \\startup file:
+            \\
+            \\       export TWITCH_OAUTH="$(cat ~/.twitch_oauth)"
+            \\
+        , .{});
+        std.os.exit(1);
+    };
+
+    if (!std.mem.startsWith(u8, auth, "oauth:")) {
+        std.debug.print("TWITCH_OAUTH needs to start with `oauth:`\n", .{});
+        std.os.exit(1);
+    }
 
     var buf: [24]Event = undefined;
     var ch = Channel(Event).init(&buf);
@@ -137,16 +155,22 @@ pub fn log(
     comptime format: []const u8,
     args: anytype,
 ) void {
-    const scope_prefix = "(" ++ @tagName(scope) ++ "): ";
-    const prefix = "[" ++ @tagName(level) ++ "] " ++ scope_prefix;
-    const held = std.debug.getStderrMutex().acquire();
-    defer held.release();
-    // const stderr = std.io.getStdErr().writer();
-    nosuspend logfile.print(prefix ++ format ++ "\n", args) catch return;
+    nosuspend {
+        const scope_prefix = "(" ++ @tagName(scope) ++ "): ";
+        const prefix = "[" ++ @tagName(level) ++ "] " ++ scope_prefix;
+        const held = std.debug.getStderrMutex().acquire();
+        defer held.release();
+        const logfile = std.fs.cwd().createFile("bork.log", .{ .truncate = false, .intended_io_mode = .blocking }) catch return;
+        defer logfile.close();
+        const writer = logfile.writer();
+        const end = logfile.getEndPos() catch return;
+        logfile.seekTo(end) catch return;
+        writer.print(prefix ++ format ++ "\n", args) catch return;
+    }
 }
 
 pub fn panic(msg: []const u8, trace: ?*std.builtin.StackTrace) noreturn {
     nosuspend Terminal.panic();
-    log(.emerg, .examples, "{}", .{msg});
+    log(.emerg, .default, "{}", .{msg});
     std.builtin.default_panic(msg, trace);
 }
