@@ -35,7 +35,7 @@
 static size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb,
                                   void *userp) {
   size_t realsize = size * nmemb;
-  struct MemoryStruct *mem = (struct MemoryStruct *)userp;
+  struct slice *mem = (struct slice *)userp;
 
   char *ptr = realloc(mem->memory, mem->size + realsize + 1);
   if (ptr == NULL) {
@@ -52,7 +52,7 @@ static size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb,
   return realsize;
 }
 
-int getEmotes(char *url, struct MemoryStruct *chunk) {
+int getEmotes(char *url, struct slice *chunk) {
   CURL *curl_handle;
   CURLcode res;
 
@@ -85,15 +85,6 @@ int getEmotes(char *url, struct MemoryStruct *chunk) {
     fprintf(stderr, "curl_easy_perform() failed: %s\n",
             curl_easy_strerror(res));
     return -1;
-  } else {
-    /*
-     * Now, our chunk.memory points to a memory block that is chunk.size
-     * bytes big and contains the remote file.
-     *
-     * Do something nice with it!
-     */
-
-    // printf("%lu bytes retrieved\n", (unsigned long)chunk.size);
   }
 
   /* cleanup curl stuff */

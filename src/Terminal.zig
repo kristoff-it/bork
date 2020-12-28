@@ -61,7 +61,7 @@ pub fn init(alloc: *std.mem.Allocator, ch: *Channel(GlobalEventUnion), streamer_
         // - iTerm2
         // - WezTerm
         // - Kitty
-        const name = std.os.getenv("TERM_PROGRAM") orelse std.os.getenv("TERM") orelse "";
+        const name = std.os.getenv("TERM") orelse std.os.getenv("TERM_PROGRAM") orelse "";
         if (std.mem.eql(u8, name, "WezTerm")) {
             emulator = .wez;
         } else if (std.mem.eql(u8, name, "iTerm.app")) {
