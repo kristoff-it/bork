@@ -4,8 +4,9 @@ const os = std.os;
 const b64 = std.base64.standard_encoder;
 
 const Emote = @import("../Chat.zig").Message.Comment.Metadata.Emote;
-const our_lib = @cImport({
+usingnamespace @cImport({
     @cInclude("EmoteCache.h");
+    @cInclude("stdlib.h");
 });
 
 allocator: *std.mem.Allocator,
@@ -14,7 +15,6 @@ cache: std.AutoHashMap(u32, []const u8),
 const Self = @This();
 // TODO: for people with 8k SUMQHD terminals, let them use bigger size emotes
 const hostname = "https://static-cdn.jtvnw.net";
-// const twitch_pem = @embedFile("../../twitch.pem");
 pub fn init(allocator: *std.mem.Allocator) Self {
     return Self{
         .allocator = allocator,
@@ -31,14 +31,14 @@ pub fn fetch(self: *Self, emote_list: []Emote) !void {
         errdefer _ = self.cache.remove(emote.id);
         if (!result.found_existing) {
             std.log.debug("need to download", .{});
+            var chunk: slice = undefined;
             // Need to download the image
-            const img = img: {
+            var img = img: {
                 nosuspend {
                     const path = try std.fmt.allocPrint(self.allocator, hostname ++ "/emoticons/v1/{}/1.0\x00", .{emote.id});
                     defer self.allocator.free(path);
 
-                    var chunk: our_lib.MemoryStruct = undefined;
-                    const code: c_int = our_lib.getEmotes(path.ptr, &chunk);
+                    const code: c_int = getEmotes(path.ptr, &chunk);
                     var image: []const u8 = undefined;
                     if (code != 0)
                         return error.CFailed;
@@ -52,6 +52,9 @@ pub fn fetch(self: *Self, emote_list: []Emote) !void {
 
             var encode_buf = try self.allocator.alloc(u8, std.base64.Base64Encoder.calcSize(img.len));
             result.entry.value = b64.encode(encode_buf, img);
+            // freeing the memory initialized from c
+            free(@ptrCast(*c_void, chunk.memory));
+            std.log.debug("encoded: {s}\n", .{result.entry.value});
         }
 
         emote.image = result.entry.value;
