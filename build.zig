@@ -23,7 +23,9 @@ pub fn build(b: *Builder) void {
 
     // Necessary for using localtime()
     exe.linkLibC();
-
+    if (std.meta.eql(target.os_tag, .linux)) {
+        // exe.sanitize_thread = true;
+    }
     exe.setTarget(target);
     exe.setBuildMode(mode);
     exe.install();
