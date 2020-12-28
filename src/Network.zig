@@ -80,8 +80,8 @@ pub fn deinit(self: *Self) void {
 
     // Now we can kill the connection and nobody will try to reconnect
     std.os.shutdown(self.socket.handle, .both) catch unreachable;
-    self.socket.close();
     await @ptrCast(anyframe->void, messages_frame_bytes);
+    self.socket.close();
 }
 
 fn receiveMessages(self: *Self) void {
@@ -189,16 +189,13 @@ fn _reconnect(self: *Self, writer_held: ?std.event.Lock.Held) void {
     // Ensure we have the writer lock
     var held = writer_held orelse self.writer_lock.acquire();
 
-    self.socket.close();
-    // TODO: is closing the socket ok?
-    //       maybe it isn't at all and we need to do
-    //       something different.
-
     // Sync with the reader. It will at one point notice
     // that the connection is borked and return.
     {
+        std.os.shutdown(self.socket.handle, .both) catch unreachable;
         // await messages_frame;
         await @ptrCast(anyframe->void, messages_frame_bytes);
+        self.socket.close();
     }
 
     // Reconnect the socket
