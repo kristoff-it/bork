@@ -4,6 +4,7 @@ const datetime = @import("datetime");
 const Chat = @import("../Chat.zig");
 const Metadata = Chat.Message.Comment.Metadata;
 const Emote = Metadata.Emote;
+const SubType = Metadata.SubType;
 
 const ParseResult = union(enum) {
     ping,
@@ -44,7 +45,7 @@ const channel = mecha.many(
 );
 
 const Tags = struct {
-    @"badge-info": ?usize,
+    @"badge-info": ?SubType,
     badges: []const u8,
     bits: ?[]const u8,
     @"client-nonce": ?[]const u8,
@@ -111,10 +112,25 @@ const tags = mecha.map(Tags, mecha.toStruct(Tags), mecha.combine(.{
     keyValue("user-type", any_tag_value),
 }));
 
-const @"badge-info" = keyValue("badge-info", mecha.opt(mecha.combine(.{
-    mecha.string("subscriber/"),
+const @"badge-info" = keyValue("badge-info", mecha.opt(mecha.map(SubType, struct {
+    fn toSubType(args: anytype) SubType {
+        std.log.debug("badge info: [{}]", .{args});
+        if (std.mem.eql(u8, args[0], "subscriber")) {
+            return SubType{ .subscriber = args[1] };
+        } else if (std.mem.eql(u8, args[0], "founder")) {
+            return SubType{ .founder = args[1] };
+        } else {
+            return SubType{ .other = .{ .name = args[0], .months = args[1] } };
+        }
+    }
+}.toSubType, mecha.combine(.{
+    mecha.many(mecha.ascii.not(mecha.oneOf(.{
+        mecha.ascii.char('/'),
+        mecha.ascii.char(';'),
+    }))),
+    mecha.ascii.char('/'),
     mecha.int(usize, 10),
-})));
+}))));
 
 const @"emote-only" = keyValue("emote-only", mecha.map(
     bool,
@@ -201,7 +217,7 @@ pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, tz: datetime.Timezone
         // if (!std.sort.isSorted(Emote, emotes, {}, Emote.lessThan))
         //     return error.InvalidEmoteList;
         std.sort.sort(Emote, emotes, {}, Emote.lessThan);
-
+        std.log.debug("parsed tokens: {}", .{msg.tags});
         return ParseResult{
             .message = Chat.Message{
                 .kind = .{
@@ -211,9 +227,10 @@ pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, tz: datetime.Timezone
                         .time = time,
                         .meta = .{
                             .name = msg.tags.@"display-name",
-                            .sub_months = msg.tags.@"badge-info" orelse 0,
+                            .sub = msg.tags.@"badge-info",
                             .emote_only = msg.tags.@"emote-only" orelse false,
                             .emotes = emotes,
+                            .is_mod = std.mem.eql(u8, msg.tags.@"user-type", "mod"),
                         },
                     },
                 },

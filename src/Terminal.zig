@@ -522,23 +522,49 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                                 try cur.writer().print("{}", .{nick_right});
                             }
 
-                            if (c.meta.sub_months > 0 and
+                            // Badges
+                            const badges_width: usize = if (c.meta.is_mod) 4 else 3;
+                            var is_founder = false;
+                            const sub_months_count = if (c.meta.sub) |sub| switch (sub) {
+                                .founder => |x| founder: {
+                                    is_founder = true;
+                                    break :founder x;
+                                },
+                                .subscriber => |x| x,
+                                .other => 0,
+                            } else 0;
+                            if (sub_months_count > 0 and
                                 !std.mem.eql(u8, self.streamer_name, c.name))
                             {
                                 var sub_cur = self.chatBuf.cursorAt(
                                     cur.row_num,
-                                    self.chatBuf.width - 3,
+                                    self.chatBuf.width - badges_width,
                                 );
 
-                                sub_cur.interactive_element = .{
-                                    .subscriber_badge = term_message,
-                                };
+                                try sub_cur.writer().print("[", .{});
+                                // Subscriber badge
+                                {
+                                    sub_cur.interactive_element = .{
+                                        .subscriber_badge = term_message,
+                                    };
+                                    if (is_founder) {
+                                        sub_cur.attribs = .{
+                                            .fg_yellow = true,
+                                        };
+                                    }
+                                    try sub_cur.writer().print("S", .{});
+                                    sub_cur.interactive_element = .none;
+                                    sub_cur.attribs = .{};
+                                }
 
-                                std.log.debug("inter: {}, {}", .{
-                                    cur.row_num,
-                                    self.chatBuf.width - 3,
-                                });
-                                try sub_cur.writer().print("[S]", .{});
+                                // Mod badge
+                                if (c.meta.is_mod) {
+                                    // sub_cur.interactive_element = .none;
+                                    // TODO: interactive element for mods
+                                    try sub_cur.writer().print("M", .{});
+                                    sub_cur.interactive_element = .none;
+                                }
+                                try sub_cur.writer().print("]", .{});
                             }
 
                             switch (self.active_interaction) {
@@ -546,9 +572,13 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                                 .subscriber_badge => |tm| {
                                     if (tm == term_message) {
                                         try renderSubBadgeOverlay(
-                                            c.meta.sub_months,
+                                            sub_months_count,
                                             &self.overlayBuf,
-                                            if (cur.row_num >= 3) cur.row_num - 3 else 0,
+                                            if (cur.row_num >= 3)
+                                                cur.row_num - 3
+                                            else
+                                                0,
+                                            badges_width,
                                         );
                                     }
                                 },
@@ -650,17 +680,21 @@ pub fn handleClick(self: *Self, row: usize, col: usize) !bool {
     return true;
 }
 
-fn renderSubBadgeOverlay(months: usize, buf: *zbox.Buffer, row: usize) !void {
+fn renderSubBadgeOverlay(months: usize, buf: *zbox.Buffer, row: usize, badges_width: usize) !void {
     const fmt = " Sub for {} months ";
-    const left = buf.width - (fmt.len + 3);
+    const fmt_len = std.fmt.count(fmt, .{months});
+    const space_needed = (fmt_len + badges_width + 1);
+    if (space_needed >= buf.width) return;
+    const left = buf.width - space_needed;
+
     var cur = buf.cursorAt(row + 1, left);
     try cur.writer().print(fmt, .{months});
 
-    while (cur.col_num < buf.width - 3) {
+    while (cur.col_num < buf.width - badges_width) {
         try cur.writer().print(" ", .{});
     }
 
-    Box.draw(.double, buf, row, left - 1, fmt.len, 3);
+    Box.draw(.double, buf, row, left - 1, fmt_len + 1, 3);
 }
 
 fn renderUserActionsOverlay(
@@ -669,6 +703,8 @@ fn renderUserActionsOverlay(
     row: usize,
     col: usize,
 ) !void {
+    if (row <= 4 or buf.width - col <= 5) return;
+
     Box.draw(.single, buf, row - 4, col + 1, 4, 5);
     const btns = .{
         .{ "BAN", "fg_red" },
