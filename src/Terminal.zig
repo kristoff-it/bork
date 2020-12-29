@@ -156,7 +156,7 @@ fn setCellToEmote(cell: *zbox.Cell, emote: []const u8) void {
             .imageDecorationPost = "\x07",
         },
         .kitty => .{
-            .imageDecorationPre = "\x1b_Gf=100,t=d,a=T,r=1,c=2,q=1;",
+            .imageDecorationPre = "\x1b_Gf=100,t=d,a=T,r=1,c=2;",
             .image = emote,
             .imageDecorationPost = "\x1b\\",
         },
