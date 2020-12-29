@@ -26,7 +26,7 @@ pub const Message = struct {
             /// Author's name
             name: []const u8,
             /// Total months the user was subbed (null = non sub)
-            sub_months: usize,
+            sub: ?SubType,
             /// List of emotes and their positions.
             /// Must be sorted (asc) by start position.
             emotes: []Emote = &[0]Emote{},
@@ -34,6 +34,17 @@ pub const Message = struct {
             emote_chars: usize = 0,
             /// The message is entirely comprised of emotes
             emote_only: bool = false,
+            /// Moderator status
+            is_mod: bool = false,
+
+            pub const SubType = union(enum) {
+                founder: usize,
+                subscriber: usize,
+                other: struct {
+                    name: []const u8,
+                    months: usize,
+                },
+            };
 
             pub const Emote = struct {
                 id: u32,

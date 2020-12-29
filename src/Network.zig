@@ -99,6 +99,8 @@ fn receiveMessages(self: *Self) void {
         };
         std.log.debug("receiveMessages succeded", .{});
 
+        if (data.len == 0) continue;
+
         const p = parser.parseMessage(data[0 .. data.len - 1], self.allocator, self.tz) catch |err| {
             std.log.debug("parsing error: [{}]", .{err});
             continue;
@@ -272,8 +274,8 @@ fn _reconnect(self: *Self, writer_held: ?std.event.Lock.Held) void {
 }
 
 fn connect(alloc: *std.mem.Allocator, name: []const u8, oauth: []const u8) !std.fs.File {
-    var socket = try std.net.tcpConnectToHost(alloc, "irc.chat.twitch.tv", 6667);
-    // var socket = try std.net.tcpConnectToHost(alloc, "localhost", 6667);
+    // var socket = try std.net.tcpConnectToHost(alloc, "irc.chat.twitch.tv", 6667);
+    var socket = try std.net.tcpConnectToHost(alloc, "localhost", 6667);
     errdefer socket.close();
 
     try socket.writer().print(
@@ -283,7 +285,7 @@ fn connect(alloc: *std.mem.Allocator, name: []const u8, oauth: []const u8) !std.
         \\CAP REQ :twitch.tv/commands
         \\JOIN #{1}
         \\
-    , .{ oauth, name });
+    , .{ "foo", name });
 
     // TODO: read what we got back, instead of assuming that
     //       all went well just because the bytes were shipped.

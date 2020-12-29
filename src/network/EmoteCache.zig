@@ -4,7 +4,7 @@ const os = std.os;
 const b64 = std.base64.standard_encoder;
 
 const Emote = @import("../Chat.zig").Message.Comment.Metadata.Emote;
-usingnamespace @cImport({
+const c = @cImport({
     @cInclude("EmoteCache.h");
     @cInclude("stdlib.h");
 });
@@ -31,21 +31,19 @@ pub fn fetch(self: *Self, emote_list: []Emote) !void {
         errdefer _ = self.cache.remove(emote.id);
         if (!result.found_existing) {
             std.log.debug("need to download", .{});
-            var chunk: slice = undefined;
+            var chunk: c.slice = undefined;
             // Need to download the image
             var img = img: {
                 nosuspend {
                     const path = try std.fmt.allocPrint(self.allocator, hostname ++ "/emoticons/v1/{}/1.0\x00", .{emote.id});
                     defer self.allocator.free(path);
 
-                    const code: c_int = getEmotes(path.ptr, &chunk);
+                    const code: c_int = c.getEmotes(path.ptr, &chunk);
                     var image: []const u8 = undefined;
                     if (code != 0)
                         return error.CFailed;
                     image.ptr = chunk.memory;
                     image.len = chunk.size;
-                    std.log.debug("image: {s}\n", .{image});
-
                     break :img image;
                 }
             };
@@ -53,8 +51,7 @@ pub fn fetch(self: *Self, emote_list: []Emote) !void {
             var encode_buf = try self.allocator.alloc(u8, std.base64.Base64Encoder.calcSize(img.len));
             result.entry.value = b64.encode(encode_buf, img);
             // freeing the memory initialized from c
-            free(@ptrCast(*c_void, chunk.memory));
-            std.log.debug("encoded: {s}\n", .{result.entry.value});
+            c.free(@ptrCast(*c_void, chunk.memory));
         }
 
         emote.image = result.entry.value;
