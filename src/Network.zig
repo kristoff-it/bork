@@ -274,8 +274,8 @@ fn _reconnect(self: *Self, writer_held: ?std.event.Lock.Held) void {
 }
 
 fn connect(alloc: *std.mem.Allocator, name: []const u8, oauth: []const u8) !std.fs.File {
-    // var socket = try std.net.tcpConnectToHost(alloc, "irc.chat.twitch.tv", 6667);
-    var socket = try std.net.tcpConnectToHost(alloc, "localhost", 6667);
+    var socket = try std.net.tcpConnectToHost(alloc, "irc.chat.twitch.tv", 6667);
+    // var socket = try std.net.tcpConnectToHost(alloc, "localhost", 6667);
     errdefer socket.close();
 
     try socket.writer().print(
