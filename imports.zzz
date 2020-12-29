@@ -2,10 +2,6 @@ zbox:
   root: /src/box.zig
   src:
     url: "file://forks/zbox"
-bearssl:
-  root: /bearssl.zig
-  src:
-    url: "file://forks/BearSSL"
 datetime:
   root: /datetime.zig
   src:
@@ -20,13 +16,6 @@ mecha:
       repo: mecha
       user: Hejsil
       ref: f15011fc94c2aaf1a618877d7e8731c496a67c0b
-hzzp:
-  root: /src/main.zig
-  src:
-    github:
-      repo: hzzp
-      user: truemedian
-      ref: e9a8b18a5fc198b8095b95ff3b8902af0765d1b3
 clap:
   root: /clap.zig
   src:

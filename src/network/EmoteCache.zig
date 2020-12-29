@@ -2,25 +2,19 @@ const builtin = @import("builtin");
 const std = @import("std");
 const os = std.os;
 const b64 = std.base64.standard_encoder;
-const hzzp = @import("hzzp");
-const ssl = @import("bearssl");
+
 const Emote = @import("../Chat.zig").Message.Comment.Metadata.Emote;
-
-const SslStream = ssl.Stream(*std.fs.File.Reader, *std.fs.File.Writer);
-const HttpClient = hzzp.base.client.BaseClient(SslStream.DstInStream, SslStream.DstOutStream);
-
-const EmoteData = struct {
-    path: []const u8,
-    data: []const u8,
-};
+usingnamespace @cImport({
+    @cInclude("EmoteCache.h");
+    @cInclude("stdlib.h");
+});
 
 allocator: *std.mem.Allocator,
 cache: std.AutoHashMap(u32, []const u8),
 
 const Self = @This();
 // TODO: for people with 8k SUMQHD terminals, let them use bigger size emotes
-const hostname = "static-cdn.jtvnw.net";
-const twitch_pem = @embedFile("../../twitch.pem");
+const hostname = "https://static-cdn.jtvnw.net";
 pub fn init(allocator: *std.mem.Allocator) Self {
     return Self{
         .allocator = allocator,
@@ -37,69 +31,30 @@ pub fn fetch(self: *Self, emote_list: []Emote) !void {
         errdefer _ = self.cache.remove(emote.id);
         if (!result.found_existing) {
             std.log.debug("need to download", .{});
+            var chunk: slice = undefined;
             // Need to download the image
-            const img = img: {
-                var trust_anchor = ssl.TrustAnchorCollection.init(self.allocator);
-                // errdefer trust_anchor.deinit();
-
-                try trust_anchor.appendFromPEM(twitch_pem);
-                var x509 = ssl.x509.Minimal.init(trust_anchor);
+            var img = img: {
                 nosuspend {
-                    var ssl_client = ssl.Client.init(x509.getEngine());
-                    ssl_client.relocate();
-                    try ssl_client.reset(hostname, false);
-
-                    var socket = try tcpConnectToHost(self.allocator, hostname, 443);
-                    errdefer socket.close();
-                    var socket_reader = socket.reader();
-                    var socket_writer = socket.writer();
-
-                    var ssl_socket = ssl.initStream(
-                        ssl_client.getEngine(),
-                        &socket_reader,
-                        &socket_writer,
-                    );
-                    errdefer ssl_socket.close() catch {};
-
-                    var buf: [1024]u8 = undefined;
-                    var client = HttpClient.init(
-                        &buf,
-                        ssl_socket.inStream(),
-                        ssl_socket.outStream(),
-                    );
-
-                    const path = try std.fmt.allocPrint(self.allocator, "/emoticons/v1/{}/1.0", .{emote.id});
+                    const path = try std.fmt.allocPrint(self.allocator, hostname ++ "/emoticons/v1/{}/1.0\x00", .{emote.id});
                     defer self.allocator.free(path);
 
-                    client.writeStatusLine("GET", path) catch |err| {
-                        return error.Error;
-                    };
-                    client.writeHeaderValue("Host", hostname) catch unreachable;
-                    client.writeHeaderValue("User-Agent", "Zig") catch unreachable;
-                    client.writeHeaderValue("Accept", "*/*") catch unreachable;
-                    client.finishHeaders() catch unreachable;
-                    ssl_socket.flush() catch unreachable;
-                    // Consume headers
-                    while (try client.next()) |event| {
-                        switch (event) {
-                            .status => |status| switch (status.code) {
-                                200 => {},
-                                302 => @panic("no redirects plz"),
-                                else => {
-                                    return error.HttpFailed;
-                                },
-                            },
-                            .header => {},
-                            .head_done => break,
-                            else => |val| std.log.debug("got other: {}", .{val}),
-                        }
-                    }
-                    break :img try client.reader().readAllAlloc(self.allocator, 1024 * 100);
+                    const code: c_int = getEmotes(path.ptr, &chunk);
+                    var image: []const u8 = undefined;
+                    if (code != 0)
+                        return error.CFailed;
+                    image.ptr = chunk.memory;
+                    image.len = chunk.size;
+                    std.log.debug("image: {s}\n", .{image});
+
+                    break :img image;
                 }
             };
 
             var encode_buf = try self.allocator.alloc(u8, std.base64.Base64Encoder.calcSize(img.len));
             result.entry.value = b64.encode(encode_buf, img);
+            // freeing the memory initialized from c
+            free(@ptrCast(*c_void, chunk.memory));
+            std.log.debug("encoded: {s}\n", .{result.entry.value});
         }
 
         emote.image = result.entry.value;

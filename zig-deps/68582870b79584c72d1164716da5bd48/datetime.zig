@@ -1362,7 +1362,7 @@ test "datetime-parse-modified-since" {
 }
 
 test "file-modified-date" {
-    var f = try std.fs.cwd().openFile("datetime.zig", .{});
+    var f = try std.fs.cwd().openFile("README.md", .{});
     var stat = try f.stat();
     var buf: [32]u8 = undefined;
     var str = try Datetime.formatHttpFromModifiedDate(&buf, stat.mtime);
