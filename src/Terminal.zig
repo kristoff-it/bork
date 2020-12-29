@@ -61,7 +61,7 @@ pub fn init(alloc: *std.mem.Allocator, ch: *Channel(GlobalEventUnion), streamer_
         // - iTerm2
         // - WezTerm
         // - Kitty
-        const name = std.os.getenv("TERM_PROGRAM") orelse std.os.getenv("TERM") orelse "";
+        const name = std.os.getenv("TERM") orelse std.os.getenv("TERM_PROGRAM") orelse "";
         if (std.mem.eql(u8, name, "WezTerm")) {
             emulator = .wez;
         } else if (std.mem.eql(u8, name, "iTerm.app")) {
@@ -156,7 +156,7 @@ fn setCellToEmote(cell: *zbox.Cell, emote: []const u8) void {
             .imageDecorationPost = "\x07",
         },
         .kitty => .{
-            .imageDecorationPre = "\x1b_Gf=100,t=d,a=T,r=1,c=2,q=1;",
+            .imageDecorationPre = "\x1b_Gf=100,t=d,a=T,r=1,c=2;",
             .image = emote,
             .imageDecorationPost = "\x1b\\",
         },
