@@ -10,17 +10,10 @@ pub fn build(b: *Builder) void {
     // for restricting supported target set are available.
     const target = b.standardTargetOptions(.{});
 
-    const cflags = [_][]const u8{
-        "-Werror",
-        "-Wall",
-    };
     // Standard release options allow the person running `zig build` to select
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
     const mode = b.standardReleaseOptions();
     const exe = b.addExecutable("bork", "src/main.zig");
-    exe.linkSystemLibrary("curl");
-    exe.addCSourceFile("src/network/EmoteCache.c", &cflags);
-    exe.addIncludeDir("src/network/");
 
     inline for (std.meta.fields(@TypeOf(pkgs))) |field| {
         exe.addPackage(@field(pkgs, field.name));
