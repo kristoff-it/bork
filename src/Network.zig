@@ -285,7 +285,7 @@ fn connect(alloc: *std.mem.Allocator, name: []const u8, oauth: []const u8) !std.
         \\CAP REQ :twitch.tv/commands
         \\JOIN #{1}
         \\
-    , .{ "foo", name });
+    , .{ oauth, name });
 
     // TODO: read what we got back, instead of assuming that
     //       all went well just because the bytes were shipped.
