@@ -33,7 +33,7 @@ pub fn fetch(self: *Self, emote_list: []Emote) !void {
             std.log.debug("need to download", .{});
             // Need to download the image
             var img = img: {
-                var sock = try tcpConnectToHost(self.allocator, hostname, 443);
+                var sock = try std.net.tcpConnectToHost(self.allocator, hostname, 443);
                 defer sock.close();
 
                 var tls_sock = try tls.client_connect(.{
