@@ -36,8 +36,10 @@ pub fn fetch(self: *Self, emote_list: []Emote) !void {
                 var sock = try std.net.tcpConnectToHost(self.allocator, hostname, 443);
                 defer sock.close();
 
+                var rng = std.rand.DefaultPrng.init(5); // chosen randomly
+
                 var tls_sock = try tls.client_connect(.{
-                    .rand = null,
+                    .rand = &rng.random,
                     .reader = sock.reader(),
                     .writer = sock.writer(),
                     .cert_verifier = .none,
