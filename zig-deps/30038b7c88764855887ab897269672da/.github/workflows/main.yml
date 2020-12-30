@@ -1,0 +1,29 @@
+name: Tests
+
+on:
+  push:
+    paths:
+    - '**.zig'
+  pull_request:
+    paths:
+    - '**.zig'
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: true
+    - uses: goto-bus-stop/setup-zig@v1
+      with:
+        version: master
+
+    - name: Build
+      run: zig build test
