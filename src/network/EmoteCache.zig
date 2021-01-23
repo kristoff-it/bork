@@ -6,7 +6,7 @@ const hzzp = @import("hzzp");
 const tls = @import("iguanaTLS");
 const Emote = @import("../Chat.zig").Message.Emote;
 
-const TLSStream = tls.Client(std.fs.File.Reader, std.fs.File.Writer, tls.ciphersuites.all, true);
+const TLSStream = tls.Client(std.net.Stream.Reader, std.net.Stream.Writer, tls.ciphersuites.all, true);
 const HttpClient = hzzp.base.client.BaseClient(TLSStream.Reader, TLSStream.Writer);
 
 allocator: *std.mem.Allocator,
