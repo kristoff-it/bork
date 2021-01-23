@@ -4,9 +4,9 @@ const os = std.os;
 const b64 = std.base64.standard_encoder;
 const hzzp = @import("hzzp");
 const tls = @import("iguanaTLS");
-const Emote = @import("../Chat.zig").Message.Comment.Metadata.Emote;
+const Emote = @import("../Chat.zig").Message.Emote;
 
-const TLSStream = tls.Client(std.fs.File.Reader, std.fs.File.Writer);
+const TLSStream = tls.Client(std.fs.File.Reader, std.fs.File.Writer, tls.ciphersuites.all, true);
 const HttpClient = hzzp.base.client.BaseClient(TLSStream.Reader, TLSStream.Writer);
 
 allocator: *std.mem.Allocator,
@@ -36,13 +36,20 @@ pub fn fetch(self: *Self, emote_list: []Emote) !void {
                 var sock = try std.net.tcpConnectToHost(self.allocator, hostname, 443);
                 defer sock.close();
 
-                var rng = std.rand.DefaultPrng.init(5); // chosen randomly
+                var rand = blk: {
+                    var seed: [std.rand.DefaultCsprng.secret_seed_length]u8 = undefined;
+                    try std.os.getrandom(&seed);
+                    break :blk &std.rand.DefaultCsprng.init(seed).random;
+                };
 
                 var tls_sock = try tls.client_connect(.{
-                    .rand = &rng.random,
+                    .rand = rand,
+                    .temp_allocator = self.allocator,
                     .reader = sock.reader(),
                     .writer = sock.writer(),
                     .cert_verifier = .none,
+                    .ciphersuites = tls.ciphersuites.all,
+                    .protocols = &[_][]const u8{"http/1.1"},
                 }, hostname);
                 defer tls_sock.close_notify() catch {};
 
@@ -53,7 +60,7 @@ pub fn fetch(self: *Self, emote_list: []Emote) !void {
                     tls_sock.writer(),
                 );
 
-                const path = try std.fmt.allocPrint(self.allocator, "/emoticons/v1/{}/1.0", .{emote.id});
+                const path = try std.fmt.allocPrint(self.allocator, "/emoticons/v1/{d}/1.0", .{emote.id});
                 defer self.allocator.free(path);
 
                 client.writeStatusLine("GET", path) catch |err| {
@@ -70,7 +77,7 @@ pub fn fetch(self: *Self, emote_list: []Emote) !void {
                         .status => |status| switch (status.code) {
                             200 => {},
                             else => |code| {
-                                std.log.debug("http bad response code: {}", .{code});
+                                std.log.debug("http bad response code: {d}", .{code});
                                 return error.HttpFailed;
                             },
                         },

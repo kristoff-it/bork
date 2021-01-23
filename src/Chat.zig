@@ -13,51 +13,72 @@ pub const Message = struct {
     next: ?*Message = null,
     kind: union(enum) {
         chat: Comment,
+        sub_mistery_gift: SubMisteryGift,
+        sub_gift: SubGift,
+        sub: Sub,
+        resub: Resub,
         line,
     },
 
     pub const Comment = struct {
-        name: []const u8,
+        login_name: []const u8,
         text: []const u8,
-        meta: Metadata,
         time: [5]u8,
+        /// Author's name (w/ unicode support, empty if not present)
+        display_name: []const u8,
+        /// Total months the user was subbed (0 = non sub)
+        sub_months: usize,
+        /// Does the user have a founder badge?
+        is_founder: bool,
+        /// List of emotes and their position. Must be sorted (asc) by end position.
+        emotes: []Emote = &[0]Emote{},
+        /// Moderator status
+        is_mod: bool = false,
+    };
 
-        pub const Metadata = struct {
-            /// Author's name
-            name: []const u8,
-            /// Total months the user was subbed (null = non sub)
-            sub: ?SubType,
-            /// List of emotes and their positions.
-            /// Must be sorted (asc) by start position.
-            emotes: []Emote = &[0]Emote{},
-            /// Number of chars that need to be replaced with emotes
-            emote_chars: usize = 0,
-            /// The message is entirely comprised of emotes
-            emote_only: bool = false,
-            /// Moderator status
-            is_mod: bool = false,
+    /// When somebody gifts X subs to random people
+    pub const SubMisteryGift = struct {
+        login_name: []const u8,
+        display_name: []const u8,
+        count: usize,
+        tier: SubTier,
+    };
 
-            pub const SubType = union(enum) {
-                founder: usize,
-                subscriber: usize,
-                other: struct {
-                    name: []const u8,
-                    months: usize,
-                },
-            };
+    pub const SubGift = struct {
+        sender_login_name: []const u8,
+        sender_display_name: []const u8,
+        months: usize,
+        tier: SubTier,
+        recipient_login_name: []const u8,
+        recipient_display_name: []const u8,
+    };
 
-            pub const Emote = struct {
-                id: u32,
-                start: usize,
-                end: usize,
-                image: ?[]const u8 = null,
+    pub const Sub = struct {
+        login_name: []const u8,
+        display_name: []const u8,
+        tier: SubTier,
+    };
+    pub const Resub = struct {
+        login_name: []const u8,
+        display_name: []const u8,
+        count: usize,
+        tier: SubTier,
+        resub_message: []const u8,
+        resub_message_emotes: []Emote,
+    };
+    // ------
 
-                // Used to sort the emote list by starting poisition.
-                pub fn lessThan(context: void, lhs: Emote, rhs: Emote) bool {
-                    return lhs.start < rhs.start;
-                }
-            };
-        };
+    pub const SubTier = enum { prime, t1, t2, t3 };
+    pub const Emote = struct {
+        id: u32,
+        start: usize,
+        end: usize,
+        image: ?[]const u8 = null, // TODO: should this be in
+
+        // Used to sort the emote list by ending poisition.
+        pub fn lessThan(context: void, lhs: Emote, rhs: Emote) bool {
+            return lhs.end < rhs.end;
+        }
     };
 };
 

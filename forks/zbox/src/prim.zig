@@ -40,8 +40,9 @@ pub const Event = union(enum) {
 
 pub const SGR = packed struct {
     bold: bool = false,
-    feint: bool = false,
     normal: bool = false,
+    feint: bool = false,
+    italics: bool = false,
     underline: bool = false,
     reverse: bool = false,
     fg_black: bool = false,
@@ -117,8 +118,9 @@ pub fn send(seq: []const u8) ErrorSet.BufWrite!void {
 pub fn sendSGR(sgr: SGR) ErrorSet.BufWrite!void {
     try send(csi ++ "0"); // always clear
     if (sgr.bold) try send(";1");
-    if (sgr.feint) try send(";2");
     if (sgr.normal) try send(";22");
+    if (sgr.feint) try send(";2");
+    if (sgr.italics) try send(";3");
     if (sgr.underline) try send(";4");
     if (sgr.reverse) try send(";7");
     if (sgr.fg_black) try send(";30");

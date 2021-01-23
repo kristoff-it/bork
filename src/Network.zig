@@ -6,6 +6,7 @@ const Chat = @import("Chat.zig");
 const parser = @import("network/parser.zig");
 const EmoteCache = @import("network/EmoteCache.zig");
 
+pub const checkTokenValidity = @import("network/auth.zig").checkTokenValidity;
 pub const Event = union(enum) {
     message: Chat.Message,
     connected,
@@ -92,8 +93,8 @@ fn receiveMessages(self: *Self) void {
     // trapped reading a spammy socket forever
     std.event.Loop.instance.?.yield();
     while (true) {
-        var data = self.reader.readUntilDelimiterAlloc(self.allocator, '\n', 4096) catch {
-            std.log.debug("receiveMessages errored out", .{});
+        var data = self.reader.readUntilDelimiterAlloc(self.allocator, '\n', 4096) catch |err| {
+            std.log.debug("receiveMessages errored out: {e}", .{err});
             self.reconnect(null);
             return;
         };
@@ -102,7 +103,7 @@ fn receiveMessages(self: *Self) void {
         if (data.len == 0) continue;
 
         const p = parser.parseMessage(data[0 .. data.len - 1], self.allocator, self.tz) catch |err| {
-            std.log.debug("parsing error: [{}]", .{err});
+            std.log.debug("parsing error: [{e}]", .{err});
             continue;
         };
         switch (p) {
@@ -111,10 +112,10 @@ fn receiveMessages(self: *Self) void {
             },
             .message => |msg| {
                 switch (msg.kind) {
-                    .line => {},
+                    else => {},
                     .chat => |c| {
-                        self.emote_cache.fetch(c.meta.emotes) catch |err| {
-                            std.log.debug("fetching error: [{}]", .{err});
+                        self.emote_cache.fetch(c.emotes) catch |err| {
+                            std.log.debug("fetching error: [{e}]", .{err});
                             continue;
                         };
                     },
@@ -279,11 +280,11 @@ fn connect(alloc: *std.mem.Allocator, name: []const u8, oauth: []const u8) !std.
     errdefer socket.close();
 
     try socket.writer().print(
-        \\PASS {0}
-        \\NICK {1}
+        \\PASS {0s}
+        \\NICK {1s}
         \\CAP REQ :twitch.tv/tags
         \\CAP REQ :twitch.tv/commands
-        \\JOIN #{1}
+        \\JOIN #{1s}
         \\
     , .{ oauth, name });
 

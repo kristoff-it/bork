@@ -11,19 +11,17 @@ pub const getSize = zbox.size;
 pub const TerminalMessage = struct {
     chat_message: Chat.Message,
     buffer: zbox.Buffer,
+    is_selected: bool = false,
 };
 
 pub const InteractiveElement = union(enum) {
     none,
     subscriber_badge: *TerminalMessage,
     username: *TerminalMessage,
+    chat_message: *TerminalMessage,
+    event_message: *TerminalMessage,
     button: union(enum) {
-        // Username buttons
-        ban: *TerminalMessage,
-        mod: *TerminalMessage,
-        vip: *TerminalMessage,
         // Message buttons
-        pin: *TerminalMessage,
         del: *TerminalMessage,
     },
 };
@@ -139,10 +137,26 @@ fn winchHandler(signum: c_int) callconv(.C) void {
 pub fn prepareMessage(self: *Self, chatMsg: Chat.Message) !*Chat.Message {
     var term_msg = try self.allocator.create(TerminalMessage);
 
-    term_msg.* = .{
-        .chat_message = chatMsg,
-        .buffer = try zbox.Buffer.init(self.allocator, 1, self.chatBuf.width - padding),
+    term_msg.* = switch (chatMsg.kind) {
+        .sub_mistery_gift, .sub_gift, .sub, .resub => .{
+            .chat_message = chatMsg,
+            .is_selected = true,
+            .buffer = try zbox.Buffer.init(
+                self.allocator,
+                2,
+                self.chatBuf.width,
+            ),
+        },
+        else => .{
+            .chat_message = chatMsg,
+            .buffer = try zbox.Buffer.init(
+                self.allocator,
+                1,
+                self.chatBuf.width - padding,
+            ),
+        },
     };
+
     try renderMessage(self.allocator, term_msg);
 
     return &term_msg.chat_message;
@@ -175,19 +189,209 @@ fn renderMessage(alloc: *std.mem.Allocator, msg: *TerminalMessage) !void {
     cursor.context.attribs = .{
         .normal = true,
     };
+
     std.log.debug("started rendering msg!", .{});
     switch (msg.chat_message.kind) {
+        // else => {
+        //     std.log.debug("TODO(renderMessage): implement rendering for  {}", .{@tagName(msg.chat_message.kind)});
+        // },
         .line => {},
+        .resub => |r| {
+            msg.buffer.fill(.{
+                .interactive_element = .{
+                    .event_message = msg,
+                },
+            });
+            cursor.context.interactive_element = .{
+                .event_message = msg,
+            };
+            cursor.context.attribs = .{
+                .feint = true,
+            };
+            const tier = switch (r.tier) {
+                .prime => "Prime",
+                .t1 => "T1",
+                .t2 => "T2",
+                .t3 => "T3",
+            };
+
+            // Top line
+            {
+                const message_fmt = "«{}»";
+                const message_args = .{r.display_name};
+                cursor.context.col_num = @divTrunc(msg.buffer.width + 2 - std.fmt.count(
+                    message_fmt,
+                    message_args,
+                ), 2);
+                try cursor.print(message_fmt, message_args);
+            }
+
+            // Bottom line
+            {
+                const message_fmt = "🎉  {}mo {} resub! 🎉";
+                const message_args = .{ r.count, tier };
+                cursor.context.row_num = 1;
+                cursor.context.col_num = @divTrunc(msg.buffer.width + 4 - std.fmt.count(
+                    message_fmt,
+                    message_args,
+                ), 2);
+
+                try cursor.print(message_fmt, message_args);
+            }
+        },
+        .sub => |s| {
+            msg.buffer.fill(.{
+                .interactive_element = .{
+                    .event_message = msg,
+                },
+            });
+            cursor.context.interactive_element = .{
+                .event_message = msg,
+            };
+            cursor.context.attribs = .{
+                .feint = true,
+            };
+            const tier = switch (s.tier) {
+                .prime => "Prime",
+                .t1 => "T1",
+                .t2 => "T2",
+                .t3 => "T3",
+            };
+
+            // Top line
+            {
+                const message_fmt = "«{}»";
+                const message_args = .{s.display_name};
+                cursor.context.col_num = @divTrunc(msg.buffer.width + 2 - std.fmt.count(
+                    message_fmt,
+                    message_args,
+                ), 2);
+                try cursor.print(message_fmt, message_args);
+            }
+
+            // Bottom line
+            {
+                const message_fmt = "🎊  is now a {} sub! 🎊";
+                const message_args = .{tier};
+                cursor.context.row_num = 1;
+                cursor.context.col_num = @divTrunc(msg.buffer.width + 4 - std.fmt.count(
+                    message_fmt,
+                    message_args,
+                ), 2);
+
+                try cursor.print(message_fmt, message_args);
+            }
+        },
+        .sub_gift => |g| {
+            msg.buffer.fill(.{
+                .interactive_element = .{
+                    .event_message = msg,
+                },
+            });
+            cursor.context.interactive_element = .{
+                .event_message = msg,
+            };
+            cursor.context.attribs = .{
+                .feint = true,
+            };
+            const tier = switch (g.tier) {
+                .prime => "Prime",
+                .t1 => "T1",
+                .t2 => "T2",
+                .t3 => "T3",
+            };
+
+            // Top line
+            {
+                const message_fmt = "«{}» 🎁  a {}mo";
+                const message_args = .{ g.sender_display_name, g.months };
+                cursor.context.col_num = @divTrunc(msg.buffer.width + 6 - std.fmt.count(
+                    message_fmt,
+                    message_args,
+                ), 2);
+                try cursor.print(message_fmt, message_args);
+            }
+
+            // Bottom line
+            {
+                const message_fmt = "{} Sub to «{}»";
+                const message_args = .{ tier, g.recipient_display_name };
+                cursor.context.row_num = 1;
+                cursor.context.col_num = @divTrunc(msg.buffer.width + 2 - std.fmt.count(
+                    message_fmt,
+                    message_args,
+                ), 2);
+
+                try cursor.print(message_fmt, message_args);
+            }
+        },
+        .sub_mistery_gift => |g| {
+            msg.buffer.fill(.{
+                .interactive_element = .{
+                    .event_message = msg,
+                },
+            });
+            cursor.context.interactive_element = .{
+                .event_message = msg,
+            };
+            cursor.context.attribs = .{
+                .feint = true,
+            };
+            const tier = switch (g.tier) {
+                .prime => "Prime",
+                .t1 => "T1",
+                .t2 => "T2",
+                .t3 => "T3",
+            };
+
+            // todo: fallback when there's not enough space
+
+            // Top line
+            {
+                const top_message_fmt = "«{}»";
+                const top_message_args = .{g.display_name};
+                cursor.context.col_num = @divTrunc(msg.buffer.width + 2 - std.fmt.count(
+                    top_message_fmt,
+                    top_message_args,
+                ), 2);
+                try cursor.print(top_message_fmt, top_message_args);
+            }
+
+            // Bottom line
+            {
+                const message_fmt = "🎁  Gifted x{} {} Subs! 🎁";
+                const message_args = .{
+                    g.count,
+                    tier,
+                };
+                cursor.context.row_num = 1;
+                cursor.context.col_num = @divTrunc(msg.buffer.width + 7 - std.fmt.count(
+                    message_fmt,
+                    message_args,
+                ), 2);
+
+                try cursor.print(message_fmt, message_args);
+            }
+        },
         .chat => |c| {
+            msg.buffer.fill(.{
+                .interactive_element = .{
+                    .chat_message = msg,
+                },
+            });
+            cursor.context.interactive_element = .{
+                .chat_message = msg,
+            };
+
             var it = std.mem.tokenize(c.text, " ");
             var emote_idx: usize = 0;
             while (it.next()) |w| {
                 std.log.debug("word: [{}]", .{w});
 
-                if (emote_idx < c.meta.emotes.len and
-                    c.meta.emotes[emote_idx].end == it.index - 1)
+                if (emote_idx < c.emotes.len and
+                    c.emotes[emote_idx].end == it.index - 1)
                 {
-                    const emote = c.meta.emotes[emote_idx].image orelse "⚡"; //@embedFile("../kappa.txt"); // ; //
+                    const emote = c.emotes[emote_idx].image orelse "⚡"; //@embedFile("../kappa.txt"); // ; //
                     const emote_len = 2;
                     emote_idx += 1;
 
@@ -229,16 +433,10 @@ fn renderMessage(alloc: *std.mem.Allocator, msg: *TerminalMessage) !void {
                         };
 
                         // Ensure we have enough rows
-                        {
-                            const missing_rows: isize = @intCast(isize, cursor.context.row_num + rows) - @intCast(isize, height);
-                            if (missing_rows > 0) {
-                                height = height + @intCast(usize, missing_rows);
-                                try msg.buffer.resize(height, width);
-                                cursor = msg.buffer.wrappedCursorAt(
-                                    cursor.context.row_num,
-                                    cursor.context.col_num,
-                                ).writer();
-                            }
+                        const missing_rows: isize = @intCast(isize, cursor.context.row_num + rows) - @intCast(isize, height);
+                        if (missing_rows > 0) {
+                            height = height + @intCast(usize, missing_rows);
+                            try msg.buffer.resize(height, width);
                         }
 
                         // Write the word, make use of the wrapping cursor
@@ -386,9 +584,9 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
             .is_transparent = true,
         });
 
-        var message = chat.bottom_message;
         var row = self.chatBuf.height;
         var i: usize = 0;
+        var message = chat.bottom_message;
         while (message) |m| : (message = m.prev) {
             // Break if we dont' have more space
             if (row == 0) break;
@@ -396,9 +594,43 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
 
             // TODO: do something when the terminal has less than `padding` columns?
             const padded_width = self.chatBuf.width - padding;
+            var term_message = @fieldParentPtr(TerminalMessage, "chat_message", m);
 
             // write it
             switch (m.kind) {
+                // else => {
+                //     std.log.debug("TODO: implement rendering for  {}", .{@tagName(m.kind)});
+                // },
+                .sub_mistery_gift, .sub_gift, .sub, .resub => {
+                    // re-render the message if width changed in the meantime
+                    if (self.chatBuf.width != term_message.buffer.width) {
+                        std.log.debug("must rerender msg!", .{});
+
+                        term_message.buffer.deinit();
+                        term_message.buffer = try zbox.Buffer.init(self.allocator, 2, self.chatBuf.width);
+                        try renderMessage(self.allocator, term_message);
+                    }
+
+                    const msg_height = term_message.buffer.height;
+                    self.chatBuf.blit(
+                        term_message.buffer,
+                        @intCast(isize, row) - @intCast(isize, msg_height),
+                        0,
+                    );
+
+                    // If the message is selected, time to invert everything!
+                    if (term_message.is_selected) {
+                        var rx: usize = row - std.math.min(msg_height, row);
+                        while (rx < row) : (rx += 1) {
+                            var cx: usize = 0;
+                            while (cx < self.chatBuf.width) : (cx += 1) {
+                                self.chatBuf.cellRef(rx, cx).attribs.reverse = true;
+                            }
+                        }
+                    }
+
+                    row -= std.math.min(msg_height, row);
+                },
                 .line => {
 
                     // Update the row position
@@ -419,8 +651,6 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                     }
                 },
                 .chat => |c| {
-                    var term_message = @fieldParentPtr(TerminalMessage, "chat_message", m);
-
                     // re-render the message if width changed in the meantime
                     if (padded_width != term_message.buffer.width) {
                         std.log.debug("must rerender msg!", .{});
@@ -440,6 +670,17 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                         padding,
                     );
 
+                    // If the message is selected, time to invert everything!
+                    if (term_message.is_selected) {
+                        var rx: usize = row - std.math.min(msg_height, row);
+                        while (rx < row) : (rx += 1) {
+                            var cx: usize = padding - 1;
+                            while (cx < self.chatBuf.width) : (cx += 1) {
+                                self.chatBuf.cellRef(rx, cx).attribs.reverse = true;
+                            }
+                        }
+                    }
+
                     row -= std.math.min(msg_height, row);
 
                     // Do we have space for the nickname?
@@ -447,8 +688,8 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                         if (row > 0) {
                             if (m.prev) |prev| {
                                 const same_name = switch (prev.kind) {
-                                    .line => false,
-                                    .chat => |c_prev| std.mem.eql(u8, c.name, c_prev.name),
+                                    else => false,
+                                    .chat => |c_prev| std.mem.eql(u8, c.login_name, c_prev.login_name),
                                 };
                                 if (same_name) {
                                     const prev_time = prev.kind.chat.time;
@@ -469,7 +710,7 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                                 }
                             }
                             row -= 1;
-                            var nick = c.meta.name[0..std.math.min(self.chatBuf.width - 5, c.meta.name.len)];
+                            var nick = c.display_name[0..std.math.min(self.chatBuf.width - 5, c.display_name.len)];
                             var cur = self.chatBuf.cursorAt(row, 0);
                             cur.attribs = .{
                                 .bold = true,
@@ -478,63 +719,59 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                             // Time
                             {
                                 try cur.writer().print(
-                                    "{} ",
+                                    "{s} ",
                                     .{c.time},
                                 );
-                            }
-
-                            var nick_left = "«";
-                            var nick_right = "»";
-                            switch (self.active_interaction) {
-                                else => {},
-                                .username => |tm| {
-                                    if (tm == term_message) {
-                                        nick_right = "«";
-                                        nick_left = "»";
-                                    }
-                                },
                             }
 
                             // Nickname
                             var nickname_end_col: usize = undefined;
                             {
-                                cur.attribs = .{
-                                    .fg_yellow = true,
-                                };
-                                try cur.writer().print("{}", .{nick_left});
-
-                                {
-                                    cur.attribs = .{
-                                        .fg_yellow = false,
-                                    };
-                                    cur.interactive_element = .{
-                                        .username = term_message,
-                                    };
-                                    try cur.writer().print("{}", .{nick});
-                                    nickname_end_col = cur.col_num;
-
-                                    cur.interactive_element = .none;
+                                var nick_left = "«";
+                                var nick_right = "»";
+                                var highligh_nick = false;
+                                switch (self.active_interaction) {
+                                    else => {},
+                                    .username => |tm| {
+                                        if (tm == term_message) {
+                                            highligh_nick = true;
+                                            nick_right = "«";
+                                            nick_left = "»";
+                                        }
+                                    },
                                 }
 
                                 cur.attribs = .{
                                     .fg_yellow = true,
+                                    .reverse = highligh_nick,
                                 };
-                                try cur.writer().print("{}", .{nick_right});
+                                cur.interactive_element = .{
+                                    .username = term_message,
+                                };
+                                try cur.writer().print("{s}", .{nick_left});
+
+                                {
+                                    cur.attribs = .{
+                                        .fg_yellow = highligh_nick,
+                                        .reverse = highligh_nick,
+                                    };
+
+                                    try cur.writer().print("{s}", .{nick});
+                                    nickname_end_col = cur.col_num;
+                                }
+
+                                cur.attribs = .{
+                                    .fg_yellow = true,
+                                    .reverse = highligh_nick,
+                                };
+                                try cur.writer().print("{s}", .{nick_right});
+                                cur.interactive_element = .none;
                             }
 
                             // Badges
-                            const badges_width: usize = if (c.meta.is_mod) 4 else 3;
-                            var is_founder = false;
-                            const sub_months_count = if (c.meta.sub) |sub| switch (sub) {
-                                .founder => |x| founder: {
-                                    is_founder = true;
-                                    break :founder x;
-                                },
-                                .subscriber => |x| x,
-                                .other => 0,
-                            } else 0;
-                            if (sub_months_count > 0 and
-                                !std.mem.eql(u8, self.streamer_name, c.name))
+                            const badges_width: usize = if (c.is_mod) 4 else 3;
+                            if (c.sub_months > 0 and
+                                !std.mem.eql(u8, self.streamer_name, c.login_name))
                             {
                                 var sub_cur = self.chatBuf.cursorAt(
                                     cur.row_num,
@@ -547,7 +784,7 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                                     sub_cur.interactive_element = .{
                                         .subscriber_badge = term_message,
                                     };
-                                    if (is_founder) {
+                                    if (c.is_founder) {
                                         sub_cur.attribs = .{
                                             .fg_yellow = true,
                                         };
@@ -558,7 +795,7 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                                 }
 
                                 // Mod badge
-                                if (c.meta.is_mod) {
+                                if (c.is_mod) {
                                     // sub_cur.interactive_element = .none;
                                     // TODO: interactive element for mods
                                     try sub_cur.writer().print("M", .{});
@@ -572,7 +809,7 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                                 .subscriber_badge => |tm| {
                                     if (tm == term_message) {
                                         try renderSubBadgeOverlay(
-                                            sub_months_count,
+                                            c.sub_months,
                                             &self.overlayBuf,
                                             if (cur.row_num >= 3)
                                                 cur.row_num - 3
@@ -583,14 +820,15 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                                     }
                                 },
                                 .username => |tm| {
-                                    if (tm == term_message) {
-                                        try renderUserActionsOverlay(
-                                            c,
-                                            &self.overlayBuf,
-                                            cur.row_num,
-                                            nickname_end_col + 1,
-                                        );
-                                    }
+
+                                    // if (tm == term_message) {
+                                    //     try renderUserActionsOverlay(
+                                    //         c,
+                                    //         &self.overlayBuf,
+                                    //         cur.row_num,
+                                    //         nickname_end_col + 1,
+                                    //     );
+                                    // }
                                 },
                             }
                         }
@@ -658,10 +896,11 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
 pub fn handleClick(self: *Self, row: usize, col: usize) !bool {
     // Find the element that was clicked,
     // do the corresponding action.
-    const r = std.math.min(row, zbox.front.height - 1);
-    const c = std.math.min(col, zbox.front.width - 1);
-    const cell = zbox.front.cellRef(r, c);
-    std.log.debug("cell clicked: {}", .{@tagName(cell.interactive_element)});
+    const cell = zbox.front.cellRef(
+        std.math.min(row, zbox.front.height - 1),
+        std.math.min(col, zbox.front.width - 1),
+    );
+    std.log.debug("cell clicked: {s}", .{@tagName(cell.interactive_element)});
 
     if (self.active_interaction == .none and
         cell.interactive_element == .none)
@@ -669,6 +908,7 @@ pub fn handleClick(self: *Self, row: usize, col: usize) !bool {
         return false;
     }
 
+    var old_action = self.active_interaction;
     self.active_interaction = if (std.meta.eql(
         self.active_interaction,
         cell.interactive_element,
@@ -677,11 +917,92 @@ pub fn handleClick(self: *Self, row: usize, col: usize) !bool {
     else
         cell.interactive_element;
 
+    // Special rule when going from username to chat_message.
+    // This makes clicking on a message disable the username selection
+    // without immediately triggering the single-message selection.
+    if (old_action == .username) {
+        switch (self.active_interaction) {
+            else => {},
+            .chat_message => |tm| {
+                if (tm.is_selected) {
+                    self.active_interaction = .none;
+                }
+            },
+        }
+    }
+
+    if (!std.meta.eql(old_action, self.active_interaction)) {
+        // Perform element-specific cleanup for the old element
+        switch (old_action) {
+            .none, .button, .subscriber_badge, .event_message => {},
+            .chat_message => |tm| {
+                tm.is_selected = false;
+            },
+            .username => |tm| {
+                // Username elements can't point to .line messages
+                tm.is_selected = false;
+
+                const name = tm.chat_message.kind.chat.login_name;
+                var next = tm.chat_message.next;
+                while (next) |n| : (next = n.next) {
+                    switch (n.kind) {
+                        else => break,
+                        .chat => |c| {
+                            if (!std.mem.eql(u8, c.login_name, name)) break;
+                            var term_message = @fieldParentPtr(TerminalMessage, "chat_message", n);
+                            term_message.is_selected = false;
+                        },
+                    }
+                }
+            },
+        }
+
+        // Perform element-specific setup for the new element
+        switch (self.active_interaction) {
+            .none, .button, .subscriber_badge => {},
+            .chat_message => |tm| {
+                tm.is_selected = true;
+            },
+            .event_message => |tm| {
+                tm.is_selected = false;
+                if (tm.chat_message.kind == .sub_mistery_gift) {
+                    var next = tm.chat_message.next;
+                    while (next) |n| : (next = n.next) {
+                        switch (n.kind) {
+                            else => break,
+                            .sub_gift => |c| {
+                                var term_message = @fieldParentPtr(TerminalMessage, "chat_message", n);
+                                term_message.is_selected = false;
+                            },
+                        }
+                    }
+                }
+            },
+            .username => |tm| {
+                // Username elements can't point to .line messages
+                tm.is_selected = true;
+
+                const name = tm.chat_message.kind.chat.login_name;
+                var next = tm.chat_message.next;
+                while (next) |n| : (next = n.next) {
+                    switch (n.kind) {
+                        else => break,
+                        .chat => |c| {
+                            if (!std.mem.eql(u8, c.login_name, name)) break;
+                            var term_message = @fieldParentPtr(TerminalMessage, "chat_message", n);
+                            term_message.is_selected = true;
+                        },
+                    }
+                }
+            },
+        }
+    }
+
     return true;
 }
 
 fn renderSubBadgeOverlay(months: usize, buf: *zbox.Buffer, row: usize, badges_width: usize) !void {
-    const fmt = " Sub for {} months ";
+    const fmt = " Sub for {d} months ";
     const fmt_len = std.fmt.count(fmt, .{months});
     const space_needed = (fmt_len + badges_width + 1);
     if (space_needed >= buf.width) return;
