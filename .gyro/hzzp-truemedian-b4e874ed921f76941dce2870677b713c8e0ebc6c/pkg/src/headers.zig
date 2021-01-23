@@ -50,7 +50,7 @@ pub const Headers = struct {
         }
     }
 
-    pub fn contains(self: *Headers, name: []const u8) bool {
+    pub fn contains(self: Headers, name: []const u8) bool {
         for (self.list.items) |header| {
             if (ascii.eqlIgnoreCase(header.name, name)) {
                 return true;
@@ -60,7 +60,7 @@ pub const Headers = struct {
         return false;
     }
 
-    pub fn search(self: *Headers, name: []const u8) ?Header {
+    pub fn search(self: Headers, name: []const u8) ?Header {
         for (self.list.items) |header| {
             if (ascii.eqlIgnoreCase(header.name, name)) {
                 return header;
@@ -70,7 +70,7 @@ pub const Headers = struct {
         return null;
     }
 
-    pub fn indexOf(self: *Headers, name: []const u8) ?usize {
+    pub fn indexOf(self: Headers, name: []const u8) ?usize {
         for (self.list.items) |header, index| {
             if (ascii.eqlIgnoreCase(header.name, name)) {
                 return index;
@@ -97,7 +97,7 @@ pub const Headers = struct {
         }
     }
 
-    pub fn get(self: *Headers, name: []const u8) ?[]const u8 {
+    pub fn get(self: Headers, name: []const u8) ?[]const u8 {
         if (self.search(name)) |header| {
             return header.value;
         } else {
