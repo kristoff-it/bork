@@ -22,6 +22,6 @@ pub fn senseUserTZ() datetime.Timezone {
     const t = time(null);
     const local = localtime(&t);
 
-    std.log.debug("current tz offset: {}", .{@divTrunc(local.tm_gmtoff, 60)});
+    std.log.debug("current tz offset: {d}", .{@divTrunc(local.tm_gmtoff, 60)});
     return datetime.Timezone.create("Custom", @intCast(i16, @divTrunc(local.tm_gmtoff, 60)));
 }

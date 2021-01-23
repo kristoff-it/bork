@@ -9,13 +9,6 @@ datetime:
       repo: zig-datetime
       user: frmdstryr
       ref: master
-mecha:
-  root: /mecha.zig
-  src:
-    github:
-      repo: mecha
-      user: Hejsil
-      ref: f15011fc94c2aaf1a618877d7e8731c496a67c0b
 clap:
   root: /clap.zig
   src:

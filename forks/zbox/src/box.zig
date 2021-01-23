@@ -185,8 +185,8 @@ pub const Buffer = struct {
                     //TODO: handle other line endings and return an error when
                     // encountering unpritable or width-breaking codepoints.
                     '\n' => {
-                        self.col_num = 0;
-                        self.row_num += 1;
+                            self.col_num = 0;
+                            self.row_num += 1;
                     },
                     else => {
                         if (self.col_num < self.buffer.width)

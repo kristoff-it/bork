@@ -15,11 +15,12 @@ pub const Event = union(enum) {
     network: Network.Event,
 };
 
+const oauth_file_name = ".bork-oauth";
+
 var log_level: std.log.Level = .warn;
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     var alloc = &gpa.allocator;
-
     const nick = nick: {
         var it = std.process.ArgIterator.init();
         var exe_name = try (it.next(alloc) orelse @panic("no executable name as first argument!?")); // burn exe name
@@ -31,33 +32,102 @@ pub fn main() !void {
         });
     };
 
-    const auth = std.os.getenv("TWITCH_OAUTH") orelse {
-        std.debug.print(
-            \\To connect to Twitch, bork needs to authenticate as you.
-            \\Please place your OAuth token in an env variable named:
-            \\                       TWITCH_OAUTH
-            \\
-            \\Here's an official tool that can quickly generate a token
-            \\for you: https://twitchapps.com/tmi/
-            \\
-            \\It might be a good idea to save the token in a dotfile
-            \\and then refer to your token through it:
-            \\
-            \\       TWITCH_OAUTH="$(cat ~/.twitch_oauth)" ./bork
-            \\
-            \\Or, even better, consider adding this line to your shell
-            \\startup file:
-            \\
-            \\       export TWITCH_OAUTH="$(cat ~/.twitch_oauth)"
-            \\
-        , .{});
-        std.os.exit(1);
-    };
+    const auth = auth: {
+        // Open either $HOME path, or just use cwd.
+        const maybe_home = std.os.getenv("HOME") orelse ".";
+        const dir = try std.fs.cwd().openDir(maybe_home, .{});
+        const oauth_file = dir.openFile(oauth_file_name, .{ .read = true, .write = true }) catch |err| switch (err) {
+            error.FileNotFound => {
+                std.debug.print(
+                    \\ 
+                    \\ To connect to Twitch, bork needs a Twitch OAuth token. 
+                    \\ Unfortunately, this procedure can't be fully automated
+                    \\ and you will have to repeat it when the token expires
+                    \\ (bork will let you know when that happens).
+                    \\ 
+                    \\ Please open the following URL and paste in here the
+                    \\ oauth token you will be shown after logging in.
+                    \\  
+                    \\    https://twitchapps.com/tmi/
+                    \\ 
+                    \\ Token (input is hidden): 
+                , .{});
+                const new_file = dir.createFile(oauth_file_name, .{}) catch |err2| {
+                    std.debug.print(
+                        \\
+                        \\ Encountered an error while trying to write to 
+                        \\ 
+                        \\    {s}/{s}
+                        \\ 
+                        \\ i.e., the file that should contain the Twitch OAuth 
+                        \\ token necessary to authenticate with the service.
+                        \\ 
+                        \\ bork needs write permission to create that file.
+                        \\ This was the error encountered: 
+                        \\ 
+                        \\    {e}
+                        \\ 
+                    , .{ maybe_home, oauth_file_name, err2 });
+                    std.os.exit(1);
+                };
+                break :auth try askUserNewToken(alloc, maybe_home, new_file);
+            },
+            else => {
+                std.debug.print(
+                    \\
+                    \\ Encountered an error while trying to open 
+                    \\ 
+                    \\    {s}/{s}
+                    \\ 
+                    \\ i.e., the file that should contain the Twitch OAuth 
+                    \\ token necessary to authenticate with the service.
+                    \\ 
+                    \\ bork needs write permission to create that file.
+                    \\ This was the error encountered: 
+                    \\ 
+                    \\    {e}
+                    \\ 
+                , .{ maybe_home, oauth_file_name, err });
+                std.os.exit(1);
+            },
+        };
 
-    if (!std.mem.startsWith(u8, auth, "oauth:")) {
-        std.debug.print("TWITCH_OAUTH needs to start with `oauth:`\n", .{});
-        std.os.exit(1);
-    }
+        // Found  the file, test it
+        if (try oauth_file.reader().readUntilDelimiterOrEofAlloc(alloc, '\n', 1024)) |old_tok| {
+            if (!try Network.checkTokenValidity(alloc, old_tok)) {
+                std.debug.print(
+                    \\ 
+                    \\ The Twitch OAuth token expired, we must refresh it.
+                    \\ 
+                    \\ Please open the following URL and paste in here the
+                    \\ oauth token you will be shown after logging in.
+                    \\  
+                    \\    https://twitchapps.com/tmi/
+                    \\ 
+                    \\ Token (input is hidden): 
+                , .{});
+                try oauth_file.seekTo(0);
+                try oauth_file.setEndPos(0);
+                break :auth try askUserNewToken(alloc, maybe_home, oauth_file);
+            }
+            break :auth old_tok;
+        } else {
+            std.debug.print(
+                \\ 
+                \\ The Twitch OAuth token expired, we must refresh it.
+                \\ 
+                \\ Please open the following URL and paste in here the
+                \\ oauth token you will be shown after logging in.
+                \\  
+                \\    https://twitchapps.com/tmi/
+                \\ 
+                \\ Token (input is hidden): 
+            , .{});
+            try oauth_file.seekTo(0);
+            try oauth_file.setEndPos(0);
+            break :auth try askUserNewToken(alloc, maybe_home, oauth_file);
+        }
+    };
 
     var buf: [24]Event = undefined;
     var ch = Channel(Event).init(&buf);
@@ -70,9 +140,10 @@ pub fn main() !void {
     defer network.deinit();
 
     var chat = Chat{ .allocator = alloc };
-
     // Initial paint!
     try display.renderChat(&chat);
+
+    defer std.log.debug("leaving already?", .{});
 
     // Main control loop
     var chaos = false;
@@ -96,7 +167,7 @@ pub fn main() !void {
                         // need_repaint = true;
                     },
                     .other => |c| {
-                        std.log.debug("[key] [{}]", .{c});
+                        std.log.debug("[key] [{s}]", .{c});
                         switch (c[0]) {
                             'r', 'R' => {
                                 try display.sizeChanged();
@@ -110,6 +181,7 @@ pub fn main() !void {
                         std.log.debug("click at {}", .{pos});
                         need_repaint = try display.handleClick(pos.row - 1, pos.col - 1);
                     },
+
                     .CTRL_C => return,
                     .up, .wheelUp, .pageUp => {
                         need_repaint = chat.scroll(.up, 1);
@@ -171,6 +243,43 @@ pub fn log(
 
 pub fn panic(msg: []const u8, trace: ?*std.builtin.StackTrace) noreturn {
     nosuspend Terminal.panic();
-    log(.emerg, .default, "{}", .{msg});
+    log(.emerg, .default, "{s}", .{msg});
     std.builtin.default_panic(msg, trace);
+}
+fn askUserNewToken(alloc: *std.mem.Allocator, maybe_home: []const u8, oauth_file: std.fs.File) ![]const u8 {
+    var in = std.io.getStdIn();
+    const original_termios = try std.os.tcgetattr(in.handle);
+    var termios = original_termios;
+
+    // disable echo
+    termios.lflag &= ~@as(std.os.tcflag_t, std.os.ECHO);
+
+    try std.os.tcsetattr(in.handle, .FLUSH, termios);
+    defer std.os.tcsetattr(in.handle, .FLUSH, original_termios) catch {};
+
+    const tok = (try in.reader().readUntilDelimiterOrEofAlloc(alloc, '\n', 1024)) orelse "";
+    if (try Network.checkTokenValidity(alloc, tok)) {
+        try oauth_file.writer().print("{s}\n", .{tok});
+        std.debug.print(
+            \\ 
+            \\ 
+            \\ Success, great job!
+            \\ Your token has been saved here:
+            \\ 
+            \\    {s}/{s}
+            \\ 
+            \\ Press any key to and continue.
+            \\ 
+        , .{ maybe_home, oauth_file_name });
+        try std.os.tcsetattr(in.handle, .FLUSH, original_termios);
+        _ = try in.reader().readByte();
+        return tok;
+    } else {
+        std.debug.print(
+            \\
+            \\ Twitch did not accept the token, please try again.
+            \\
+        , .{});
+        std.os.exit(1);
+    }
 }

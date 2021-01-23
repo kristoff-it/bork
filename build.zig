@@ -24,6 +24,7 @@ pub fn build(b: *Builder) void {
     if (std.meta.eql(target.os_tag, .linux)) {
         // exe.sanitize_thread = true;
     }
+    
     exe.setTarget(target);
     exe.setBuildMode(mode);
     exe.install();
