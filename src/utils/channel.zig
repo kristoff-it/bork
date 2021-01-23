@@ -1,8 +1,10 @@
 const std = @import("std");
 
+const Held = @TypeOf(@as(std.Thread.Mutex, undefined).impl).Held;
+
 pub fn Channel(comptime T: type) type {
     return struct {
-        lock: std.Mutex = .{},
+        lock: std.Thread.Mutex = .{},
         buffer: []T,
         head: usize = 0,
         tail: usize = 0,
@@ -48,7 +50,7 @@ pub fn Channel(comptime T: type) type {
         }
 
         pub fn get(self: *Self) T {
-            var held: std.Mutex.Held = undefined;
+            var held: Held = undefined;
 
             if (self.tryGet(&held)) |item|
                 return item;
@@ -57,7 +59,7 @@ pub fn Channel(comptime T: type) type {
         }
 
         pub fn getOrNull(self: *Self) ?T {
-            var held: std.Mutex.Held = undefined;
+            var held: Held = undefined;
 
             if (self.tryGet(&held)) |item|
                 return item;
@@ -66,7 +68,7 @@ pub fn Channel(comptime T: type) type {
             return null;
         }
 
-        fn tryGet(self: *Self, held: *std.Mutex.Held) ?T {
+        fn tryGet(self: *Self, held: *Held) ?T {
             held.* = self.lock.acquire();
 
             if (self.tail -% self.head > 0) {
@@ -88,7 +90,7 @@ pub fn Channel(comptime T: type) type {
             return null;
         }
 
-        fn wait(queue: *?*Waiter, held: std.Mutex.Held, item: T) T {
+        fn wait(queue: *?*Waiter, held: Held, item: T) T {
             var waiter: Waiter = undefined;
             push(queue, &waiter);
             waiter.item = item;

@@ -5,7 +5,7 @@ const tls = @import("iguanaTLS");
 const hostname = "id.twitch.tv";
 
 pub fn checkTokenValidity(allocator: *std.mem.Allocator, token: []const u8) !bool {
-    const TLSStream = tls.Client(std.fs.File.Reader, std.fs.File.Writer, tls.ciphersuites.all, true);
+    const TLSStream = tls.Client(std.net.Stream.Reader, std.net.Stream.Writer, tls.ciphersuites.all, true);
     const HttpClient = hzzp.base.client.BaseClient(TLSStream.Reader, TLSStream.Writer);
 
     var sock = try std.net.tcpConnectToHost(allocator, hostname, 443);

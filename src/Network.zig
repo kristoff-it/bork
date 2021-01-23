@@ -29,9 +29,9 @@ tz: datetime.Timezone,
 allocator: *std.mem.Allocator,
 ch: *Channel(GlobalEventUnion),
 emote_cache: EmoteCache,
-socket: std.fs.File,
-reader: std.fs.File.Reader,
-writer: std.fs.File.Writer,
+socket: std.net.Stream,
+reader: std.net.Stream.Reader,
+writer: std.net.Stream.Writer,
 writer_lock: std.event.Lock = .{},
 _atomic_reconnecting: bool = false,
 
@@ -274,7 +274,7 @@ fn _reconnect(self: *Self, writer_held: ?std.event.Lock.Held) void {
     }
 }
 
-fn connect(alloc: *std.mem.Allocator, name: []const u8, oauth: []const u8) !std.fs.File {
+fn connect(alloc: *std.mem.Allocator, name: []const u8, oauth: []const u8) !std.net.Stream {
     var socket = try std.net.tcpConnectToHost(alloc, "irc.chat.twitch.tv", 6667);
     // var socket = try std.net.tcpConnectToHost(alloc, "localhost", 6667);
     errdefer socket.close();
