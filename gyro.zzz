@@ -1,0 +1,46 @@
+pkgs:
+  bork:
+    version: 0.0.0
+    author: kristoff-it
+    source_url: "https://github.com/kristoff-it/bork"
+
+    root: src/main.zig
+    files:
+      README.md
+      LICENSE
+      build.zig
+      src/*.zig
+      src/network/*.zig
+      src/utils/*.zig
+
+deps:
+  zbox:
+    root: src/box.zig
+    src:
+      url: "file://forks/zbox"
+  datetime:
+    root: datetime.zig
+    src:
+      github:
+        repo: zig-datetime
+        user: frmdstryr
+        ref: master
+  clap:
+    root: clap.zig
+    src:
+      github:
+        repo: zig-clap
+        user: Hejsil
+        ref: zig-master
+  iguanaTLS:
+    src:
+      github:
+        repo: iguanaTLS
+        user: alexnask
+        ref: master
+  hzzp:
+    src:
+      github:
+        repo: hzzp
+        user: truemedian
+        ref: master

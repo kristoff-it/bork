@@ -58,6 +58,27 @@ pub fn BaseClient(comptime Reader: type, comptime Writer: type) type {
             try self.writer.writeAll(" HTTP/1.1\r\n");
         }
 
+        // This makes interacting with URI parsers like Vexu/zuri much nicer, because you don't need to reconstruct the path.
+        pub fn writeStatusLineParts(self: *Self, method: []const u8, path: []const u8, query: ?[]const u8, fragment: ?[]const u8) Writer.Error!void {
+            assert(!self.head_finished);
+
+            try self.writer.writeAll(method);
+            try self.writer.writeAll(" ");
+            try self.writer.writeAll(path);
+
+            if (query) |qs| {
+                try self.writer.writeAll("?");
+                try self.writer.writeAll(qs);
+            }
+
+            if (fragment) |frag| {
+                try self.writer.writeAll("#");
+                try self.writer.writeAll(frag);
+            }
+
+            try self.writer.writeAll(" HTTP/1.1\r\n");
+        }
+
         pub fn writeHeaderValue(self: *Self, name: []const u8, value: []const u8) Writer.Error!void {
             assert(!self.head_finished);
 
