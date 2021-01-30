@@ -14,17 +14,14 @@ pub fn build(b: *Builder) void {
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
     const mode = b.standardReleaseOptions();
     const exe = b.addExecutable("bork", "src/main.zig");
-
-    inline for (std.meta.fields(@TypeOf(pkgs))) |field| {
-        exe.addPackage(@field(pkgs, field.name));
-    }
+    pkgs.addAllTo(exe);
 
     // Necessary for using localtime()
     exe.linkLibC();
     if (std.meta.eql(target.os_tag, .linux)) {
         // exe.sanitize_thread = true;
     }
-    
+
     exe.setTarget(target);
     exe.setBuildMode(mode);
     exe.install();

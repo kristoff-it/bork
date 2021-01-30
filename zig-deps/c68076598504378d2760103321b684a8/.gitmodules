@@ -1,3 +1,0 @@
-[submodule "src/PeerType"]
-	path = src/PeerType
-	url = git@github.com:alexnask/PeerType
