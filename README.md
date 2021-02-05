@@ -11,3 +11,8 @@ bork is meant to be used as a twitch chat feed to be displayed on stream.
 Currently in alpha stage.
 
 A better readme will be written once I manage to learn Colemak. At the moment life is pain.
+
+## Demo
+Watch demo in meantime
+
+https://youtu.be/Px8rVB3ZpKA
