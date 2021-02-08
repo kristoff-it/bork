@@ -217,7 +217,7 @@ fn renderMessage(alloc: *std.mem.Allocator, msg: *TerminalMessage) !void {
 
             // Top line
             {
-                const message_fmt = "«{}»";
+                const message_fmt = "«{s}»";
                 const message_args = .{r.display_name};
                 cursor.context.col_num = @divTrunc(msg.buffer.width + 2 - std.fmt.count(
                     message_fmt,
@@ -228,7 +228,7 @@ fn renderMessage(alloc: *std.mem.Allocator, msg: *TerminalMessage) !void {
 
             // Bottom line
             {
-                const message_fmt = "🎉  {}mo {} resub! 🎉";
+                const message_fmt = "🎉  {d}mo {s} resub! 🎉";
                 const message_args = .{ r.count, tier };
                 cursor.context.row_num = 1;
                 cursor.context.col_num = @divTrunc(msg.buffer.width + 4 - std.fmt.count(
@@ -260,7 +260,7 @@ fn renderMessage(alloc: *std.mem.Allocator, msg: *TerminalMessage) !void {
 
             // Top line
             {
-                const message_fmt = "«{}»";
+                const message_fmt = "«{s}»";
                 const message_args = .{s.display_name};
                 cursor.context.col_num = @divTrunc(msg.buffer.width + 2 - std.fmt.count(
                     message_fmt,
@@ -271,7 +271,7 @@ fn renderMessage(alloc: *std.mem.Allocator, msg: *TerminalMessage) !void {
 
             // Bottom line
             {
-                const message_fmt = "🎊  is now a {} sub! 🎊";
+                const message_fmt = "🎊  is now a {s} sub! 🎊";
                 const message_args = .{tier};
                 cursor.context.row_num = 1;
                 cursor.context.col_num = @divTrunc(msg.buffer.width + 4 - std.fmt.count(
@@ -303,7 +303,7 @@ fn renderMessage(alloc: *std.mem.Allocator, msg: *TerminalMessage) !void {
 
             // Top line
             {
-                const message_fmt = "«{}» 🎁  a {}mo";
+                const message_fmt = "«{s}» 🎁  a {d}mo";
                 const message_args = .{ g.sender_display_name, g.months };
                 cursor.context.col_num = @divTrunc(msg.buffer.width + 6 - std.fmt.count(
                     message_fmt,
@@ -314,7 +314,7 @@ fn renderMessage(alloc: *std.mem.Allocator, msg: *TerminalMessage) !void {
 
             // Bottom line
             {
-                const message_fmt = "{} Sub to «{}»";
+                const message_fmt = "{s} Sub to «{s}»";
                 const message_args = .{ tier, g.recipient_display_name };
                 cursor.context.row_num = 1;
                 cursor.context.col_num = @divTrunc(msg.buffer.width + 2 - std.fmt.count(
@@ -348,7 +348,7 @@ fn renderMessage(alloc: *std.mem.Allocator, msg: *TerminalMessage) !void {
 
             // Top line
             {
-                const top_message_fmt = "«{}»";
+                const top_message_fmt = "«{s}»";
                 const top_message_args = .{g.display_name};
                 cursor.context.col_num = @divTrunc(msg.buffer.width + 2 - std.fmt.count(
                     top_message_fmt,
@@ -359,7 +359,7 @@ fn renderMessage(alloc: *std.mem.Allocator, msg: *TerminalMessage) !void {
 
             // Bottom line
             {
-                const message_fmt = "🎁  Gifted x{} {} Subs! 🎁";
+                const message_fmt = "🎁  Gifted x{d} {s} Subs! 🎁";
                 const message_args = .{
                     g.count,
                     tier,
@@ -386,7 +386,7 @@ fn renderMessage(alloc: *std.mem.Allocator, msg: *TerminalMessage) !void {
             var it = std.mem.tokenize(c.text, " ");
             var emote_idx: usize = 0;
             while (it.next()) |w| {
-                std.log.debug("word: [{}]", .{w});
+                std.log.debug("word: [{s}]", .{w});
 
                 if (emote_idx < c.emotes.len and
                     c.emotes[emote_idx].end == it.index - 1)
