@@ -136,7 +136,7 @@ pub fn main() !void {
     defer display.deinit();
 
     var network: Network = undefined;
-    try network.init(alloc, &ch, nick, auth, senseUserTZ());
+    try network.init(alloc, &ch, nick, auth, try senseUserTZ(alloc));
     defer network.deinit();
 
     var chat = Chat{ .allocator = alloc };

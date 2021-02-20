@@ -25,6 +25,11 @@ pub const pkgs = struct {
         .path = ".gyro/hzzp-truemedian-b4e874ed921f76941dce2870677b713c8e0ebc6c/pkg/src/main.zig",
     };
 
+    pub const tzif = std.build.Pkg{
+        .name = "tzif",
+        .path = ".gyro/zig-tzif-leroycep-bf91177e6ff7f52cffc44c33b6d755392ed7f9d7/pkg/tzif.zig",
+    };
+
     pub fn addAllTo(artifact: *std.build.LibExeObjStep) void {
         @setEvalBranchQuota(1_000_000);
         inline for (std.meta.declarations(pkgs)) |decl| {
