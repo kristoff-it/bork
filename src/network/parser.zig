@@ -8,7 +8,7 @@ const ParseResult = union(enum) {
 };
 
 pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, tz: datetime.Timezone) !ParseResult {
-    std.log.debug("data:\n{}\n", .{data});
+    std.log.debug("data:\n{s}\n", .{data});
     if (data.len == 0) return error.NoData;
 
     // Basic message structure:
@@ -47,7 +47,7 @@ pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, tz: datetime.Timezone
         // Message has no prefix
         break :blk "";
     };
-    std.log.debug("prefix: [{}]", .{prefix});
+    std.log.debug("prefix: [{s}]", .{prefix});
 
     // Command and arguments
     const cmd_and_args = blk: {
