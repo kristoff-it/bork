@@ -30,10 +30,12 @@ pub const Message = struct {
         sub_months: usize,
         /// Does the user have a founder badge?
         is_founder: bool,
-        /// List of emotes and their position. Must be sorted (asc) by end position.
+        /// List of emotes and their position. Must be sorted (asc) by end position
         emotes: []Emote = &[0]Emote{},
         /// Moderator status
         is_mod: bool = false,
+        /// Highlighed message by redeeming points
+        is_highlighted: bool = false,
     };
 
     /// When somebody gifts X subs to random people

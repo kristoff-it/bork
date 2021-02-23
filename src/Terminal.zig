@@ -147,7 +147,16 @@ pub fn prepareMessage(self: *Self, chatMsg: Chat.Message) !*Chat.Message {
                 self.chatBuf.width,
             ),
         },
-        else => .{
+        .chat => |m| .{
+            .chat_message = chatMsg,
+            .is_selected = m.is_highlighted,
+            .buffer = try zbox.Buffer.init(
+                self.allocator,
+                1,
+                self.chatBuf.width - padding,
+            ),
+        },
+        .line => .{
             .chat_message = chatMsg,
             .buffer = try zbox.Buffer.init(
                 self.allocator,
@@ -961,7 +970,14 @@ pub fn handleClick(self: *Self, row: usize, col: usize) !bool {
         switch (self.active_interaction) {
             .none, .button, .subscriber_badge => {},
             .chat_message => |tm| {
-                tm.is_selected = true;
+                // If the message came in highlighted we must clear
+                // it and also clear the active interaction.
+                if (tm.is_selected) {
+                    tm.is_selected = false;
+                    self.active_interaction = .none;
+                } else {
+                    tm.is_selected = true;
+                }
             },
             .event_message => |tm| {
                 tm.is_selected = false;
