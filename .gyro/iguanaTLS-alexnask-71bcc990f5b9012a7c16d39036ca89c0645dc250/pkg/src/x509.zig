@@ -63,7 +63,7 @@ pub fn parse_public_key(allocator: *Allocator, reader: anytype) !PublicKey {
     if ((try reader.readByte()) != 0x06)
         return error.MalformedDER;
     const oid_bytes = try asn1.der.parse_length(reader);
-    if (oid_bytes == 9 ) {
+    if (oid_bytes == 9) {
         // @TODO This fails in async if merged with the if
         if (!try reader.isBytes(&[9]u8{ 0x2A, 0x86, 0x48, 0x86, 0xF7, 0xD, 0x1, 0x1, 0x1 }))
             return error.MalformedDER;
@@ -132,8 +132,7 @@ pub fn parse_public_key(allocator: *Allocator, reader: anytype) !PublicKey {
                 key.ec = .{ .id = .secp521r1, .curve_point = undefined }
             else
                 return error.MalformedDER;
-        } else if (curve_oid_bytes == 8)
-        {
+        } else if (curve_oid_bytes == 8) {
             if (!try reader.isBytes(&[8]u8{ 0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x3, 0x1, 0x7 }))
                 return error.MalformedDER;
             key.ec = .{ .id = .secp256r1, .curve_point = undefined };
@@ -150,7 +149,7 @@ pub fn parse_public_key(allocator: *Allocator, reader: anytype) !PublicKey {
             return error.MalformedDER;
         const bit_memory = try allocator.alloc(u8, std.math.divCeil(usize, bit_count, 8) catch unreachable);
         errdefer allocator.free(bit_memory);
-        try reader.readNoEof(bit_memory[0.. byte_len - 1]);
+        try reader.readNoEof(bit_memory[0 .. byte_len - 1]);
 
         key.ec.curve_point = bit_memory;
         return key;

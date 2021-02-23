@@ -1185,11 +1185,11 @@ pub fn client_connect(
         };
 
         const next_32_bytes = struct {
-            inline fn f(
+            fn f(
                 state: *KeyExpansionState,
                 comptime chunk_idx: comptime_int,
                 chunk: *[32]u8,
-            ) void {
+            ) callconv(.Inline) void {
                 if (chunk_idx == 0) {
                     Hmac256.create(state.a1[0..32], state.seed, state.master_secret);
                     Hmac256.create(chunk, state.a1, state.master_secret);

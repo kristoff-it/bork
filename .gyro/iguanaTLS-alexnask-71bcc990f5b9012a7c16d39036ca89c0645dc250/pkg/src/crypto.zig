@@ -38,7 +38,7 @@ pub const ChaCha20Stream = struct {
         };
     }
 
-    inline fn chacha20Core(x: *BlockVec, input: BlockVec) void {
+    fn chacha20Core(x: *BlockVec, input: BlockVec) callconv(.Inline) void {
         x.* = input;
 
         const rounds = comptime [_]QuarterRound{
@@ -67,7 +67,7 @@ pub const ChaCha20Stream = struct {
         }
     }
 
-    inline fn hashToBytes(out: *[64]u8, x: BlockVec) void {
+    fn hashToBytes(out: *[64]u8, x: BlockVec) callconv(.Inline) void {
         var i: usize = 0;
         while (i < 4) : (i += 1) {
             mem.writeIntLittle(u32, out[16 * i + 0 ..][0..4], x[i * 4 + 0]);
@@ -77,7 +77,7 @@ pub const ChaCha20Stream = struct {
         }
     }
 
-    inline fn contextFeedback(x: *BlockVec, ctx: BlockVec) void {
+    fn contextFeedback(x: *BlockVec, ctx: BlockVec) callconv(.Inline) void {
         var i: usize = 0;
         while (i < 16) : (i += 1) {
             x[i] +%= ctx[i];
@@ -348,10 +348,10 @@ pub const ecc = struct {
         P.* = Q;
     }
 
-    inline fn point_double(comptime Curve: type, P: *Jacobian(Curve)) void {
+    fn point_double(comptime Curve: type, P: *Jacobian(Curve)) callconv(.Inline) void {
         _ = run_code(Curve, P, P.*, &code.double);
     }
-    inline fn point_add(comptime Curve: type, P1: *Jacobian(Curve), P2: Jacobian(Curve)) void {
+    fn point_add(comptime Curve: type, P1: *Jacobian(Curve), P2: Jacobian(Curve)) callconv(.Inline) void {
         _ = run_code(Curve, P1, P2, &code._add);
     }
 
@@ -621,39 +621,39 @@ pub const ecc = struct {
         return result;
     }
 
-    inline fn MUL31(x: u32, y: u32) u64 {
+    fn MUL31(x: u32, y: u32) callconv(.Inline) u64 {
         return @as(u64, x) * @as(u64, y);
     }
 
-    inline fn MUL31_lo(x: u32, y: u32) u32 {
+    fn MUL31_lo(x: u32, y: u32) callconv(.Inline) u32 {
         return (x *% y) & 0x7FFFFFFF;
     }
 
-    inline fn MUX(ctl: u32, x: u32, y: u32) u32 {
+    fn MUX(ctl: u32, x: u32, y: u32) callconv(.Inline) u32 {
         return y ^ (@bitCast(u32, -@bitCast(i32, ctl)) & (x ^ y));
     }
-    inline fn NOT(ctl: u32) u32 {
+    fn NOT(ctl: u32) callconv(.Inline) u32 {
         return ctl ^ 1;
     }
-    inline fn NEQ(x: u32, y: u32) u32 {
+    fn NEQ(x: u32, y: u32) callconv(.Inline) u32 {
         const q = x ^ y;
         return (q | @bitCast(u32, -@bitCast(i32, q))) >> 31;
     }
-    inline fn EQ(x: u32, y: u32) u32 {
+    fn EQ(x: u32, y: u32) callconv(.Inline) u32 {
         const q = x ^ y;
         return NOT((q | @bitCast(u32, -@bitCast(i32, q))) >> 31);
     }
-    inline fn CMP(x: u32, y: u32) i32 {
+    fn CMP(x: u32, y: u32) callconv(.Inline) i32 {
         return @bitCast(i32, GT(x, y)) | -@bitCast(i32, GT(y, x));
     }
-    inline fn GT(x: u32, y: u32) u32 {
+    fn GT(x: u32, y: u32) callconv(.Inline) u32 {
         const z = y -% x;
         return (z ^ ((x ^ y) & (x ^ z))) >> 31;
     }
-    inline fn LT(x: u32, y: u32) u32 {
+    fn LT(x: u32, y: u32) callconv(.Inline) u32 {
         return GT(y, x);
     }
-    inline fn GE(x: u32, y: u32) u32 {
+    fn GE(x: u32, y: u32) callconv(.Inline) u32 {
         return NOT(GT(y, x));
     }
 
@@ -666,7 +666,7 @@ pub const ecc = struct {
     // @TODO Remove lots of len and Curve parameters, just use the first byte calcualtions
     // This will make all these functions shared for and reduce code bloat
 
-    inline fn set_zero(comptime len: usize, out: *[len]u32, bit_len: u32) void {
+    fn set_zero(comptime len: usize, out: *[len]u32, bit_len: u32) callconv(.Inline) void {
         out[0] = bit_len;
         mem.set(u32, out[1..][0 .. (bit_len + 31) >> 5], 0);
     }
@@ -695,7 +695,7 @@ pub const ecc = struct {
         return q;
     }
 
-    inline fn div(hi: u32, lo: u32, d: u32) u32 {
+    fn div(hi: u32, lo: u32, d: u32) callconv(.Inline) u32 {
         var r: u32 = undefined;
         return divrem(hi, lo, d, &r);
     }

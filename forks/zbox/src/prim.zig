@@ -329,7 +329,7 @@ const TermState = struct {
 };
 var termState: ?TermState = null;
 
-inline fn state() *TermState {
+fn state() callconv(.Inline) *TermState {
     if (std.debug.runtime_safety) {
         if (termState) |*self| return self else @panic("terminal is not initialized");
     } else return &termState.?;

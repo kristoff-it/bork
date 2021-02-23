@@ -82,10 +82,8 @@ pub const MIN_YEAR: u16 = 1;
 pub const MAX_YEAR: u16 = 9999;
 pub const MAX_ORDINAL: u32 = 3652059;
 
-const DAYS_IN_MONTH = [12]u8{
-    31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
-const DAYS_BEFORE_MONTH = [12]u16{
-    0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334};
+const DAYS_IN_MONTH = [12]u8{ 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+const DAYS_BEFORE_MONTH = [12]u16{ 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334 };
 
 pub fn isLeapYear(year: u32) bool {
     return year % 4 == 0 and (year % 100 != 0 or year % 400 == 0);
@@ -107,12 +105,11 @@ test "leapyear" {
 // Number of days before Jan 1st of year
 pub fn daysBeforeYear(year: u32) u32 {
     var y: u32 = year - 1;
-    return y*365 + @divFloor(y, 4) - @divFloor(y, 100) + @divFloor(y, 400);
+    return y * 365 + @divFloor(y, 4) - @divFloor(y, 100) + @divFloor(y, 400);
 }
 
 // Days before 1 Jan 1970
 const EPOCH = daysBeforeYear(1970) + 1;
-
 
 test "daysBeforeYear" {
     testing.expect(daysBeforeYear(1996) == 728658);
@@ -123,9 +120,8 @@ test "daysBeforeYear" {
 pub fn daysInMonth(year: u32, month: u32) u8 {
     assert(1 <= month and month <= 12);
     if (month == 2 and isLeapYear(year)) return 29;
-    return DAYS_IN_MONTH[month-1];
+    return DAYS_IN_MONTH[month - 1];
 }
-
 
 test "daysInMonth" {
     testing.expect(daysInMonth(2019, 1) == 31);
@@ -133,15 +129,13 @@ test "daysInMonth" {
     testing.expect(daysInMonth(2016, 2) == 29);
 }
 
-
 // Number of days in year preceding the first day of month
 pub fn daysBeforeMonth(year: u32, month: u32) u32 {
     assert(month >= 1 and month <= 12);
-    var d = DAYS_BEFORE_MONTH[month-1];
+    var d = DAYS_BEFORE_MONTH[month - 1];
     if (month > 2 and isLeapYear(year)) d += 1;
     return d;
 }
-
 
 // Return number of days since 01-Jan-0001
 fn ymd2ord(year: u16, month: u8, day: u8) u32 {
@@ -157,25 +151,23 @@ test "ymd2ord" {
     testing.expect(ymd2ord(2019, 11, 28) == 737391);
 }
 
-
 test "days-before-year" {
     const DI400Y = daysBeforeYear(401); // Num of days in 400 years
     const DI100Y = daysBeforeYear(101); // Num of days in 100 years
-    const DI4Y =   daysBeforeYear(5);   // Num of days in 4   years
+    const DI4Y = daysBeforeYear(5); // Num of days in 4   years
 
     // A 4-year cycle has an extra leap day over what we'd get from pasting
     // together 4 single years.
-    std.testing.expect(DI4Y == 4*365 + 1);
+    std.testing.expect(DI4Y == 4 * 365 + 1);
 
     // Similarly, a 400-year cycle has an extra leap day over what we'd get from
     // pasting together 4 100-year cycles.
-    std.testing.expect(DI400Y == 4*DI100Y + 1);
+    std.testing.expect(DI400Y == 4 * DI100Y + 1);
 
     // OTOH, a 100-year cycle has one fewer leap day than we'd get from
     // pasting together 25 4-year cycles.
-    std.testing.expect(DI100Y == 25*DI4Y - 1);
+    std.testing.expect(DI100Y == 25 * DI4Y - 1);
 }
-
 
 pub const Date = struct {
     year: u16,
@@ -183,7 +175,7 @@ pub const Date = struct {
     day: u8 = 1, // Day of month
 
     // Create and validate the date
-    pub fn create(year: u32, month: u32, day: u32) ! Date {
+    pub fn create(year: u32, month: u32, day: u32) !Date {
         if (year < MIN_YEAR or year > MAX_YEAR) return error.InvalidDate;
         if (month < 1 or month > 12) return error.InvalidDate;
         if (day < 1 or day > daysInMonth(year, month)) return error.InvalidDate;
@@ -224,10 +216,10 @@ pub const Date = struct {
         //      1 Jan  401         DI400Y +1     DI400Y        400-year boundary
         assert(ordinal >= 1 and ordinal <= MAX_ORDINAL);
 
-        var n = ordinal-1;
+        var n = ordinal - 1;
         comptime const DI400Y = daysBeforeYear(401); // Num of days in 400 years
         comptime const DI100Y = daysBeforeYear(101); // Num of days in 100 years
-        comptime const DI4Y =   daysBeforeYear(5);   // Num of days in 4   years
+        comptime const DI4Y = daysBeforeYear(5); // Num of days in 4   years
         const n400 = @divFloor(n, DI400Y);
         n = @mod(n, DI400Y);
         var year = n400 * 400 + 1; //  ..., -399, 1, 401, ...
@@ -253,7 +245,7 @@ pub const Date = struct {
 
         if (n1 == 4 or n100 == 4) {
             assert(n == 0);
-            return Date.create(year-1, 12, 31) catch unreachable;
+            return Date.create(year - 1, 12, 31) catch unreachable;
         }
 
         // Now the year is correct, and n is the offset from January 1.  We find
@@ -274,7 +266,7 @@ pub const Date = struct {
 
         // Now the year and month are correct, and n is the offset from the
         // start of that month:  we're done!
-        return Date.create(year, month, n+1) catch unreachable;
+        return Date.create(year, month, n + 1) catch unreachable;
     }
 
     // Return proleptic Gregorian ordinal for the year, month and day.
@@ -365,8 +357,7 @@ pub const Date = struct {
 
     // Return date in ISO format YYYY-MM-DD
     pub fn formatIso(self: Date, buf: []u8) ![]u8 {
-        return std.fmt.bufPrint(buf, "{}-{}-{}",
-            .{self.year, self.month, self.day});
+        return std.fmt.bufPrint(buf, "{}-{}-{}", .{ self.year, self.month, self.day });
     }
 
     // ------------------------------------------------------------------------
@@ -376,7 +367,7 @@ pub const Date = struct {
     // Return day of year starting with 1
     pub fn dayOfYear(self: Date) u16 {
         var d = self.toOrdinal() - daysBeforeYear(self.year);
-        assert(d >=1 and d <= 366);
+        assert(d >= 1 and d <= 366);
         return @intCast(u16, d);
     }
 
@@ -413,12 +404,12 @@ pub const Date = struct {
 
     // Return a copy of the date shifted by the given number of days
     pub fn shiftDays(self: Date, days: i32) Date {
-        return self.shift(Delta{.days=days});
+        return self.shift(Delta{ .days = days });
     }
 
     // Return a copy of the date shifted by the given number of years
     pub fn shiftYears(self: Date, years: i16) Date {
-        return self.shift(Delta{.years=years});
+        return self.shift(Delta{ .years = years });
     }
 
     pub const Delta = struct {
@@ -466,9 +457,7 @@ pub const Date = struct {
         }
         return Date.fromOrdinal(ord);
     }
-
 };
-
 
 test "date-now" {
     var date = Date.now();
@@ -511,32 +500,29 @@ test "date-from-seconds" {
     testing.expectEqual(date, try Date.create(1970, 1, 1));
     testing.expectEqual(date.toSeconds(), seconds);
 
-    seconds = -@as(f64, EPOCH-1)*time.s_per_day;
+    seconds = -@as(f64, EPOCH - 1) * time.s_per_day;
     date = Date.fromSeconds(seconds);
     testing.expectEqual(date, try Date.create(1, 1, 1));
     testing.expectEqual(date.toSeconds(), seconds);
 
-    seconds = @as(f64, MAX_ORDINAL-EPOCH)*time.s_per_day;
+    seconds = @as(f64, MAX_ORDINAL - EPOCH) * time.s_per_day;
     date = Date.fromSeconds(seconds);
     testing.expectEqual(date, try Date.create(9999, 12, 31));
     testing.expectEqual(date.toSeconds(), seconds);
-//
-//
-//     const t = 63710928000.000;
-//     date = Date.fromSeconds(t);
-//     testing.expectEqual(date.year, 2019);
-//     testing.expectEqual(date.month, 12);
-//     testing.expectEqual(date.day, 3);
-//     testing.expectEqual(date.toSeconds(), t);
-//
-//     Max check
-//     var max_date = try Date.create(9999, 12, 31);
-//     const tmax: f64 = @intToFloat(f64, MAX_ORDINAL-1) * time.s_per_day;
-//     date = Date.fromSeconds(tmax);
-//     testing.expect(date.eql(max_date));
-//     testing.expectEqual(date.toSeconds(), tmax);
+    //     const t = 63710928000.000;
+    //     date = Date.fromSeconds(t);
+    //     testing.expectEqual(date.year, 2019);
+    //     testing.expectEqual(date.month, 12);
+    //     testing.expectEqual(date.day, 3);
+    //     testing.expectEqual(date.toSeconds(), t);
+    //
+    //     Max check
+    //     var max_date = try Date.create(9999, 12, 31);
+    //     const tmax: f64 = @intToFloat(f64, MAX_ORDINAL-1) * time.s_per_day;
+    //     date = Date.fromSeconds(tmax);
+    //     testing.expect(date.eql(max_date));
+    //     testing.expectEqual(date.toSeconds(), tmax);
 }
-
 
 test "date-day-of-year" {
     var date = try Date.create(1970, 1, 1);
@@ -579,7 +565,6 @@ test "date-shift-days" {
 
     d = date.shiftDays(0);
     testing.expect(date.eql(d));
-
 }
 
 test "date-shift-years" {
@@ -609,13 +594,10 @@ test "date-shift-years" {
     // From leap day to leap day
     d = leap_day.shiftYears(4);
     testing.expect(d.eql(try Date.create(2024, 2, 29)));
-
 }
 
-
 test "date-create" {
-    testing.expectError(
-        error.InvalidDate, Date.create(2019, 2, 29));
+    testing.expectError(error.InvalidDate, Date.create(2019, 2, 29));
 
     var date = Date.fromTimestamp(1574908586928);
     testing.expect(date.eql(try Date.create(2019, 11, 28)));
@@ -627,23 +609,20 @@ test "date-copy" {
     testing.expect(d1.eql(d2));
 }
 
-
 pub const Timezone = struct {
     offset: i16, // In minutes
     name: []const u8,
 
     // Auto register timezones
     pub fn create(name: []const u8, offset: i16) Timezone {
-        const self = Timezone{.offset=offset, .name=name};
+        const self = Timezone{ .offset = offset, .name = name };
         return self;
     }
 
     pub fn offsetSeconds(self: Timezone) i32 {
         return @as(i32, self.offset) * time.s_per_min;
     }
-
 };
-
 
 pub const Time = struct {
     hour: u8 = 0, // 0 to 23
@@ -691,7 +670,7 @@ pub const Time = struct {
         return Time.create(h, m, s, ns) catch unreachable;
     }
 
-      // From seconds since the start of the day
+    // From seconds since the start of the day
     pub fn fromSeconds(seconds: f64) Time {
         assert(seconds >= 0);
         // Convert to s and us
@@ -704,7 +683,7 @@ pub const Time = struct {
 
         // Rounding seems to only be accurate to within 100ns
         // for normal timestamps
-        var frac = math.round(r.fpart * time.ns_per_s/100)*100;
+        var frac = math.round(r.fpart * time.ns_per_s / 100) * 100;
         if (frac >= time.ns_per_s) {
             s += 1;
             frac -= time.ns_per_s;
@@ -713,7 +692,7 @@ pub const Time = struct {
             frac += time.ns_per_s;
         }
         const ns = @floatToInt(u32, frac);
-        return Time.create(h, m, s,  ns) catch unreachable; // If this fails it's a bug
+        return Time.create(h, m, s, ns) catch unreachable; // If this fails it's a bug
     }
 
     // Convert to a time in seconds relative to the UTC timezones
@@ -832,7 +811,7 @@ test "time-from-seconds" {
     testing.expect(t.minute == 5);
     testing.expect(t.second == 15);
     testing.expect(t.nanosecond == 120000000);
-    testing.expectEqual(t.totalSeconds(), 6*3600+315);
+    testing.expectEqual(t.totalSeconds(), 6 * 3600 + 315);
     //testing.expectAlmostEqual(t.toSeconds(), seconds-time.s_per_day);
 }
 
@@ -853,7 +832,6 @@ test "time-compare" {
     testing.expect(t2.lt(t4));
     testing.expect(t3.lt(t4));
 }
-
 
 pub const Datetime = struct {
     date: Date,
@@ -936,8 +914,7 @@ pub const Datetime = struct {
         return Datetime.fromTimestamp(time.milliTimestamp());
     }
 
-    pub fn create(year: u32, month: u32, day: u32, hour: u32, minute: u32,
-            second: u32, nanosecond: u32, zone: ?*const Timezone) !Datetime {
+    pub fn create(year: u32, month: u32, day: u32, hour: u32, minute: u32, second: u32, nanosecond: u32, zone: ?*const Timezone) !Datetime {
         return Datetime{
             .date = try Date.create(year, month, day),
             .time = try Time.create(hour, minute, second, nanosecond),
@@ -1058,43 +1035,43 @@ pub const Datetime = struct {
             seconds += mins * time.s_per_min;
         }
         const ns = @intCast(i32, self.time.nanosecond) - @intCast(i32, other.time.nanosecond);
-        return Delta{.days=days, .seconds=seconds, .nanoseconds=ns};
+        return Delta{ .days = days, .seconds = seconds, .nanoseconds = ns };
     }
 
     // Create a Datetime shifted by the given number of years
     pub fn shiftYears(self: Datetime, years: i16) Datetime {
-        return self.shift(Delta{.years=years});
+        return self.shift(Delta{ .years = years });
     }
 
     // Create a Datetime shifted by the given number of days
     pub fn shiftDays(self: Datetime, days: i32) Datetime {
-        return self.shift(Delta{.days=days});
+        return self.shift(Delta{ .days = days });
     }
 
     // Create a Datetime shifted by the given number of hours
     pub fn shiftHours(self: Datetime, hours: i32) Datetime {
-        return self.shift(Delta{.seconds=hours*time.s_per_hour});
+        return self.shift(Delta{ .seconds = hours * time.s_per_hour });
     }
 
     // Create a Datetime shifted by the given number of minutes
     pub fn shiftMinutes(self: Datetime, minutes: i32) Datetime {
-        return self.shift(Delta{.seconds=minutes*time.s_per_min});
+        return self.shift(Delta{ .seconds = minutes * time.s_per_min });
     }
 
     // Convert to the given timeszone
     pub fn shiftTimezone(self: Datetime, zone: *const Timezone) Datetime {
         var dt =
             if (self.zone.offset == zone.offset)
-                (self.copy() catch unreachable)
-            else
-                self.shiftMinutes(zone.offset-self.zone.offset);
+            (self.copy() catch unreachable)
+        else
+            self.shiftMinutes(zone.offset - self.zone.offset);
         dt.zone = zone;
         return dt;
     }
 
     // Create a Datetime shifted by the given number of seconds
     pub fn shiftSeconds(self: Datetime, seconds: i64) Datetime {
-        return self.shift(Delta{.seconds=seconds});
+        return self.shift(Delta{ .seconds = seconds });
     }
 
     // Create a Datetime shifted by the given Delta
@@ -1137,10 +1114,9 @@ pub const Datetime = struct {
         second -= minute * time.s_per_min;
 
         return Datetime{
-            .date=self.date.shift(Date.Delta{.years=delta.years, .days=days}),
-            .time=Time.create(hour, minute, second, nanosecond)
-                catch unreachable, // Error here would mean a bug
-            .zone=self.zone,
+            .date = self.date.shift(Date.Delta{ .years = delta.years, .days = days }),
+            .time = Time.create(hour, minute, second, nanosecond) catch unreachable, // Error here would mean a bug
+            .zone = self.zone,
         };
     }
 
@@ -1159,7 +1135,7 @@ pub const Datetime = struct {
             self.time.hour,
             self.time.minute,
             self.time.second,
-            self.zone.name // TODO: Should be GMT
+            self.zone.name, // TODO: Should be GMT
         });
     }
 
@@ -1172,7 +1148,7 @@ pub const Datetime = struct {
             self.time.hour,
             self.time.minute,
             self.time.second,
-            self.zone.name // TODO: Should be GMT
+            self.zone.name, // TODO: Should be GMT
         });
     }
 
@@ -1206,9 +1182,7 @@ pub const Datetime = struct {
         const second = std.fmt.parseInt(u8, value[23..25], 10) catch return error.InvalidFormat;
         return Datetime.create(year, month, day, hour, minute, second, 0, &timezones.GMT);
     }
-
 };
-
 
 test "datetime-now" {
     var t = Datetime.now();
@@ -1233,9 +1207,7 @@ test "datetime-from-seconds" {
     testing.expectEqual(t.date, try Date.create(2020, 6, 17));
     testing.expectEqual(t.time, try Time.create(18, 12, 1, 932644400));
     testing.expectEqual(t.toSeconds(), ts);
-
 }
-
 
 test "datetime-shift-timezones" {
     const ts = 1574908586928;
@@ -1293,14 +1265,12 @@ test "datetime-shift" {
     t = dt.shiftYears(-3);
     testing.expect(t.date.eql(try Date.create(2016, 12, 2)));
     testing.expect(t.time.eql(dt.time));
-
 }
 
 test "datetime-shift-seconds" {
     // Issue 1
     const midnight_utc = try Datetime.create(2020, 12, 17, 0, 0, 0, 0, null);
-    const midnight_copenhagen = try Datetime.create(
-        2020, 12, 17, 1, 0, 0, 0, &timezones.Europe.Copenhagen);
+    const midnight_copenhagen = try Datetime.create(2020, 12, 17, 1, 0, 0, 0, &timezones.Europe.Copenhagen);
     testing.expect(midnight_utc.eql(midnight_copenhagen));
 
     // Check rollover issues
@@ -1337,28 +1307,25 @@ test "datetime-compare" {
 }
 
 test "datetime-subtract" {
-     var a = try Datetime.create(2019, 12, 2, 11, 51, 13, 466545, null);
-     var b = try Datetime.create(2019, 12, 5, 11, 51, 13, 466545, null);
-     var delta = a.sub(b);
-     testing.expectEqual(delta.days, -3);
-     testing.expectEqual(delta.totalSeconds(), -3 * time.s_per_day);
-     delta = b.sub(a);
-     testing.expectEqual(delta.days, 3);
-     testing.expectEqual(delta.totalSeconds(), 3 * time.s_per_day);
+    var a = try Datetime.create(2019, 12, 2, 11, 51, 13, 466545, null);
+    var b = try Datetime.create(2019, 12, 5, 11, 51, 13, 466545, null);
+    var delta = a.sub(b);
+    testing.expectEqual(delta.days, -3);
+    testing.expectEqual(delta.totalSeconds(), -3 * time.s_per_day);
+    delta = b.sub(a);
+    testing.expectEqual(delta.days, 3);
+    testing.expectEqual(delta.totalSeconds(), 3 * time.s_per_day);
 
-     b = try Datetime.create(2019, 12, 2, 11, 0, 0, 466545, null);
-     delta = a.sub(b);
-     testing.expectEqual(delta.totalSeconds(), 13 + 51* time.s_per_min);
+    b = try Datetime.create(2019, 12, 2, 11, 0, 0, 466545, null);
+    delta = a.sub(b);
+    testing.expectEqual(delta.totalSeconds(), 13 + 51 * time.s_per_min);
 }
 
 test "datetime-parse-modified-since" {
     const str = " Wed, 21 Oct 2015 07:28:00 GMT ";
-    testing.expectEqual(
-        try Datetime.parseModifiedSince(str),
-        try Datetime.create(2015, 10, 21, 7, 28, 0, 0, &timezones.GMT));
+    testing.expectEqual(try Datetime.parseModifiedSince(str), try Datetime.create(2015, 10, 21, 7, 28, 0, 0, &timezones.GMT));
 
-    testing.expectError(error.InvalidFormat,
-        Datetime.parseModifiedSince("21/10/2015"));
+    testing.expectError(error.InvalidFormat, Datetime.parseModifiedSince("21/10/2015"));
 }
 
 test "file-modified-date" {
@@ -1383,6 +1350,4 @@ test "readme-example" {
     defer allocator.free(now_str);
     std.debug.warn("The time is now: {}\n", .{now_str});
     // The time is now: Fri, 20 Dec 2019 22:03:02 UTC
-
-
 }
