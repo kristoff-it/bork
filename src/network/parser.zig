@@ -96,6 +96,7 @@ pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, tz: datetime.Timezone
         const display_name = meta[1];
         const emotes = try parseEmotes(meta[2], alloc);
         const is_mod = std.mem.eql(u8, meta[3], "1");
+        const highlight_pos = std.mem.indexOf(u8, metadata, "msg-id=highlighted-message;");
 
         return ParseResult{
             .message = Chat.Message{
@@ -109,6 +110,7 @@ pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, tz: datetime.Timezone
                         .is_founder = std.mem.eql(u8, sub_badge.name, "founder"),
                         .emotes = emotes,
                         .is_mod = is_mod,
+                        .is_highlighted = highlight_pos != null,
                     },
                 },
             },
