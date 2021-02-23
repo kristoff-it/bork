@@ -659,7 +659,6 @@ pub const WET = create("WET", 0);
 pub const W_SU = create("W-SU", 180);
 pub const Zulu = create("Zulu", 0);
 
-
 // TODO: Allow lookup by name
 //pub fn getAll() []*const Timezone {
 //    for (comptime std.meta.fields(@This())) |field {
@@ -670,7 +669,6 @@ pub const Zulu = create("Zulu", 0);
 //pub fn get(name: []const u8) ?*const Timezone {
 //    return ALL_TIMEZONES.getValue(name);
 //}
-
 
 test "timezone-get" {
     const testing = std.testing;
