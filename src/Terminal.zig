@@ -388,7 +388,7 @@ fn renderMessage(alloc: *std.mem.Allocator, msg: *TerminalMessage) !void {
             while (it.next()) |w| {
                 std.log.debug("word: [{s}]", .{w});
 
-                if (emote_idx < c.emotes.len and
+                if (emulator == .kitty and emote_idx < c.emotes.len and
                     c.emotes[emote_idx].end == it.index - 1)
                 {
                     const emote = c.emotes[emote_idx].image orelse "⚡"; //@embedFile("../kappa.txt"); // ; //
