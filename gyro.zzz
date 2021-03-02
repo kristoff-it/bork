@@ -3,7 +3,6 @@ pkgs:
     version: 0.0.0
     author: kristoff-it
     source_url: "https://github.com/kristoff-it/bork"
-
     root: src/main.zig
     files:
       README.md
@@ -12,7 +11,6 @@ pkgs:
       src/*.zig
       src/network/*.zig
       src/utils/*.zig
-
 deps:
   zbox:
     root: src/box.zig
@@ -43,4 +41,10 @@ deps:
       github:
         repo: hzzp
         user: truemedian
+        ref: master
+  tzif:
+    src:
+      github:
+        user: leroycep
+        repo: zig-tzif
         ref: master
