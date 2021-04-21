@@ -89,7 +89,7 @@ pub fn fetch(self: *Self, emote_list: []Emote) !void {
                 break :img try client.reader().readAllAlloc(self.allocator, 1024 * 100);
             };
 
-            var encode_buf = try self.allocator.alloc(u8, std.base64.Base64Encoder.calcSize(img.len));
+            var encode_buf = try self.allocator.alloc(u8, std.base64.standard.Encoder.calcSize(img.len));
             result.entry.value = b64.encode(encode_buf, img);
         }
 
