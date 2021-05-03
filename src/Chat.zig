@@ -13,11 +13,12 @@ pub const Message = struct {
     next: ?*Message = null,
     kind: union(enum) {
         chat: Comment,
+        line,
+        raid: Raid,
+        resub: Resub,
         sub_mistery_gift: SubMisteryGift,
         sub_gift: SubGift,
         sub: Sub,
-        resub: Resub,
-        line,
     },
 
     pub const Comment = struct {
@@ -36,6 +37,14 @@ pub const Message = struct {
         is_mod: bool = false,
         /// Highlighed message by redeeming points
         is_highlighted: bool = false,
+    };
+
+    pub const Raid = struct {
+        login_name: []const u8,
+        display_name: []const u8,
+        profile_picture_url: []const u8,
+        /// How many raiders
+        count: usize,
     };
 
     /// When somebody gifts X subs to random people

@@ -137,6 +137,50 @@ pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, tz: datetime.Timezone
         // One might be tempted at this point to really implement
         // the sorted version of this algorithm NotLikeThis
         const msg_type = (try parseMetaSubsetLinear(metadata, [1][]const u8{"msg-id"}))[0];
+
+        if (std.mem.eql(u8, msg_type, "raid")) {
+            // @badge-info=;
+            // badges=;
+            // color=#5F9EA0;
+            // display-name=togglebit;
+            // emotes=;
+            // flags=;
+            // id=20d2355b-92d6-4262-a5d5-c0ef7ccb8bad;
+            // login=togglebit;
+            // mod=0;
+            // msg-id=raid;
+            // msg-param-displayName=togglebit;
+            // msg-param-login=togglebit;
+            // msg-param-profileImageURL=https://static-cdn.jtvnw.net/jtv_user_pictures/0bb9c502-ab5d-4440-9c9d-14e5260ebf86-profile_image-70x70.png;
+            // msg-param-viewerCount=126;
+            // room-id=102701971;
+            // subscriber=0;
+            // system-msg=126\sraiders\sfrom\stogglebit\shave\sjoined!;
+            // tmi-sent-ts=1619015565551;
+            // user-id=474725923;
+            // user-type= :tmi.twitch.tv USERNOTICE #kristoff_it
+
+            const meta = try parseMetaSubsetLinear(metadata, [_][]const u8{
+                "display-name", // 0
+                "login", // 1
+                "msg-param-profileImageURL", // 2
+                "msg-param-viewerCount", // 3
+            });
+
+            const count = try std.fmt.parseInt(usize, meta[3], 10);
+            return ParseResult{
+                .message = Chat.Message{
+                    .kind = .{
+                        .raid = .{
+                            .display_name = meta[0],
+                            .login_name = meta[1],
+                            .profile_picture_url = meta[2],
+                            .count = count,
+                        },
+                    },
+                },
+            };
+        }
         if (std.mem.eql(u8, msg_type, "submysterygift")) {
             // @badge-info=founder/1;
             // badges=founder/0;
