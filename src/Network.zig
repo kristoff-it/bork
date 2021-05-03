@@ -6,6 +6,8 @@ const Chat = @import("Chat.zig");
 const parser = @import("network/parser.zig");
 const EmoteCache = @import("network/EmoteCache.zig");
 
+const build_opts = @import("build_options");
+
 pub const checkTokenValidity = @import("network/auth.zig").checkTokenValidity;
 pub const Event = union(enum) {
     message: Chat.Message,
@@ -275,9 +277,10 @@ fn _reconnect(self: *Self, writer_held: ?std.event.Lock.Held) void {
 }
 
 fn connect(alloc: *std.mem.Allocator, name: []const u8, oauth: []const u8) !std.net.Stream {
-    var socket = try std.net.tcpConnectToHost(alloc, "irc.chat.twitch.tv", 6667);
-    // var socket = try std.net.tcpConnectToHost(alloc, "localhost", 6667);
+    var socket = if (build_opts.not_real) try std.net.tcpConnectToHost(alloc, "localhost", 6667) else try std.net.tcpConnectToHost(alloc, "irc.chat.twitch.tv", 6667);
     errdefer socket.close();
+
+    const oua = if (build_opts.not_real) "foo" else oauth;
 
     try socket.writer().print(
         \\PASS {0s}
@@ -286,7 +289,7 @@ fn connect(alloc: *std.mem.Allocator, name: []const u8, oauth: []const u8) !std.
         \\CAP REQ :twitch.tv/commands
         \\JOIN #{1s}
         \\
-    , .{ oauth, name });
+    , .{ oua, name });
 
     // TODO: read what we got back, instead of assuming that
     //       all went well just because the bytes were shipped.
