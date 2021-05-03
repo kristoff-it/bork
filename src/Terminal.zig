@@ -138,7 +138,12 @@ pub fn prepareMessage(self: *Self, chatMsg: Chat.Message) !*Chat.Message {
     var term_msg = try self.allocator.create(TerminalMessage);
 
     term_msg.* = switch (chatMsg.kind) {
-        .sub_mistery_gift, .sub_gift, .sub, .resub => .{
+        .raid,
+        .resub,
+        .sub,
+        .sub_gift,
+        .sub_mistery_gift,
+        => .{
             .chat_message = chatMsg,
             .is_selected = true,
             .buffer = try zbox.Buffer.init(
@@ -205,6 +210,43 @@ fn renderMessage(alloc: *std.mem.Allocator, msg: *TerminalMessage) !void {
         //     std.log.debug("TODO(renderMessage): implement rendering for  {}", .{@tagName(msg.chat_message.kind)});
         // },
         .line => {},
+        .raid => |g| {
+            msg.buffer.fill(.{
+                .interactive_element = .{
+                    .event_message = msg,
+                },
+            });
+            cursor.context.interactive_element = .{
+                .event_message = msg,
+            };
+            cursor.context.attribs = .{
+                .feint = true,
+            };
+
+            // Top line
+            {
+                const top_message_fmt = "«{s}»";
+                const top_message_args = .{g.display_name};
+                cursor.context.col_num = @divTrunc(msg.buffer.width + 2 - std.fmt.count(
+                    top_message_fmt,
+                    top_message_args,
+                ), 2);
+                try cursor.print(top_message_fmt, top_message_args);
+            }
+
+            // Bottom line
+            {
+                const message_fmt = "🚨  raiding with {d} 🚨";
+                const message_args = .{g.count};
+                cursor.context.row_num = 1;
+                cursor.context.col_num = @divTrunc(msg.buffer.width + 7 - std.fmt.count(
+                    message_fmt,
+                    message_args,
+                ), 2);
+
+                try cursor.print(message_fmt, message_args);
+            }
+        },
         .resub => |r| {
             msg.buffer.fill(.{
                 .interactive_element = .{
@@ -240,7 +282,7 @@ fn renderMessage(alloc: *std.mem.Allocator, msg: *TerminalMessage) !void {
                 const message_fmt = "🎉  {d}mo {s} resub! 🎉";
                 const message_args = .{ r.count, tier };
                 cursor.context.row_num = 1;
-                cursor.context.col_num = @divTrunc(msg.buffer.width + 4 - std.fmt.count(
+                cursor.context.col_num = @divTrunc(msg.buffer.width + 7 - std.fmt.count(
                     message_fmt,
                     message_args,
                 ), 2);
@@ -283,7 +325,7 @@ fn renderMessage(alloc: *std.mem.Allocator, msg: *TerminalMessage) !void {
                 const message_fmt = "🎊  is now a {s} sub! 🎊";
                 const message_args = .{tier};
                 cursor.context.row_num = 1;
-                cursor.context.col_num = @divTrunc(msg.buffer.width + 4 - std.fmt.count(
+                cursor.context.col_num = @divTrunc(msg.buffer.width + 7 - std.fmt.count(
                     message_fmt,
                     message_args,
                 ), 2);
@@ -314,7 +356,7 @@ fn renderMessage(alloc: *std.mem.Allocator, msg: *TerminalMessage) !void {
             {
                 const message_fmt = "«{s}» 🎁  a {d}mo";
                 const message_args = .{ g.sender_display_name, g.months };
-                cursor.context.col_num = @divTrunc(msg.buffer.width + 6 - std.fmt.count(
+                cursor.context.col_num = @divTrunc(msg.buffer.width + 4 - std.fmt.count(
                     message_fmt,
                     message_args,
                 ), 2);
@@ -610,7 +652,12 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                 // else => {
                 //     std.log.debug("TODO: implement rendering for  {}", .{@tagName(m.kind)});
                 // },
-                .sub_mistery_gift, .sub_gift, .sub, .resub => {
+                .raid,
+                .resub,
+                .sub,
+                .sub_gift,
+                .sub_mistery_gift,
+                => {
                     // re-render the message if width changed in the meantime
                     if (self.chatBuf.width != term_message.buffer.width) {
                         std.log.debug("must rerender msg!", .{});
