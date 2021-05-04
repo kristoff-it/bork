@@ -121,8 +121,43 @@ fn receiveMessages(self: *Self) void {
                             continue;
                         };
                     },
+                    .resub => |c| {
+                        self.emote_cache.fetch(c.resub_message_emotes) catch |err| {
+                            std.log.debug("fetching error: [{e}]", .{err});
+                            continue;
+                        };
+                    },
                 }
+
                 self.ch.put(GlobalEventUnion{ .network = .{ .message = msg } });
+
+                // Hack: when receiving resub events, we generate a fake chat message
+                //       to display the resub message. In the future this should be
+                //       dropped in favor of actually representing properly the resub.
+                switch (msg.kind) {
+                    .resub => |r| {
+                        self.ch.put(GlobalEventUnion{
+                            .network = .{
+                                .message = Chat.Message{
+                                    .kind = .{
+                                        .chat = .{
+                                            .login_name = r.login_name,
+                                            .display_name = r.display_name,
+                                            .text = r.resub_message,
+                                            .time = r.time,
+                                            .sub_months = r.count,
+                                            .is_founder = false, // std.mem.eql(u8, sub_badge.name, "founder"),
+                                            .emotes = r.resub_message_emotes,
+                                            .is_mod = false, // is_mod,
+                                            .is_highlighted = true,
+                                        },
+                                    },
+                                },
+                            },
+                        });
+                    },
+                    else => {},
+                }
             },
         }
     }
