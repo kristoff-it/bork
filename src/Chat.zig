@@ -74,6 +74,7 @@ pub const Message = struct {
         display_name: []const u8,
         count: usize,
         tier: SubTier,
+        time: [5]u8,
         resub_message: []const u8,
         resub_message_emotes: []Emote,
     };

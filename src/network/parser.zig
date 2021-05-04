@@ -338,6 +338,7 @@ pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, tz: datetime.Timezone
                             .display_name = meta[0],
                             .count = count,
                             .tier = tier,
+                            .time = time,
                             .resub_message = trailer,
                             .resub_message_emotes = emotes,
                         },

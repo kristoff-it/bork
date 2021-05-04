@@ -236,10 +236,10 @@ fn renderMessage(alloc: *std.mem.Allocator, msg: *TerminalMessage) !void {
 
             // Bottom line
             {
-                const message_fmt = "🚨  raiding with {d} 🚨";
+                const message_fmt = "🚨  raiding with {d} people 🚨";
                 const message_args = .{g.count};
                 cursor.context.row_num = 1;
-                cursor.context.col_num = @divTrunc(msg.buffer.width + 7 - std.fmt.count(
+                cursor.context.col_num = @divTrunc(msg.buffer.width + 4 - std.fmt.count(
                     message_fmt,
                     message_args,
                 ), 2);
@@ -282,7 +282,7 @@ fn renderMessage(alloc: *std.mem.Allocator, msg: *TerminalMessage) !void {
                 const message_fmt = "🎉  {d}mo {s} resub! 🎉";
                 const message_args = .{ r.count, tier };
                 cursor.context.row_num = 1;
-                cursor.context.col_num = @divTrunc(msg.buffer.width + 7 - std.fmt.count(
+                cursor.context.col_num = @divTrunc(msg.buffer.width + 4 - std.fmt.count(
                     message_fmt,
                     message_args,
                 ), 2);
@@ -325,7 +325,7 @@ fn renderMessage(alloc: *std.mem.Allocator, msg: *TerminalMessage) !void {
                 const message_fmt = "🎊  is now a {s} sub! 🎊";
                 const message_args = .{tier};
                 cursor.context.row_num = 1;
-                cursor.context.col_num = @divTrunc(msg.buffer.width + 7 - std.fmt.count(
+                cursor.context.col_num = @divTrunc(msg.buffer.width + 4 - std.fmt.count(
                     message_fmt,
                     message_args,
                 ), 2);
@@ -416,7 +416,7 @@ fn renderMessage(alloc: *std.mem.Allocator, msg: *TerminalMessage) !void {
                     tier,
                 };
                 cursor.context.row_num = 1;
-                cursor.context.col_num = @divTrunc(msg.buffer.width + 7 - std.fmt.count(
+                cursor.context.col_num = @divTrunc(msg.buffer.width + 4 - std.fmt.count(
                     message_fmt,
                     message_args,
                 ), 2);
