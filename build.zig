@@ -16,8 +16,8 @@ pub fn build(b: *Builder) void {
     const exe = b.addExecutable("bork", "src/main.zig");
     pkgs.addAllTo(exe);
 
-    const not_real = b.option(bool, "not_real", "not using real data and testing locally") orelse false;
-    exe.addBuildOption(bool, "not_real", not_real);
+    const local = b.option(bool, "local", "not using real data and testing locally") orelse false;
+    exe.addBuildOption(bool, "local", local);
 
     exe.setTarget(target);
     exe.setBuildMode(mode);
