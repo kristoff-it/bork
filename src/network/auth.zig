@@ -6,7 +6,7 @@ const build_opts = @import("build_options");
 const hostname = "id.twitch.tv";
 
 pub fn checkTokenValidity(allocator: *std.mem.Allocator, token: []const u8) !bool {
-    if (build_opts.not_real) return true;
+    if (build_opts.local) return true;
 
     const TLSStream = tls.Client(std.net.Stream.Reader, std.net.Stream.Writer, tls.ciphersuites.all, true);
     const HttpClient = hzzp.base.client.BaseClient(TLSStream.Reader, TLSStream.Writer);
