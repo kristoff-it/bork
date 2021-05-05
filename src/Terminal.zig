@@ -752,7 +752,7 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                                     if (std.meta.eql(prev_time, c.time)) {
                                         var cur = self.chatBuf.cursorAt(row, 0);
                                         cur.attribs = .{
-                                            .fg_red = true,
+                                            .fg_blue = true,
                                         };
                                         try cur.writer().writeAll("   >>");
                                     } else {
