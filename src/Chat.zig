@@ -82,11 +82,11 @@ pub const Message = struct {
 
     pub const SubTier = enum { prime, t1, t2, t3 };
     pub const Emote = struct {
-        id: u32,
+        twitch_id: []const u8,
         start: usize,
         end: usize,
-        image: ?[]const u8 = null, // TODO: should this be in
-
+        img_data: ?[]const u8 = null, // TODO: should this be in
+        idx: u32 = 0, // surely this will never cause problematic bugs
         // Used to sort the emote list by ending poisition.
         pub fn lessThan(context: void, lhs: Emote, rhs: Emote) bool {
             return lhs.end < rhs.end;

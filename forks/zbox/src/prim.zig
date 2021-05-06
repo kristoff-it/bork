@@ -115,6 +115,10 @@ pub fn send(seq: []const u8) ErrorSet.BufWrite!void {
     try state().buffer.out.writer().writeAll(seq);
 }
 
+pub fn getWriter() std.ArrayList(u8).Writer {
+    return state().buffer.out.writer();
+}
+
 pub fn sendSGR(sgr: SGR) ErrorSet.BufWrite!void {
     try send(csi ++ "0"); // always clear
     if (sgr.bold) try send(";1");

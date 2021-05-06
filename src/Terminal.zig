@@ -26,6 +26,8 @@ pub const InteractiveElement = union(enum) {
     },
 };
 
+const EmoteCache = std.AutoHashMap(u32, void);
+
 // State
 streamer_name: []const u8,
 allocator: *std.mem.Allocator,
@@ -34,13 +36,14 @@ chatBuf: zbox.Buffer,
 overlayBuf: zbox.Buffer,
 ticker: @Frame(startTicking),
 active_interaction: InteractiveElement = .none,
+emote_cache: EmoteCache,
 
 // Static config
 // The message is padded on each line
 // by 6 spaces (HH:MM )
 //              123456
 const padding = 6;
-var emulator: enum { iterm, wez, kitty, other } = undefined;
+var emulator: enum { kitty, other } = undefined;
 
 const Self = @This();
 var done_init = false;
@@ -56,15 +59,9 @@ pub fn init(alloc: *std.mem.Allocator, ch: *Channel(GlobalEventUnion), streamer_
     // Sense the terminal *emulator* we're running in.
     {
         // We're interested in sensing:
-        // - iTerm2
-        // - WezTerm
         // - Kitty
         const name = std.os.getenv("TERM") orelse std.os.getenv("TERM_PROGRAM") orelse "";
-        if (std.mem.eql(u8, name, "WezTerm")) {
-            emulator = .wez;
-        } else if (std.mem.eql(u8, name, "iTerm.app")) {
-            emulator = .iterm;
-        } else if (std.mem.eql(u8, name, "xterm-kitty")) {
+        if (std.mem.eql(u8, name, "xterm-kitty")) {
             emulator = .kitty;
             zbox.is_kitty = true;
         } else {
@@ -121,6 +118,7 @@ pub fn init(alloc: *std.mem.Allocator, ch: *Channel(GlobalEventUnion), streamer_
         .output = output,
         .overlayBuf = overlayBuf,
         .ticker = undefined, //async startTicking(ch),
+        .emote_cache = EmoteCache.init(alloc),
     };
 }
 
@@ -171,31 +169,19 @@ pub fn prepareMessage(self: *Self, chatMsg: Chat.Message) !*Chat.Message {
         },
     };
 
-    try renderMessage(self.allocator, term_msg);
+    try self.renderMessage(term_msg);
 
     return &term_msg.chat_message;
 }
 
-fn setCellToEmote(cell: *zbox.Cell, emote: []const u8) void {
-    cell.* = switch (emulator) {
-        .wez, .iterm => .{
-            .imageDecorationPre = "\x1b]1337;File=inline=1;preserveAspectRatio=1;height=1;size=2164;:",
-            .image = emote,
-            .imageDecorationPost = "\x07",
-        },
-        .kitty => .{
-            .imageDecorationPre = "\x1b_Gf=100,t=d,a=T,r=1,c=2;",
-            .image = emote,
-            .imageDecorationPost = "\x1b\\",
-        },
-        .other => .{
-            .char = ' ',
-        },
+fn setCellToEmote(cell: *zbox.Cell, emote_idx: u32) void {
+    cell.* = .{
+        .emote_idx = emote_idx,
     };
 }
 
 // NOTE: callers must clear the buffer when necessary (when size changes)
-fn renderMessage(alloc: *std.mem.Allocator, msg: *TerminalMessage) !void {
+fn renderMessage(self: *Self, msg: *TerminalMessage) !void {
     const width = msg.buffer.width;
     var height = msg.buffer.height;
 
@@ -425,6 +411,56 @@ fn renderMessage(alloc: *std.mem.Allocator, msg: *TerminalMessage) !void {
             }
         },
         .chat => |c| {
+            // Async emote image data transmission
+            var term_writer = zbox.term.getWriter();
+            for (c.emotes) |e| {
+                if (e.img_data) |img| {
+                    const entry = try self.emote_cache.getOrPut(e.idx);
+                    if (!entry.found_existing) {
+                        const single_chunk = img.len <= 4096;
+                        if (single_chunk) {
+                            std.log.debug("single chunk!", .{});
+                            try term_writer.print(
+                                "\x1b_Gf=100,t=d,a=t,i={d};{s}\x1b\\",
+                                .{ e.idx, img },
+                            );
+                        } else {
+                            var cur: usize = 4096;
+                            // send first chunk
+                            std.log.debug("full image [{s}]", .{img});
+                            try term_writer.print(
+                                "\x1b_Gf=100,i={d},m=1;{s}\x1b\\",
+                                .{ e.idx, img[0..cur] },
+                            );
+
+                            std.log.debug(
+                                "_Gf=100,i={d},m=1;{s}",
+                                .{ e.idx, img[0..cur] },
+                            );
+
+                            while (cur < img.len) : (cur += 4096) {
+                                const end = std.math.min(cur + 4096, img.len);
+                                const m = if (end == img.len) "0" else "1";
+
+                                // <ESC>_Gs=100,v=30,m=1;<encoded pixel data first chunk><ESC>\
+                                // <ESC>_Gm=1;<encoded pixel data second chunk><ESC>\
+                                // <ESC>_Gm=0;<encoded pixel data last chunk><ESC>\
+                                try term_writer.print(
+                                    "\x1b_Gm={s};{s}\x1b\\",
+                                    .{ m, img[cur..end] },
+                                );
+                                std.log.debug(
+                                    "_Gm={s};{s}",
+                                    .{ m, img[cur..end] },
+                                );
+                            }
+                        }
+                    }
+                } else {
+                    // TODO: display placeholder or something
+                }
+            }
+
             msg.buffer.fill(.{
                 .interactive_element = .{
                     .chat_message = msg,
@@ -435,16 +471,16 @@ fn renderMessage(alloc: *std.mem.Allocator, msg: *TerminalMessage) !void {
             };
 
             var it = std.mem.tokenize(c.text, " ");
-            var emote_idx: usize = 0;
+            var emote_array_idx: usize = 0;
             while (it.next()) |w| {
                 std.log.debug("word: [{s}]", .{w});
 
-                if (emulator == .kitty and emote_idx < c.emotes.len and
-                    c.emotes[emote_idx].end == it.index - 1)
+                if (emulator == .kitty and emote_array_idx < c.emotes.len and
+                    c.emotes[emote_array_idx].end == it.index - 1)
                 {
-                    const emote = c.emotes[emote_idx].image orelse "⚡"; //@embedFile("../kappa.txt"); // ; //
+                    const emote = c.emotes[emote_array_idx].idx; //@embedFile("../kappa.txt"); // ; //
                     const emote_len = 2;
-                    emote_idx += 1;
+                    emote_array_idx += 1;
 
                     if (emote_len <= width - cursor.context.col_num) {
                         // emote fits in this row
@@ -618,7 +654,7 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
         // cur.col_num = emoji_column + 2;
         // try cur.writer().writeAll("b0rk");
         self.output.cellRef(0, emoji_column).* = .{
-            .image = "⚡",
+            .char = '⚡',
             .attribs = .{
                 .fg_yellow = true,
                 .bg_blue = true,
@@ -664,7 +700,7 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
 
                         term_message.buffer.deinit();
                         term_message.buffer = try zbox.Buffer.init(self.allocator, 2, self.chatBuf.width);
-                        try renderMessage(self.allocator, term_message);
+                        try self.renderMessage(term_message);
                     }
 
                     const msg_height = term_message.buffer.height;
@@ -713,7 +749,7 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
 
                         term_message.buffer.deinit();
                         term_message.buffer = try zbox.Buffer.init(self.allocator, 1, padded_width);
-                        try renderMessage(self.allocator, term_message);
+                        try self.renderMessage(term_message);
                     }
 
                     // Update the row position

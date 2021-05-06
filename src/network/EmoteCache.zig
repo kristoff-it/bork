@@ -2,23 +2,29 @@ const builtin = @import("builtin");
 const std = @import("std");
 const os = std.os;
 const b64 = std.base64.standard_encoder;
+// const zfetch = @import("zfetch");
 const hzzp = @import("hzzp");
 const tls = @import("iguanaTLS");
 const Emote = @import("../Chat.zig").Message.Emote;
 
-const TLSStream = tls.Client(std.net.Stream.Reader, std.net.Stream.Writer, tls.ciphersuites.all, true);
-const HttpClient = hzzp.base.client.BaseClient(TLSStream.Reader, TLSStream.Writer);
+const EmoteHashMap = std.StringHashMap(struct {
+    data: []const u8,
+    idx: u32,
+});
 
 allocator: *std.mem.Allocator,
-cache: std.AutoHashMap(u32, []const u8),
+idx_counter: u32 = 1,
+cache: EmoteHashMap,
 
 const Self = @This();
 // TODO: for people with 8k SUMQHD terminals, let them use bigger size emotes
+// const path_fmt = "https://localhost:443/emoticons/v1/{s}/3.0";
 const hostname = "static-cdn.jtvnw.net";
+
 pub fn init(allocator: *std.mem.Allocator) Self {
     return Self{
         .allocator = allocator,
-        .cache = std.AutoHashMap(u32, []const u8).init(allocator),
+        .cache = EmoteHashMap.init(allocator),
     };
 }
 
@@ -27,12 +33,15 @@ pub fn init(allocator: *std.mem.Allocator) Self {
 pub fn fetch(self: *Self, emote_list: []Emote) !void {
     for (emote_list) |*emote| {
         std.log.debug("fetching  {}", .{emote.*});
-        const result = try self.cache.getOrPut(emote.id);
-        errdefer _ = self.cache.remove(emote.id);
+        const result = try self.cache.getOrPut(emote.twitch_id);
+        errdefer _ = self.cache.remove(emote.twitch_id);
         if (!result.found_existing) {
             std.log.debug("need to download", .{});
             // Need to download the image
             var img = img: {
+                const TLSStream = tls.Client(std.net.Stream.Reader, std.net.Stream.Writer, tls.ciphersuites.all, true);
+                const HttpClient = hzzp.base.client.BaseClient(TLSStream.Reader, TLSStream.Writer);
+
                 var sock = try std.net.tcpConnectToHost(self.allocator, hostname, 443);
                 defer sock.close();
 
@@ -60,7 +69,11 @@ pub fn fetch(self: *Self, emote_list: []Emote) !void {
                     tls_sock.writer(),
                 );
 
-                const path = try std.fmt.allocPrint(self.allocator, "/emoticons/v1/{d}/1.0", .{emote.id});
+                const path = try std.fmt.allocPrint(
+                    self.allocator,
+                    "/emoticons/v1/{s}/1.0",
+                    .{emote.twitch_id},
+                );
                 defer self.allocator.free(path);
 
                 client.writeStatusLine("GET", path) catch |err| {
@@ -88,11 +101,45 @@ pub fn fetch(self: *Self, emote_list: []Emote) !void {
                 }
                 break :img try client.reader().readAllAlloc(self.allocator, 1024 * 100);
             };
+            // var img = img: {
+            //     const path = try std.fmt.allocPrint(
+            //         self.allocator,
+            //         path_fmt,
+            //         .{emote.twitch_id},
+            //     );
+            //     defer self.allocator.free(path);
+
+            //     std.log.debug("emote url = ({s})", .{path});
+
+            //     var headers = zfetch.Headers.init(self.allocator);
+            //     defer headers.deinit();
+
+            //     try headers.appendValue("Host", "static-cdn.jtvnw.net");
+            //     try headers.appendValue("User-Agent", "Bork");
+            //     try headers.appendValue("Accept", "*/*");
+
+            //     var req = try zfetch.Request.init(self.allocator, path, null);
+            //     defer req.deinit();
+
+            //     try req.do(.GET, headers, null);
+
+            //     if (req.status.code != 200) {
+            //         std.log.err("emote request failed ({s})", .{path});
+            //         return error.HttpError;
+            //     }
+
+            //     break :img try req.reader().readAllAlloc(self.allocator, 1024 * 100);
+            // };
 
             var encode_buf = try self.allocator.alloc(u8, std.base64.standard.Encoder.calcSize(img.len));
-            result.entry.value = b64.encode(encode_buf, img);
+            result.entry.value = .{
+                .data = b64.encode(encode_buf, img),
+                .idx = self.idx_counter,
+            };
+            self.idx_counter += 1;
         }
 
-        emote.image = result.entry.value;
+        emote.img_data = result.entry.value.data;
+        emote.idx = result.entry.value.idx;
     }
 }

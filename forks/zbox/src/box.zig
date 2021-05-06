@@ -65,8 +65,8 @@ pub fn push(buffer: Buffer) (Allocator.Error || ErrorSet.Utf8Encode || ErrorSet.
         var last_image_out = false;
         while (col < buffer.width) : (col += 1) {
             const must_repaint = last_image_out;
-            if ((front.cell(row, col).image.len != 0) and
-                (buffer.cell(row, col).image.len == 0))
+            if ((front.cell(row, col).emote_idx != 0) and
+                (buffer.cell(row, col).emote_idx == 0))
             {
                 last_image_out = true;
             }
@@ -86,11 +86,12 @@ pub fn push(buffer: Buffer) (Allocator.Error || ErrorSet.Utf8Encode || ErrorSet.
 
             const cell = buffer.cell(row, col);
             front.cellRef(row, col).* = cell;
-            if (cell.image.len != 0) {
+            if (cell.emote_idx != 0) {
                 try term.sendSGR(cell.attribs);
-                try term.send(cell.imageDecorationPre);
-                try term.send(cell.image);
-                try term.send(cell.imageDecorationPost);
+                try term.getWriter().print(
+                    "\x1b_Gf=100,t=d,a=p,r=1,c=2,i={d};\x1b\\",
+                    .{cell.emote_idx},
+                );
                 if (is_kitty) {
                     try term.cursorTo(row, col);
                     try term.send(" ");
@@ -118,9 +119,7 @@ pub fn push(buffer: Buffer) (Allocator.Error || ErrorSet.Utf8Encode || ErrorSet.
 pub const Cell = struct {
     attribs: term.SGR = term.SGR{},
     char: u21 = ' ',
-    image: []const u8 = "",
-    imageDecorationPre: []const u8 = "",
-    imageDecorationPost: []const u8 = "",
+    emote_idx: u32 = 0,
 
     interactive_element: InteractiveElement = .none,
 
@@ -132,7 +131,7 @@ pub const Cell = struct {
     fn eql(self: Cell, other: Cell) bool {
         return self.char == other.char and
             self.attribs.eql(other.attribs) and
-            self.image.ptr == other.image.ptr and
+            self.emote_idx == other.emote_idx and
             std.meta.eql(self.interactive_element, other.interactive_element);
     }
 };
