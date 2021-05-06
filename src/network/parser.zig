@@ -382,7 +382,7 @@ fn parseEmotes(data: []const u8, allocator: *std.mem.Allocator) ![]Chat.Message.
     var i: usize = 0;
     while (emote_it.next()) |e| {
         const colon_pos = std.mem.indexOf(u8, e, ":") orelse return error.NoColon;
-        const emote_id = try std.fmt.parseInt(u32, e[0..colon_pos], 10);
+        const emote_id = e[0..colon_pos];
 
         var pos_it = std.mem.tokenize(e[colon_pos + 1 ..], ",");
         while (pos_it.next()) |pos| : (i += 1) {
@@ -400,7 +400,7 @@ fn parseEmotes(data: []const u8, allocator: *std.mem.Allocator) ![]Chat.Message.
 
             // result.emote_chars += end - start;
             emotes[i] = Chat.Message.Emote{
-                .id = emote_id,
+                .twitch_id = emote_id,
                 .start = start,
                 .end = end,
             };

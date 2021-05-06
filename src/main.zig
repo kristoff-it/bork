@@ -2,6 +2,8 @@ const std = @import("std");
 const options = @import("build_options");
 const datetime = @import("datetime");
 const clap = @import("clap");
+const zfetch = @import("zfetch");
+
 const Channel = @import("utils/channel.zig").Channel;
 const senseUserTZ = @import("utils/sense_tz.zig").senseUserTZ;
 const Network = @import("Network.zig");
@@ -232,7 +234,8 @@ pub fn log(
         const prefix = "[" ++ @tagName(level) ++ "] " ++ scope_prefix;
         const held = std.debug.getStderrMutex().acquire();
         defer held.release();
-        const logfile = std.fs.cwd().createFile("bork.log", .{ .truncate = false, .intended_io_mode = .blocking }) catch return;
+        const name = if (options.local) "bork-local.log" else "bork.log";
+        const logfile = std.fs.cwd().createFile(name, .{ .truncate = false, .intended_io_mode = .blocking }) catch return;
         defer logfile.close();
         const writer = logfile.writer();
         const end = logfile.getEndPos() catch return;
