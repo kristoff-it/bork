@@ -412,52 +412,54 @@ fn renderMessage(self: *Self, msg: *TerminalMessage) !void {
         },
         .chat => |c| {
             // Async emote image data transmission
-            var term_writer = zbox.term.getWriter();
-            for (c.emotes) |e| {
-                if (e.img_data) |img| {
-                    const entry = try self.emote_cache.getOrPut(e.idx);
-                    if (!entry.found_existing) {
-                        const single_chunk = img.len <= 4096;
-                        if (single_chunk) {
-                            std.log.debug("single chunk!", .{});
-                            try term_writer.print(
-                                "\x1b_Gf=100,t=d,a=t,i={d};{s}\x1b\\",
-                                .{ e.idx, img },
-                            );
-                        } else {
-                            var cur: usize = 4096;
-                            // send first chunk
-                            std.log.debug("full image [{s}]", .{img});
-                            try term_writer.print(
-                                "\x1b_Gf=100,i={d},m=1;{s}\x1b\\",
-                                .{ e.idx, img[0..cur] },
-                            );
-
-                            std.log.debug(
-                                "_Gf=100,i={d},m=1;{s}",
-                                .{ e.idx, img[0..cur] },
-                            );
-
-                            while (cur < img.len) : (cur += 4096) {
-                                const end = std.math.min(cur + 4096, img.len);
-                                const m = if (end == img.len) "0" else "1";
-
-                                // <ESC>_Gs=100,v=30,m=1;<encoded pixel data first chunk><ESC>\
-                                // <ESC>_Gm=1;<encoded pixel data second chunk><ESC>\
-                                // <ESC>_Gm=0;<encoded pixel data last chunk><ESC>\
+            {
+                var term_writer = zbox.term.getWriter();
+                for (c.emotes) |e| {
+                    if (e.img_data) |img| {
+                        const entry = try self.emote_cache.getOrPut(e.idx);
+                        if (!entry.found_existing) {
+                            const single_chunk = img.len <= 4096;
+                            if (single_chunk) {
+                                std.log.debug("single chunk!", .{});
                                 try term_writer.print(
-                                    "\x1b_Gm={s};{s}\x1b\\",
-                                    .{ m, img[cur..end] },
+                                    "\x1b_Gf=100,t=d,a=t,i={d};{s}\x1b\\",
+                                    .{ e.idx, img },
                                 );
+                            } else {
+                                var cur: usize = 4096;
+                                // send first chunk
+                                std.log.debug("full image [{s}]", .{img});
+                                try term_writer.print(
+                                    "\x1b_Gf=100,i={d},m=1;{s}\x1b\\",
+                                    .{ e.idx, img[0..cur] },
+                                );
+
                                 std.log.debug(
-                                    "_Gm={s};{s}",
-                                    .{ m, img[cur..end] },
+                                    "_Gf=100,i={d},m=1;{s}",
+                                    .{ e.idx, img[0..cur] },
                                 );
+
+                                while (cur < img.len) : (cur += 4096) {
+                                    const end = std.math.min(cur + 4096, img.len);
+                                    const m = if (end == img.len) "0" else "1";
+
+                                    // <ESC>_Gs=100,v=30,m=1;<encoded pixel data first chunk><ESC>\
+                                    // <ESC>_Gm=1;<encoded pixel data second chunk><ESC>\
+                                    // <ESC>_Gm=0;<encoded pixel data last chunk><ESC>\
+                                    try term_writer.print(
+                                        "\x1b_Gm={s};{s}\x1b\\",
+                                        .{ m, img[cur..end] },
+                                    );
+                                    std.log.debug(
+                                        "_Gm={s};{s}",
+                                        .{ m, img[cur..end] },
+                                    );
+                                }
                             }
                         }
+                    } else {
+                        // TODO: display placeholder or something
                     }
-                } else {
-                    // TODO: display placeholder or something
                 }
             }
 
@@ -472,11 +474,14 @@ fn renderMessage(self: *Self, msg: *TerminalMessage) !void {
 
             var it = std.mem.tokenize(c.text, " ");
             var emote_array_idx: usize = 0;
-            while (it.next()) |w| {
-                std.log.debug("word: [{s}]", .{w});
+            var codepoints: usize = 0;
+            while (it.next()) |word| : (codepoints += 1) { // we add the space, twitch removes extra spaces
+                std.log.debug("word: [{s}]", .{word});
+                const word_len = try std.unicode.utf8CountCodepoints(word);
+                codepoints += word_len;
 
                 if (emulator == .kitty and emote_array_idx < c.emotes.len and
-                    c.emotes[emote_array_idx].end == it.index - 1)
+                    c.emotes[emote_array_idx].end == codepoints - 1)
                 {
                     const emote = c.emotes[emote_array_idx].idx; //@embedFile("../kappa.txt"); // ; //
                     const emote_len = 2;
@@ -502,9 +507,6 @@ fn renderMessage(self: *Self, msg: *TerminalMessage) !void {
                         ), emote);
                     }
                 } else {
-                    const word = w;
-                    const word_len = try std.unicode.utf8CountCodepoints(w);
-
                     if (word_len >= width) {
                         // a link or a very big word
 
