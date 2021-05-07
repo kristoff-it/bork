@@ -335,7 +335,7 @@ pub const der = struct {
         const schema_tag: Tag = tag_literal;
         const actual_tag = std.meta.intToEnum(Tag, tag_byte) catch return error.InvalidTag;
         if (actual_tag != schema_tag) {
-            if (is_optional) return tag_byte;
+            if (is_optional) return TagLength{ .tag = tag_byte, .length = length };
             return error.DoesNotMatchSchema;
         }
 
@@ -409,6 +409,20 @@ pub const der = struct {
 
     fn parse_int_internal(alloc: *Allocator, bytes_read: *usize, der_reader: anytype) !BigInt {
         const length = try parse_length_internal(bytes_read, der_reader);
+        return try parse_int_with_length_internal(alloc, bytes_read, length, der_reader);
+    }
+
+    pub fn parse_int(alloc: *Allocator, der_reader: anytype) !BigInt {
+        var bytes: usize = undefined;
+        return try parse_int_internal(alloc, &bytes, der_reader);
+    }
+
+    pub fn parse_int_with_length(alloc: *Allocator, length: usize, der_reader: anytype) !BigInt {
+        var read: usize = 0;
+        return try parse_int_with_length_internal(alloc, &read, length, der_reader);
+    }
+
+    fn parse_int_with_length_internal(alloc: *Allocator, bytes_read: *usize, length: usize, der_reader: anytype) !BigInt  {
         const first_byte = try der_reader.readByte();
         if (first_byte == 0x0 and length > 1) {
             // Positive number with highest bit set to 1 in the rest.
@@ -441,11 +455,6 @@ pub const der = struct {
         mem.reverse(u8, limb_ptr[0..length]);
         bytes_read.* += length;
         return BigInt{ .limbs = limbs, .positive = (first_byte & 0x80) == 0x00 };
-    }
-
-    pub fn parse_int(alloc: *Allocator, der_reader: anytype) !BigInt {
-        var bytes: usize = undefined;
-        return try parse_int_internal(alloc, &bytes, der_reader);
     }
 
     pub fn parse_length(der_reader: anytype) !usize {

@@ -17,7 +17,7 @@ pub const pkgs = struct {
 
     pub const iguanaTLS = std.build.Pkg{
         .name = "iguanaTLS",
-        .path = ".gyro/iguanaTLS-alexnask-71bcc990f5b9012a7c16d39036ca89c0645dc250/pkg/src/main.zig",
+        .path = ".gyro/iguanaTLS-alexnask-71b5c85edf899e83b0d715d857bd0a344b26f3eb/pkg/src/main.zig",
     };
 
     pub const hzzp = std.build.Pkg{
@@ -38,4 +38,13 @@ pub const pkgs = struct {
             }
         }
     }
+};
+
+pub const base_dirs = struct {
+    pub const zbox = "forks/zbox";
+    pub const datetime = ".gyro/zig-datetime-frmdstryr-b52235d4026ead2ce8e2b768daf880f8174f0be5/pkg";
+    pub const clap = ".gyro/zig-clap-Hejsil-42433ca7b59c3256f786af5d1d282798b5b37f31/pkg";
+    pub const iguanaTLS = ".gyro/iguanaTLS-alexnask-71b5c85edf899e83b0d715d857bd0a344b26f3eb/pkg";
+    pub const hzzp = ".gyro/hzzp-truemedian-b4e874ed921f76941dce2870677b713c8e0ebc6c/pkg";
+    pub const tzif = ".gyro/zig-tzif-leroycep-bf91177e6ff7f52cffc44c33b6d755392ed7f9d7/pkg";
 };

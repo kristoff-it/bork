@@ -142,7 +142,6 @@ pub fn ctr(
         mem.copy(u8, pad[offset..], src[0..part_len]);
         block_cipher.xor(&pad, &pad, counter);
         mem.copy(u8, dst[0..part_len], pad[offset..][0..part_len]);
-
         cur_idx += part_len;
         idx.* += part_len;
         if (idx.* % block_length == 0)
@@ -182,7 +181,7 @@ pub fn ctr(
         var pad = [_]u8{0} ** block_length;
         mem.copy(u8, &pad, src[start_idx..][cur_idx..]);
         block_cipher.xor(&pad, &pad, counter);
-        mem.copy(u8, dst[cur_idx..], pad[0 .. remaining - cur_idx]);
+        mem.copy(u8, dst[start_idx..][cur_idx..], pad[0 .. remaining - cur_idx]);
 
         idx.* += remaining - cur_idx;
         if (idx.* % block_length == 0)
@@ -236,6 +235,54 @@ pub const ecc = struct {
             0xE9, 0xDA, 0x31, 0x13, 0xB5, 0xF0, 0xB8, 0xC0,
             0x0A, 0x60, 0xB1, 0xCE, 0x1D, 0x7E, 0x81, 0x9D,
             0x7A, 0x43, 0x1D, 0x7C, 0x90, 0xEA, 0x0E, 0x5F,
+        };
+
+        comptime {
+            std.debug.assert((P[0] - (P[0] >> 5) + 7) >> 2 == point_len + 1);
+        }
+    };
+
+    pub const SECP256R1 = struct {
+        pub const point_len = 64;
+
+        const order = [point_len / 2]u8{
+            0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+            0xBC, 0xE6, 0xFA, 0xAD, 0xA7, 0x17, 0x9E, 0x84,
+            0xF3, 0xB9, 0xCA, 0xC2, 0xFC, 0x63, 0x25, 0x51,
+        };
+
+        const P = [_]u32{
+            0x00000108, 0x7FFFFFFF,
+            0x7FFFFFFF, 0x7FFFFFFF,
+            0x00000007, 0x00000000,
+            0x00000000, 0x00000040,
+            0x7FFFFF80, 0x000000FF,
+        };
+        const R2 = [_]u32{
+            0x00000108, 0x00014000,
+            0x00018000, 0x00000000,
+            0x7FF40000, 0x7FEFFFFF,
+            0x7FF7FFFF, 0x7FAFFFFF,
+            0x005FFFFF, 0x00000000,
+        };
+        const B = [_]u32{
+            0x00000108, 0x6FEE1803,
+            0x6229C4BD, 0x21B139BE,
+            0x327150AA, 0x3567802E,
+            0x3F7212ED, 0x012E4355,
+            0x782DD38D, 0x0000000E,
+        };
+
+        const base_point = [point_len]u8{
+            0x6B, 0x17, 0xD1, 0xF2, 0xE1, 0x2C, 0x42, 0x47,
+            0xF8, 0xBC, 0xE6, 0xE5, 0x63, 0xA4, 0x40, 0xF2,
+            0x77, 0x03, 0x7D, 0x81, 0x2D, 0xEB, 0x33, 0xA0,
+            0xF4, 0xA1, 0x39, 0x45, 0xD8, 0x98, 0xC2, 0x96,
+            0x4F, 0xE3, 0x42, 0xE2, 0xFE, 0x1A, 0x7F, 0x9B,
+            0x8E, 0xE7, 0xEB, 0x4A, 0x7C, 0x0F, 0x9E, 0x16,
+            0x2B, 0xCE, 0x33, 0x57, 0x6B, 0x31, 0x5E, 0xCE,
+            0xCB, 0xB6, 0x40, 0x68, 0x37, 0xBF, 0x51, 0xF5,
         };
 
         comptime {
@@ -309,8 +356,8 @@ pub const ecc = struct {
         var Q = P;
         const T = comptime jacobian_with_one_set(Curve, [2][jacobian_len(Curve)]u32{ undefined, undefined });
         _ = run_code(Curve, &Q, T, &code.affine);
-        encode_jacobian_part(Curve, point[0 .. Curve.point_len / 2], Q[0]);
-        encode_jacobian_part(Curve, point[Curve.point_len / 2 ..], Q[1]);
+        encode_jacobian_part(point[0 .. Curve.point_len / 2], &Q[0]);
+        encode_jacobian_part(point[Curve.point_len / 2 ..], &Q[1]);
     }
 
     fn point_mul(comptime Curve: type, P: *Jacobian(Curve), x: []const u8) void {
@@ -602,19 +649,19 @@ pub const ecc = struct {
             switch (op) {
                 0 => t[d] = t[a],
                 1 => {
-                    var ctl = add(jaclen, &t[d], t[a], 1);
-                    ctl |= NOT(sub(jaclen, &t[d], Curve.P, 0));
-                    _ = sub(jaclen, &t[d], Curve.P, ctl);
+                    var ctl = add(&t[d], &t[a], 1);
+                    ctl |= NOT(sub(&t[d], &Curve.P, 0));
+                    _ = sub(&t[d], &Curve.P, ctl);
                 },
-                2 => _ = add(jaclen, &t[d], Curve.P, sub(jaclen, &t[d], t[a], 1)),
-                3 => montymul(Curve, &t[d], t[a], t[b], Curve.P, 1),
+                2 => _ = add(&t[d], &Curve.P, sub(&t[d], &t[a], 1)),
+                3 => montymul(&t[d], &t[a], &t[b], &Curve.P, 1),
                 4 => {
                     var tp: [Curve.point_len / 2]u8 = undefined;
-                    encode_jacobian_part(Curve, &tp, Curve.P);
+                    encode_jacobian_part(&tp, &Curve.P);
                     tp[Curve.point_len / 2 - 1] -= 2;
                     modpow(Curve, &t[d], tp, 1, &t[a], &t[b]);
                 },
-                else => result &= ~iszero(jaclen, t[d]),
+                else => result &= ~iszero(&t[d]),
             }
         }
         P1.* = t[0..3].*;
@@ -663,12 +710,9 @@ pub const ecc = struct {
         }
     }
 
-    // @TODO Remove lots of len and Curve parameters, just use the first byte calcualtions
-    // This will make all these functions shared for and reduce code bloat
-
-    fn set_zero(comptime len: usize, out: *[len]u32, bit_len: u32) callconv(.Inline) void {
+    fn set_zero(out: [*]u32, bit_len: u32) callconv(.Inline) void {
         out[0] = bit_len;
-        mem.set(u32, out[1..][0 .. (bit_len + 31) >> 5], 0);
+        mem.set(u32, (out + 1)[0 .. (bit_len + 31) >> 5], 0);
     }
 
     fn divrem(_hi: u32, _lo: u32, d: u32, r: *u32) u32 {
@@ -700,7 +744,7 @@ pub const ecc = struct {
         return divrem(hi, lo, d, &r);
     }
 
-    fn muladd_small(comptime len: usize, x: *[len]u32, z: u32, m: [len]u32) void {
+    fn muladd_small(x: [*]u32, z: u32, m: [*]const u32) void {
         var a0: u32 = undefined;
         var a1: u32 = undefined;
         var b0: u32 = undefined;
@@ -709,13 +753,13 @@ pub const ecc = struct {
         const hi = x[mlen];
         if (mblr == 0) {
             a0 = x[mlen];
-            mem.copyBackwards(u32, x[2..][0 .. mlen - 1], x[1..][0 .. mlen - 1]);
+            mem.copyBackwards(u32, (x + 2)[0 .. mlen - 1], (x + 1)[0 .. mlen - 1]);
             x[1] = z;
             a1 = x[mlen];
             b0 = m[mlen];
         } else {
             a0 = ((x[mlen] << (31 - mblr)) | (x[mlen - 1] >> mblr)) & 0x7FFFFFFF;
-            mem.copyBackwards(u32, x[2..][0 .. mlen - 1], x[1..][0 .. mlen - 1]);
+            mem.copyBackwards(u32, (x + 2)[0 .. mlen - 1], (x + 1)[0 .. mlen - 1]);
             x[1] = z;
             a1 = ((x[mlen] << (31 - mblr)) | (x[mlen - 1] >> mblr)) & 0x7FFFFFFF;
             b0 = ((m[mlen] << (31 - mblr)) | (m[mlen - 1] >> mblr)) & 0x7FFFFFFF;
@@ -742,15 +786,15 @@ pub const ecc = struct {
 
         const over = GT(cc, hi);
         const under = ~over & (tb | LT(cc, hi));
-        _ = add(len, x, m, over);
-        _ = sub(len, x, m, under);
+        _ = add(x, m, over);
+        _ = sub(x, m, under);
     }
 
-    fn to_monty(comptime len: usize, x: *[len]u32, m: [len]u32) void {
+    fn to_monty(x: [*]u32, m: [*]const u32) void {
         const mlen = (m[0] + 31) >> 5;
         var k = mlen;
         while (k > 0) : (k -= 1) {
-            muladd_small(len, x, 0, m);
+            muladd_small(x, 0, m);
         }
     }
 
@@ -764,25 +808,25 @@ pub const ecc = struct {
     ) void {
         comptime const jaclen = jacobian_len(Curve);
         t1.* = x.*;
-        to_monty(jaclen, t1, Curve.P);
-        set_zero(jaclen, x, Curve.P[0]);
+        to_monty(t1, &Curve.P);
+        set_zero(x, Curve.P[0]);
         x[1] = 1;
         comptime const bitlen = (Curve.point_len / 2) << 3;
         var k: usize = 0;
         while (k < bitlen) : (k += 1) {
             const ctl = (e[Curve.point_len / 2 - 1 - (k >> 3)] >> (@truncate(u3, k & 7))) & 1;
-            montymul(Curve, t2, x.*, t1.*, Curve.P, m0i);
+            montymul(t2, x, t1, &Curve.P, m0i);
             CCOPY(ctl, mem.asBytes(x), mem.asBytes(t2));
-            montymul(Curve, t2, t1.*, t1.*, Curve.P, m0i);
+            montymul(t2, t1, t1, &Curve.P, m0i);
             t1.* = t2.*;
         }
     }
 
-    fn encode_jacobian_part(comptime Curve: type, dst: *[Curve.point_len / 2]u8, x: [jacobian_len(Curve)]u32) void {
+    fn encode_jacobian_part(dst: []u8, x: [*]const u32) void {
         const xlen = (x[0] + 31) >> 5;
 
-        var buf = @ptrToInt(dst) + Curve.point_len / 2;
-        var len: usize = Curve.point_len / 2;
+        var buf = @ptrToInt(dst.ptr) + dst.len;
+        var len: usize = dst.len;
         var k: usize = 1;
         var acc: u32 = 0;
         var acc_len: u5 = 0;
@@ -818,17 +862,15 @@ pub const ecc = struct {
     }
 
     fn montymul(
-        comptime Curve: type,
-        out: *[jacobian_len(Curve)]u32,
-        x: [jacobian_len(Curve)]u32,
-        y: [jacobian_len(Curve)]u32,
-        m: [jacobian_len(Curve)]u32,
+        out: [*]u32,
+        x: [*]const u32,
+        y: [*]const u32,
+        m: [*]const u32,
         m0i: u32,
     ) void {
-        comptime const jaclen = jacobian_len(Curve);
         const len = (m[0] + 31) >> 5;
         const len4 = len & ~@as(usize, 3);
-        set_zero(jaclen, out, m[0]);
+        set_zero(out, m[0]);
         var dh: u32 = 0;
         var u: usize = 0;
         while (u < len) : (u += 1) {
@@ -855,14 +897,15 @@ pub const ecc = struct {
             dh >>= 31;
         }
         out[0] = m[0];
-        const ctl = NEQ(dh, 0) | NOT(sub(jaclen, out, m, 0));
-        _ = sub(jaclen, out, m, ctl);
+        const ctl = NEQ(dh, 0) | NOT(sub(out, m, 0));
+        _ = sub(out, m, ctl);
     }
 
-    fn add(comptime len: usize, a: *[len]u32, b: [len]u32, ctl: u32) u32 {
+    fn add(a: [*]u32, b: [*]const u32, ctl: u32) u32 {
         var u: usize = 1;
         var cc: u32 = 0;
-        while (u < len) : (u += 1) {
+        const m = (a[0] + 63) >> 5;
+        while (u < m) : (u += 1) {
             const aw = a[u];
             const bw = b[u];
             const naw = aw +% bw +% cc;
@@ -872,7 +915,7 @@ pub const ecc = struct {
         return cc;
     }
 
-    fn sub(comptime len: usize, a: *[len]u32, b: [len]u32, ctl: u32) u32 {
+    fn sub(a: [*]u32, b: [*]const u32, ctl: u32) u32 {
         var cc: u32 = 0;
         const m = (a[0] + 63) >> 5;
         var u: usize = 1;
@@ -886,9 +929,10 @@ pub const ecc = struct {
         return cc;
     }
 
-    fn iszero(comptime len: usize, arr: [len]u32) u32 {
+    fn iszero(arr: [*]const u32) u32 {
+        const mlen = (arr[0] + 63) >> 5;
         var z: u32 = 0;
-        var u: usize = len - 1;
+        var u: usize = mlen - 1;
         while (u > 0) : (u -= 1) {
             z |= arr[u];
         }
