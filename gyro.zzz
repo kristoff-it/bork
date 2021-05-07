@@ -15,7 +15,7 @@ deps:
   zbox:
     root: src/box.zig
     src:
-      url: "file://forks/zbox"
+      local: forks/zbox
   datetime:
     root: datetime.zig
     src:
@@ -43,6 +43,7 @@ deps:
         user: truemedian
         ref: master
   tzif:
+    root: tzif.zig
     src:
       github:
         user: leroycep
