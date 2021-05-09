@@ -86,6 +86,16 @@ pub fn push(buffer: Buffer) (Allocator.Error || ErrorSet.Utf8Encode || ErrorSet.
 
             const cell = buffer.cell(row, col);
             front.cellRef(row, col).* = cell;
+
+            // before printing the actual cell content, if we have
+            // a link to open, we do it.
+            if (cell.link) |link| {
+                try term.getWriter().print(
+                    "\x1b]8;;{s}\x1b\\",
+                    .{link},
+                );
+            }
+
             if (cell.emote_idx != 0) {
                 try term.sendSGR(cell.attribs);
                 try term.getWriter().print(
@@ -108,6 +118,10 @@ pub fn push(buffer: Buffer) (Allocator.Error || ErrorSet.Utf8Encode || ErrorSet.
                 try term.sendSGR(cell.attribs);
                 try term.send(codepoint[0..len]);
             }
+
+            if (cell.is_link_end) {
+                try term.getWriter().print("\x1b]8;;\x1b\\", .{});
+            }
         }
     }
     try term.endSync();
@@ -120,6 +134,8 @@ pub const Cell = struct {
     attribs: term.SGR = term.SGR{},
     char: u21 = ' ',
     emote_idx: u32 = 0,
+    link: ?[]const u8 = null, // cell that opens a link, contains the url itself
+    is_link_end: bool = false, // cell that closes a link
 
     interactive_element: InteractiveElement = .none,
 
@@ -132,6 +148,8 @@ pub const Cell = struct {
         return self.char == other.char and
             self.attribs.eql(other.attribs) and
             self.emote_idx == other.emote_idx and
+            std.meta.eql(self.link, other.link) and
+            self.is_link_end == other.is_link_end and
             std.meta.eql(self.interactive_element, other.interactive_element);
     }
 };
@@ -166,6 +184,9 @@ pub const Buffer = struct {
 
         interactive_element: InteractiveElement = .none,
 
+        link: ?[]const u8 = null,
+        is_link_end: bool = false,
+
         const Error = error{ InvalidUtf8, InvalidCharacter };
 
         fn writeFn(self: *WriteCursor, bytes: []const u8) Error!usize {
@@ -194,6 +215,8 @@ pub const Buffer = struct {
                                 .attribs = self.attribs,
                                 .interactive_element = self.interactive_element,
                                 .is_transparent = false,
+                                .link = self.link,
+                                .is_link_end = self.is_link_end,
                             };
                         self.col_num += 1;
                     },
@@ -201,6 +224,10 @@ pub const Buffer = struct {
                 bytes_written = cp_iter.i;
             }
             return bytes_written;
+        }
+
+        pub fn currentCell(self: *WriteCursor) *Cell {
+            return self.buffer.cellRef(self.row_num, self.col_num);
         }
 
         pub fn writer(self: *WriteCursor) Writer {
