@@ -424,18 +424,14 @@ fn renderMessage(self: *Self, msg: *TerminalMessage) !void {
                                 );
                             } else {
                                 var cur: usize = 4096;
+
                                 // send first chunk
-                                std.log.debug("full image [{s}]", .{img});
                                 try term_writer.print(
                                     "\x1b_Gf=100,i={d},m=1;{s}\x1b\\",
                                     .{ e.idx, img[0..cur] },
                                 );
 
-                                std.log.debug(
-                                    "_Gf=100,i={d},m=1;{s}",
-                                    .{ e.idx, img[0..cur] },
-                                );
-
+                                // send remaining chunks
                                 while (cur < img.len) : (cur += 4096) {
                                     const end = std.math.min(cur + 4096, img.len);
                                     const m = if (end == img.len) "0" else "1";
@@ -445,10 +441,6 @@ fn renderMessage(self: *Self, msg: *TerminalMessage) !void {
                                     // <ESC>_Gm=0;<encoded pixel data last chunk><ESC>\
                                     try term_writer.print(
                                         "\x1b_Gm={s};{s}\x1b\\",
-                                        .{ m, img[cur..end] },
-                                    );
-                                    std.log.debug(
-                                        "_Gm={s};{s}",
                                         .{ m, img[cur..end] },
                                     );
                                 }
