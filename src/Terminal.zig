@@ -182,9 +182,6 @@ fn setCellToEmote(cell: *zbox.Cell, emote_idx: u32) void {
 
 // NOTE: callers must clear the buffer when necessary (when size changes)
 fn renderMessage(self: *Self, msg: *TerminalMessage) !void {
-    const width = msg.buffer.width;
-    var height = msg.buffer.height;
-
     var cursor = msg.buffer.wrappedCursorAt(0, 0).writer();
     cursor.context.attribs = .{
         .normal = true,
@@ -472,87 +469,133 @@ fn renderMessage(self: *Self, msg: *TerminalMessage) !void {
                 .chat_message = msg,
             };
 
-            var it = std.mem.tokenize(c.text, " ");
-            var emote_array_idx: usize = 0;
-            var codepoints: usize = 0;
-            while (it.next()) |word| : (codepoints += 1) { // we add the space, twitch removes extra spaces
-                std.log.debug("word: [{s}]", .{word});
-                const word_len = try std.unicode.utf8CountCodepoints(word);
-                codepoints += word_len;
+            const action_preamble = "\x01ACTION ";
+            if (std.mem.startsWith(u8, c.text, action_preamble) and
+                std.mem.endsWith(u8, c.text, "\x01"))
+            {
+                cursor.context.attribs = .{ .fg_cyan = true };
+                try printWordWrap(
+                    "*",
+                    &[0]Chat.Message.Emote{},
+                    &msg.buffer,
+                    cursor,
+                );
 
-                if (emulator == .kitty and emote_array_idx < c.emotes.len and
-                    c.emotes[emote_array_idx].end == codepoints - 1)
-                {
-                    const emote = c.emotes[emote_array_idx].idx; //@embedFile("../kappa.txt"); // ; //
-                    const emote_len = 2;
-                    emote_array_idx += 1;
+                cursor.context.attribs = .{ .feint = true };
+                try printWordWrap(
+                    c.text[action_preamble.len .. c.text.len - 1],
+                    c.emotes,
+                    &msg.buffer,
+                    cursor,
+                );
 
-                    if (emote_len <= width - cursor.context.col_num) {
-                        // emote fits in this row
-                        setCellToEmote(msg.buffer.cellRef(
-                            cursor.context.row_num,
-                            cursor.context.col_num,
-                        ), emote);
-                        cursor.context.col_num += 2;
-                    } else {
-                        // emote doesn't fit, let's add a line for it.
-                        height += 1;
-                        try msg.buffer.resize(height, width);
-
-                        cursor.context.col_num = 2;
-                        cursor.context.row_num += 1;
-                        setCellToEmote(msg.buffer.cellRef(
-                            cursor.context.row_num,
-                            0,
-                        ), emote);
-                    }
-                } else {
-                    if (word_len >= width) {
-                        // a link or a very big word
-
-                        // How many rows considering that we might be on a row
-                        // with something already written on it?
-                        const rows = blk: {
-                            const len = word_len + cursor.context.col_num;
-                            const rows = @divTrunc(len, width) + if (len % width == 0)
-                                @as(usize, 0)
-                            else
-                                @as(usize, 1);
-                            break :blk rows;
-                        };
-
-                        // Ensure we have enough rows
-                        const missing_rows: isize = @intCast(isize, cursor.context.row_num + rows) - @intCast(isize, height);
-                        if (missing_rows > 0) {
-                            height = height + @intCast(usize, missing_rows);
-                            try msg.buffer.resize(height, width);
-                        }
-
-                        // Write the word, make use of the wrapping cursor
-                        try cursor.writeAll(word);
-                    } else if (word_len <= width - cursor.context.col_num) {
-                        // word fits in this row
-                        try cursor.writeAll(word);
-                    } else {
-                        // word fits the width (i.e. it shouldn't be broken up)
-                        // but it doesn't fit, let's add a line for it.
-                        height += 1;
-                        try msg.buffer.resize(height, width);
-
-                        // Add a newline if we're not at the end
-                        if (cursor.context.col_num < width) try cursor.writeAll("\n");
-                        try cursor.writeAll(word);
-                    }
-                }
-
-                // If we're not at the end of the line, add a space
-                if (cursor.context.col_num < width) {
-                    try cursor.writeAll(" ");
-                }
+                cursor.context.attribs = .{ .fg_cyan = true };
+                try printWordWrap(
+                    "*",
+                    &[0]Chat.Message.Emote{},
+                    &msg.buffer,
+                    cursor,
+                );
+            } else {
+                try printWordWrap(
+                    c.text,
+                    c.emotes,
+                    &msg.buffer,
+                    cursor,
+                );
             }
         },
     }
     std.log.debug("done rendering msg!", .{});
+}
+
+fn printWordWrap(
+    text: []const u8,
+    emotes: []const Chat.Message.Emote,
+    buffer: *zbox.Buffer,
+    cursor: zbox.Buffer.Writer,
+) !void {
+    const width = buffer.width;
+    var height = buffer.height; // TODO: do we really need to track this?
+
+    var it = std.mem.tokenize(text, " ");
+    var emote_array_idx: usize = 0;
+    var codepoints: usize = 0;
+    while (it.next()) |word| : (codepoints += 1) { // we add the space, twitch removes extra spaces
+        std.log.debug("word: [{s}]", .{word});
+        const word_len = try std.unicode.utf8CountCodepoints(word);
+        codepoints += word_len;
+
+        if (emulator == .kitty and emote_array_idx < emotes.len and
+            emotes[emote_array_idx].end == codepoints - 1)
+        {
+            const emote = emotes[emote_array_idx].idx; //@embedFile("../kappa.txt"); // ; //
+            const emote_len = 2;
+            emote_array_idx += 1;
+
+            if (emote_len <= width - cursor.context.col_num) {
+                // emote fits in this row
+                setCellToEmote(buffer.cellRef(
+                    cursor.context.row_num,
+                    cursor.context.col_num,
+                ), emote);
+                cursor.context.col_num += 2;
+            } else {
+                // emote doesn't fit, let's add a line for it.
+                height += 1;
+                try buffer.resize(height, width);
+
+                cursor.context.col_num = 2;
+                cursor.context.row_num += 1;
+                setCellToEmote(buffer.cellRef(
+                    cursor.context.row_num,
+                    0,
+                ), emote);
+            }
+        } else {
+            if (word_len >= width) {
+                // a link or a very big word
+
+                // How many rows considering that we might be on a row
+                // with something already written on it?
+                const rows = blk: {
+                    const len = word_len + cursor.context.col_num;
+                    const rows = @divTrunc(len, width) + if (len % width == 0)
+                        @as(usize, 0)
+                    else
+                        @as(usize, 1);
+                    break :blk rows;
+                };
+
+                // Ensure we have enough rows
+                const missing_rows: isize = @intCast(isize, cursor.context.row_num + rows) - @intCast(isize, height);
+                if (missing_rows > 0) {
+                    height = height + @intCast(usize, missing_rows);
+                    try buffer.resize(height, width);
+                }
+
+                // Write the word, make use of the wrapping cursor
+                try cursor.writeAll(word);
+            } else if (word_len <= width - cursor.context.col_num) {
+                // word fits in this row
+                try cursor.writeAll(word);
+            } else {
+                // word fits the width (i.e. it shouldn't be broken up)
+                // but it doesn't fit, let's add a line for it.
+                height += 1;
+                try buffer.resize(height, width);
+
+                // Add a newline if we're not at the end
+                if (cursor.context.col_num < width) try cursor.writeAll("\n");
+                try cursor.writeAll(word);
+            }
+        }
+
+        // If we're not at the end of the line, add a space
+        if (cursor.context.col_num < width) {
+            try cursor.writeAll(" ");
+        }
+    }
 }
 
 pub fn startTicking(ch: *Channel(GlobalEventUnion)) void {
