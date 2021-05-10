@@ -136,25 +136,27 @@ fn receiveMessages(self: *Self) void {
                 //       dropped in favor of actually representing properly the resub.
                 switch (msg.kind) {
                     .resub => |r| {
-                        self.ch.put(GlobalEventUnion{
-                            .network = .{
-                                .message = Chat.Message{
-                                    .kind = .{
-                                        .chat = .{
-                                            .login_name = r.login_name,
-                                            .display_name = r.display_name,
-                                            .text = r.resub_message,
-                                            .time = r.time,
-                                            .sub_months = r.count,
-                                            .is_founder = false, // std.mem.eql(u8, sub_badge.name, "founder"),
-                                            .emotes = r.resub_message_emotes,
-                                            .is_mod = false, // is_mod,
-                                            .is_highlighted = true,
+                        if (r.resub_message.len > 0) {
+                            self.ch.put(GlobalEventUnion{
+                                .network = .{
+                                    .message = Chat.Message{
+                                        .kind = .{
+                                            .chat = .{
+                                                .login_name = r.login_name,
+                                                .display_name = r.display_name,
+                                                .text = r.resub_message,
+                                                .time = r.time,
+                                                .sub_months = r.count,
+                                                .is_founder = false, // std.mem.eql(u8, sub_badge.name, "founder"),
+                                                .emotes = r.resub_message_emotes,
+                                                .is_mod = false, // is_mod,
+                                                .is_highlighted = true,
+                                            },
                                         },
                                     },
                                 },
-                            },
-                        });
+                            });
+                        }
                     },
                     else => {},
                 }
