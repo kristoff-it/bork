@@ -1,0 +1,351 @@
+
+
+pub const Form = enum {
+    D, // Canonical Decomposition
+    KD, // Compatibility Decomposition
+};
+
+/// codePointTo takes a code point and returns a sequence of code points that represent its conversion 
+/// to the specified Form. Caller must free returned bytes.
+pub fn codePointTo(self: Self, allocator: *mem.Allocator, form: Form, cp: u21) anyerror![]u21 {
+    if (form == .D or form == .KD) {
+        // Decomposition.
+        if (self.isHangulPrecomposed(cp)) {
+            // Hangul precomposed syllable full decomposition.
+            const dcs = self.decomposeHangul(cp);
+            const len: usize = if (dcs[2] == 0) 2 else 3;
+            var result = try allocator.alloc(u21, len);
+            mem.copy(u21, result, dcs[0..len]);
+            return result;
+        } else {
+            // Non-Hangul code points.
+            const src = [1]Decomposed{.{ .src = cp }};
+            const dcs = try self.decomposeTo(allocator, form, &src);
+            defer allocator.free(dcs);
+            var result = try allocator.alloc(u21, dcs.len);
+            for (dcs) |dc, index| {
+                result[index] = dc.same;
+            }
+            return result;
+        }
+    } else {
+        return error.FormUnimplemented;
+    }
+}
+
+/// decomposeTo recursively performs decomposition until the specified form is obtained.
+/// Caller must free returned bytes.
+pub fn decomposeTo(self: Self, allocator: *mem.Allocator, form: Form, dcs: []const Decomposed) anyerror![]const Decomposed {
+    // Avoid recursive allocation hell with arena.
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+
+    // Freed by arena.
+    const rdcs = switch (form) {
+        .D => try self.decompD(&arena.allocator, dcs),
+        .KD => try self.decompKD(&arena.allocator, dcs),
+    };
+
+    // Freed by caller.
+    var result = try allocator.alloc(Decomposed, rdcs.len);
+    for (rdcs) |dc, i| {
+        result[i] = dc;
+    }
+
+    return result;
+}
+
+fn decompD(self: Self, allocator: *mem.Allocator, dcs: []const Decomposed) anyerror![]const Decomposed {
+    // Base case;
+    if (allDone(dcs)) return dcs;
+
+    var rdcs = std.ArrayList(Decomposed).init(allocator);
+    defer rdcs.deinit();
+
+    for (dcs) |dc| {
+        switch (dc) {
+            .src => |cp| {
+                const next_map = self.mapping(cp);
+                if (next_map == .same) {
+                    try rdcs.append(next_map);
+                    return rdcs.toOwnedSlice();
+                } else if (next_map == .compat) {
+                    try rdcs.append(.{ .same = cp });
+                    return rdcs.toOwnedSlice();
+                } else {
+                    const m = [1]Decomposed{self.mapping(cp)};
+                    try rdcs.appendSlice(try self.decomposeTo(allocator, .D, &m));
+                }
+            },
+            .same => try rdcs.append(dc),
+            .single => |cp| {
+                const next_map = self.mapping(cp);
+                if (next_map == .same or next_map == .compat) {
+                    try rdcs.append(.{ .same = cp });
+                } else {
+                    const m = [1]Decomposed{self.mapping(cp)};
+                    try rdcs.appendSlice(try self.decomposeTo(allocator, .D, &m));
+                }
+            },
+            .canon => |seq| {
+                for (seq) |cp| {
+                    const next_map = self.mapping(cp);
+                    if (next_map == .same or next_map == .compat) {
+                        try rdcs.append(.{ .same = cp });
+                    } else {
+                        const m = [1]Decomposed{next_map};
+                        try rdcs.appendSlice(try self.decomposeTo(allocator, .D, &m));
+                    }
+                }
+            },
+            .compat => {},
+        }
+    }
+
+    return rdcs.toOwnedSlice();
+}
+
+fn decompKD(self: Self, allocator: *mem.Allocator, dcs: []const Decomposed) anyerror![]const Decomposed {
+    // Base case;
+    if (allDone(dcs)) return dcs;
+
+    var rdcs = std.ArrayList(Decomposed).init(allocator);
+    defer rdcs.deinit();
+
+    for (dcs) |dc| {
+        switch (dc) {
+            .src => |cp| {
+                const m = [1]Decomposed{self.mapping(cp)};
+                try rdcs.appendSlice(try self.decomposeTo(allocator, .KD, &m));
+            },
+            .same => try rdcs.append(dc),
+            .single => |cp| {
+                const m = [1]Decomposed{self.mapping(cp)};
+                try rdcs.appendSlice(try self.decomposeTo(allocator, .KD, &m));
+            },
+            .canon => |seq| {
+                for (seq) |cp| {
+                    const m = [1]Decomposed{self.mapping(cp)};
+                    try rdcs.appendSlice(try self.decomposeTo(allocator, .KD, &m));
+                }
+            },
+            .compat => |seq| {
+                for (seq) |cp| {
+                    const m = [1]Decomposed{self.mapping(cp)};
+                    try rdcs.appendSlice(try self.decomposeTo(allocator, .KD, &m));
+                }
+            },
+        }
+    }
+
+    return rdcs.toOwnedSlice();
+}
+
+fn finalizeAndEncode(self: Self, allocator: *mem.Allocator, code_points: []u21) ![]u8 {
+    var result = std.ArrayList(u8).init(allocator);
+    defer result.deinit();
+
+    // Apply canonical sort algorithm.
+    self.canonicalSort(code_points);
+
+    // Encode as UTF-8 code units.
+    var buf: [4]u8 = undefined;
+    for (code_points) |dcp| {
+        const len = try unicode.utf8Encode(dcp, &buf);
+        try result.appendSlice(buf[0..len]);
+    }
+
+    return result.toOwnedSlice();
+}
+
+/// normalizeTo will normalize the code points in str, producing a slice of u8 with the new bytes
+/// corresponding to the specified Normalization Form. Caller must free returned bytes.
+pub fn normalizeTo(self: *Self, allocator: *mem.Allocator, form: Form, str: []const u8) anyerror![]u8 {
+    if (form != .D and form != .KD) return error.FormUnimplemented;
+
+    // Gather source code points.
+    var code_points = std.ArrayList(u21).init(allocator);
+    defer code_points.deinit();
+
+    var iter = (try unicode.Utf8View.init(str)).iterator();
+
+    while (iter.nextCodepoint()) |cp| {
+        try code_points.append(cp);
+    }
+
+    // NFD Quick Check.
+    if (form == .D) {
+        var already_nfd = true;
+
+        for (code_points.items) |cp| {
+            if (!self.nfd_check.isNFD(cp)) already_nfd = false;
+        }
+
+        // Already NFD, nothing more to do.
+        if (already_nfd) return self.finalizeAndEncode(allocator, code_points.items);
+    }
+
+    var d_code_points = std.ArrayList(u21).init(allocator);
+    defer d_code_points.deinit();
+
+    // Gather decomposed code points.
+    for (code_points.items) |cp| {
+        const cp_slice = try self.codePointTo(allocator, form, cp);
+        defer allocator.free(cp_slice);
+        try d_code_points.appendSlice(cp_slice);
+    }
+
+    return self.finalizeAndEncode(allocator, d_code_points.items);
+}
+
+fn cccLess(self: Self, lhs: u21, rhs: u21) bool {
+    return self.ccc_map.combiningClass(lhs) < self.ccc_map.combiningClass(rhs);
+}
+
+fn canonicalSort(self: Self, cp_list: []u21) void {
+    var i: usize = 0;
+    while (true) {
+        if (i >= cp_list.len) break;
+        var start: usize = i;
+        while (i < cp_list.len and self.ccc_map.combiningClass(cp_list[i]) != 0) : (i += 1) {}
+        sort(u21, cp_list[start..i], self, cccLess);
+        i += 1;
+    }
+}
+
+fn decomposeHangul(self: Self, cp: u21) [3]u21 {
+    const SBase: u21 = 0xAC00;
+    const LBase: u21 = 0x1100;
+    const VBase: u21 = 0x1161;
+    const TBase: u21 = 0x11A7;
+    const LCount: u21 = 19;
+    const VCount: u21 = 21;
+    const TCount: u21 = 28;
+    const NCount: u21 = 588; // VCount * TCount
+    const SCount: u21 = 11172; // LCount * NCount
+
+    const SIndex: u21 = cp - SBase;
+    const LIndex: u21 = SIndex / NCount;
+    const VIndex: u21 = (SIndex % NCount) / TCount;
+    const TIndex: u21 = SIndex % TCount;
+    const LPart: u21 = LBase + LIndex;
+    const VPart: u21 = VBase + VIndex;
+    var TPart: u21 = 0;
+    if (TIndex != 0) TPart = TBase + TIndex;
+
+    return [3]u21{ LPart, VPart, TPart };
+}
+
+fn isHangulPrecomposed(self: Self, cp: u21) bool {
+    if (self.hangul_map.syllableType(cp)) |kind| {
+        return switch (kind) {
+            .LV, .LVT => true,
+            else => false,
+        };
+    } else {
+        return false;
+    }
+}
+
+fn allDone(dcs: []const Decomposed) bool {
+    for (dcs) |dc| {
+        if (dc != .same) return false;
+    }
+    return true;
+}
+
+test "Decomp codePointTo D" {
+    var allocator = std.testing.allocator;
+    var decomp_map = new();
+
+    var result = try decomp_map.codePointTo(allocator, .D, '\u{00E9}');
+    defer allocator.free(result);
+    std.testing.expectEqualSlices(u21, result, &[2]u21{ 0x0065, 0x0301 });
+    allocator.free(result);
+
+    result = try decomp_map.codePointTo(allocator, .D, '\u{03D3}');
+    std.testing.expectEqualSlices(u21, result, &[2]u21{ 0x03D2, 0x0301 });
+}
+
+test "Decomp codePointTo KD" {
+    var allocator = std.testing.allocator;
+    var decomp_map = new();
+
+    var result = try decomp_map.codePointTo(allocator, .KD, '\u{00E9}');
+    defer allocator.free(result);
+    std.testing.expectEqualSlices(u21, result, &[2]u21{ 0x0065, 0x0301 });
+    allocator.free(result);
+
+    result = try decomp_map.codePointTo(allocator, .KD, '\u{03D3}');
+    std.testing.expectEqualSlices(u21, result, &[2]u21{ 0x03A5, 0x0301 });
+}
+
+test "Decomp normalizeTo" {
+    var allocator = std.testing.allocator;
+    var decomp_map = new();
+
+    var file = try std.fs.cwd().openFile("src/data/ucd/NormalizationTest.txt", .{});
+    defer file.close();
+    var buf_reader = std.io.bufferedReader(file.reader());
+    var input_stream = buf_reader.reader();
+    var buf: [640]u8 = undefined;
+    while (try input_stream.readUntilDelimiterOrEof(&buf, '\n')) |line| {
+        // Skip comments or empty lines.
+        if (line.len == 0 or line[0] == '#' or line[0] == '@') continue;
+        // Iterate over fields.
+        var fields = mem.split(line, ";");
+        var field_index: usize = 0;
+        var input: []u8 = undefined;
+        defer allocator.free(input);
+        while (fields.next()) |field| : (field_index += 1) {
+            if (field_index == 0) {
+                var i_buf = std.ArrayList(u8).init(allocator);
+                defer i_buf.deinit();
+                var i_fields = mem.split(field, " ");
+                var cp_buf: [4]u8 = undefined;
+                while (i_fields.next()) |s| {
+                    const icp = try std.fmt.parseInt(u21, s, 16);
+                    const len = try unicode.utf8Encode(icp, &cp_buf);
+                    try i_buf.appendSlice(cp_buf[0..len]);
+                }
+                input = i_buf.toOwnedSlice();
+            } else if (field_index == 2) {
+                // NFD, time to test.
+                var w_buf = std.ArrayList(u8).init(allocator);
+                defer w_buf.deinit();
+                var w_fields = mem.split(field, " ");
+                var cp_buf: [4]u8 = undefined;
+                while (w_fields.next()) |s| {
+                    const wcp = try std.fmt.parseInt(u21, s, 16);
+                    const len = try unicode.utf8Encode(wcp, &cp_buf);
+                    try w_buf.appendSlice(cp_buf[0..len]);
+                }
+                const want = w_buf.toOwnedSlice();
+                defer allocator.free(want);
+                const got = try decomp_map.normalizeTo(allocator, .D, input);
+                defer allocator.free(got);
+                std.testing.expectEqualSlices(u8, want, got);
+                continue;
+            } else if (field_index == 4) {
+                // NFKD, time to test.
+                var w_buf = std.ArrayList(u8).init(allocator);
+                defer w_buf.deinit();
+                var w_fields = mem.split(field, " ");
+                var cp_buf: [4]u8 = undefined;
+                while (w_fields.next()) |s| {
+                    const wcp = try std.fmt.parseInt(u21, s, 16);
+                    const len = try unicode.utf8Encode(wcp, &cp_buf);
+                    try w_buf.appendSlice(cp_buf[0..len]);
+                }
+                const want = w_buf.toOwnedSlice();
+                defer allocator.free(want);
+                const got = try decomp_map.normalizeTo(allocator, .KD, input);
+                defer allocator.free(got);
+                std.testing.expectEqualSlices(u8, want, got);
+                continue;
+            } else {
+                continue;
+            }
+        }
+    }
+}

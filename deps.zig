@@ -3,6 +3,12 @@ pub const pkgs = struct {
     pub const zbox = std.build.Pkg{
         .name = "zbox",
         .path = "forks/zbox/src/box.zig",
+        .dependencies = &[_]std.build.Pkg{
+            std.build.Pkg{
+                .name = "ziglyph",
+                .path = ".gyro/ziglyph-jecolon-e5a1f4959447583077ee18b9cfd483e0a4a133ad/pkg/src/ziglyph.zig",
+            },
+        },
     };
 
     pub const datetime = std.build.Pkg{
@@ -30,6 +36,11 @@ pub const pkgs = struct {
         .path = ".gyro/zig-tzif-leroycep-bf91177e6ff7f52cffc44c33b6d755392ed7f9d7/pkg/tzif.zig",
     };
 
+    pub const ziglyph = std.build.Pkg{
+        .name = "ziglyph",
+        .path = ".gyro/ziglyph-jecolon-e5a1f4959447583077ee18b9cfd483e0a4a133ad/pkg/src/ziglyph.zig",
+    };
+
     pub fn addAllTo(artifact: *std.build.LibExeObjStep) void {
         @setEvalBranchQuota(1_000_000);
         inline for (std.meta.declarations(pkgs)) |decl| {
@@ -47,4 +58,5 @@ pub const base_dirs = struct {
     pub const iguanaTLS = ".gyro/iguanaTLS-alexnask-71b5c85edf899e83b0d715d857bd0a344b26f3eb/pkg";
     pub const hzzp = ".gyro/hzzp-truemedian-b4e874ed921f76941dce2870677b713c8e0ebc6c/pkg";
     pub const tzif = ".gyro/zig-tzif-leroycep-bf91177e6ff7f52cffc44c33b6d755392ed7f9d7/pkg";
+    pub const ziglyph = ".gyro/ziglyph-jecolon-e5a1f4959447583077ee18b9cfd483e0a4a133ad/pkg";
 };
