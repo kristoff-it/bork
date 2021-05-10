@@ -49,3 +49,10 @@ deps:
         user: leroycep
         repo: zig-tzif
         ref: master
+  ziglyph:
+    root: src/ziglyph.zig
+    src:
+      github:
+        user: jecolon
+        repo: ziglyph
+        ref: main

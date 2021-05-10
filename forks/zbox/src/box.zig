@@ -3,6 +3,10 @@ const mem = std.mem;
 const math = std.math;
 const assert = std.debug.assert;
 const Allocator = mem.Allocator;
+
+const ziglyph = @import("ziglyph");
+const uw = ziglyph.Width.new();
+
 pub const term = @import("prim.zig");
 
 // promote some primitive ops
@@ -195,30 +199,32 @@ pub const Buffer = struct {
             var cp_iter = (try std.unicode.Utf8View.init(bytes)).iterator();
             var bytes_written: usize = 0;
             while (cp_iter.nextCodepoint()) |cp| {
-                if (self.col_num >= self.buffer.width and self.wrap) {
+                const char_w = @intCast(usize, uw.codePointWidth(cp, .half));
+
+                if (self.col_num + char_w > self.buffer.width) {
+                    if (!self.wrap) @panic("tried to print past the row end");
                     self.col_num = 0;
                     self.row_num += 1;
                 }
                 if (self.row_num >= self.buffer.height) return bytes_written;
 
                 switch (cp) {
-                    //TODO: handle other line endings and return an error when
+                    // TODO: handle other line endings and return an error when
                     // encountering unpritable or width-breaking codepoints.
                     '\n' => {
                         self.col_num = 0;
                         self.row_num += 1;
                     },
                     else => {
-                        if (self.col_num < self.buffer.width)
-                            self.buffer.cellRef(self.row_num, self.col_num).* = .{
-                                .char = cp,
-                                .attribs = self.attribs,
-                                .interactive_element = self.interactive_element,
-                                .is_transparent = false,
-                                .link = self.link,
-                                .is_link_end = self.is_link_end,
-                            };
-                        self.col_num += 1;
+                        self.buffer.cellRef(self.row_num, self.col_num).* = .{
+                            .char = cp,
+                            .attribs = self.attribs,
+                            .interactive_element = self.interactive_element,
+                            .is_transparent = false,
+                            .link = self.link,
+                            .is_link_end = self.is_link_end,
+                        };
+                        self.col_num += char_w; // increase by 2 when the cp is wide
                     },
                 }
                 bytes_written = cp_iter.i;

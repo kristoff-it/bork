@@ -4,6 +4,9 @@ const Channel = @import("utils/channel.zig").Channel;
 const Chat = @import("Chat.zig");
 const GlobalEventUnion = @import("main.zig").Event;
 
+const ziglyph = @import("ziglyph");
+var uw = comptime ziglyph.Width.new();
+
 // We expose directly the event type produced by zbox
 pub const Event = zbox.Event;
 pub const getSize = zbox.size;
@@ -219,7 +222,7 @@ fn renderMessage(self: *Self, msg: *TerminalMessage) !void {
 
             // Bottom line
             {
-                const message_fmt = "🚨  raiding with {d} people 🚨";
+                const message_fmt = "🚨 raiding with {d} people 🚨";
                 const message_args = .{g.count};
                 cursor.context.row_num = 1;
                 cursor.context.col_num = @divTrunc(msg.buffer.width + 4 - std.fmt.count(
@@ -262,7 +265,7 @@ fn renderMessage(self: *Self, msg: *TerminalMessage) !void {
 
             // Bottom line
             {
-                const message_fmt = "🎉  {d}mo {s} resub! 🎉";
+                const message_fmt = "🎉 {d}mo {s} resub! 🎉";
                 const message_args = .{ r.count, tier };
                 cursor.context.row_num = 1;
                 cursor.context.col_num = @divTrunc(msg.buffer.width + 4 - std.fmt.count(
@@ -305,7 +308,7 @@ fn renderMessage(self: *Self, msg: *TerminalMessage) !void {
 
             // Bottom line
             {
-                const message_fmt = "🎊  is now a {s} sub! 🎊";
+                const message_fmt = "🎊 is now a {s} sub! 🎊";
                 const message_args = .{tier};
                 cursor.context.row_num = 1;
                 cursor.context.col_num = @divTrunc(msg.buffer.width + 4 - std.fmt.count(
@@ -337,7 +340,7 @@ fn renderMessage(self: *Self, msg: *TerminalMessage) !void {
 
             // Top line
             {
-                const message_fmt = "«{s}» 🎁  a {d}mo";
+                const message_fmt = "«{s}» 🎁 a {d}mo";
                 const message_args = .{ g.sender_display_name, g.months };
                 cursor.context.col_num = @divTrunc(msg.buffer.width + 4 - std.fmt.count(
                     message_fmt,
@@ -393,7 +396,7 @@ fn renderMessage(self: *Self, msg: *TerminalMessage) !void {
 
             // Bottom line
             {
-                const message_fmt = "🎁  Gifted x{d} {s} Subs! 🎁";
+                const message_fmt = "🎁 Gifted x{d} {s} Subs! 🎁";
                 const message_args = .{
                     g.count,
                     tier,
@@ -518,6 +521,8 @@ fn printWordWrap(
         const word_len = try std.unicode.utf8CountCodepoints(word);
         codepoints += word_len;
 
+        const word_width = @intCast(usize, try uw.strWidth(word, .half));
+
         if (emulator == .kitty and emote_array_idx < emotes.len and
             emotes[emote_array_idx].end == codepoints - 1)
         {
@@ -545,14 +550,14 @@ fn printWordWrap(
                 ), emote);
             }
         } else {
-            if (word_len >= width) {
+            if (word_width >= width) {
                 // a link or a very big word
                 const is_link = std.mem.startsWith(u8, word, "http");
 
                 // How many rows considering that we might be on a row
                 // with something already written on it?
                 const rows = blk: {
-                    const len = word_len + cursor.context.col_num;
+                    const len = word_width + cursor.context.col_num;
                     const rows = @divTrunc(len, width) + if (len % width == 0)
                         @as(usize, 0)
                     else
@@ -580,7 +585,7 @@ fn printWordWrap(
                 } else {
                     try cursor.writeAll(word);
                 }
-            } else if (word_len <= width - cursor.context.col_num) {
+            } else if (word_width <= width - cursor.context.col_num) {
                 // word fits in this row
                 try cursor.writeAll(word);
             } else {
