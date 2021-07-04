@@ -1,6 +1,9 @@
 const std = @import("std");
 const mem = std.mem;
 
+const Poly1305 = std.crypto.onetimeauth.Poly1305;
+const Chacha20IETF = std.crypto.stream.chacha.ChaCha20IETF;
+
 // TODO See stdlib, this is a modified non vectorized implementation
 pub const ChaCha20Stream = struct {
     const math = std.math;
@@ -38,7 +41,7 @@ pub const ChaCha20Stream = struct {
         };
     }
 
-    fn chacha20Core(x: *BlockVec, input: BlockVec) callconv(.Inline) void {
+    inline fn chacha20Core(x: *BlockVec, input: BlockVec) void {
         x.* = input;
 
         const rounds = comptime [_]QuarterRound{
@@ -67,7 +70,7 @@ pub const ChaCha20Stream = struct {
         }
     }
 
-    fn hashToBytes(out: *[64]u8, x: BlockVec) callconv(.Inline) void {
+    inline fn hashToBytes(out: *[64]u8, x: BlockVec) void {
         var i: usize = 0;
         while (i < 4) : (i += 1) {
             mem.writeIntLittle(u32, out[16 * i + 0 ..][0..4], x[i * 4 + 0]);
@@ -77,18 +80,52 @@ pub const ChaCha20Stream = struct {
         }
     }
 
-    fn contextFeedback(x: *BlockVec, ctx: BlockVec) callconv(.Inline) void {
+    inline fn contextFeedback(x: *BlockVec, ctx: BlockVec) void {
         var i: usize = 0;
         while (i < 16) : (i += 1) {
             x[i] +%= ctx[i];
         }
     }
 
+    pub fn initPoly1305(key: [32]u8, nonce: [12]u8, ad: [13]u8) Poly1305 {
+        var polyKey = [_]u8{0} ** 32;
+        Chacha20IETF.xor(&polyKey, &polyKey, 0, key, nonce);
+        var mac = Poly1305.init(&polyKey);
+        mac.update(&ad);
+        // Pad to 16 bytes from ad
+        mac.update(&.{ 0, 0, 0 });
+        return mac;
+    }
+
+    /// Call after `mac` has been updated with the whole message
+    pub fn checkPoly1305(mac: *Poly1305, len: usize, tag: [16]u8) !void {
+        if (len % 16 != 0) {
+            const zeros = [_]u8{0} ** 16;
+            const padding = 16 - (len % 16);
+            mac.update(zeros[0..padding]);
+        }
+        var lens: [16]u8 = undefined;
+        mem.writeIntLittle(u64, lens[0..8], 13);
+        mem.writeIntLittle(u64, lens[8..16], len);
+        mac.update(lens[0..]);
+        var computedTag: [16]u8 = undefined;
+        mac.final(computedTag[0..]);
+
+        var acc: u8 = 0;
+        for (computedTag) |_, i| {
+            acc |= computedTag[i] ^ tag[i];
+        }
+        if (acc != 0) {
+            return error.AuthenticationFailed;
+        }
+    }
+
     // TODO: Optimize this
     pub fn chacha20Xor(out: []u8, in: []const u8, key: [8]u32, ctx: *BlockVec, idx: *usize, buf: *[64]u8) void {
+        _ = key;
+
         var x: BlockVec = undefined;
 
-        const start_idx = idx.*;
         var i: usize = 0;
         while (i < in.len) {
             if (idx.* % 64 == 0) {
@@ -126,7 +163,7 @@ pub fn ctr(
     src: []const u8,
     counterInt: *u128,
     idx: *usize,
-    endian: comptime std.builtin.Endian,
+    endian: std.builtin.Endian,
 ) void {
     std.debug.assert(dst.len >= src.len);
     const block_length = BlockCipher.block_length;
@@ -346,7 +383,7 @@ pub const ecc = struct {
     }
 
     fn jacobian_with_one_set(comptime Curve: type, comptime fields: [2][jacobian_len(Curve)]u32) Jacobian(Curve) {
-        comptime const plen = (Curve.P[0] + 63) >> 5;
+        const plen = comptime (Curve.P[0] + 63) >> 5;
         return fields ++ [1][jacobian_len(Curve)]u32{
             [2]u32{ Curve.P[0], 1 } ++ ([1]u32{0} ** (plen - 2)),
         };
@@ -395,10 +432,10 @@ pub const ecc = struct {
         P.* = Q;
     }
 
-    fn point_double(comptime Curve: type, P: *Jacobian(Curve)) callconv(.Inline) void {
+    inline fn point_double(comptime Curve: type, P: *Jacobian(Curve)) void {
         _ = run_code(Curve, P, P.*, &code.double);
     }
-    fn point_add(comptime Curve: type, P1: *Jacobian(Curve), P2: Jacobian(Curve)) callconv(.Inline) void {
+    inline fn point_add(comptime Curve: type, P1: *Jacobian(Curve), P2: Jacobian(Curve)) void {
         _ = run_code(Curve, P1, P2, &code._add);
     }
 
@@ -628,7 +665,7 @@ pub const ecc = struct {
         P2: Jacobian(Curve),
         comptime Code: []const u16,
     ) u32 {
-        comptime const jaclen = jacobian_len(Curve);
+        const jaclen = comptime jacobian_len(Curve);
 
         var t: [13][jaclen]u32 = undefined;
         var result: u32 = 1;
@@ -641,9 +678,9 @@ pub const ecc = struct {
             comptime var op = Code[u];
             if (op == 0)
                 break;
-            comptime const d = (op >> 8) & 0x0F;
-            comptime const a = (op >> 4) & 0x0F;
-            comptime const b = op & 0x0F;
+            const d = comptime (op >> 8) & 0x0F;
+            const a = comptime (op >> 4) & 0x0F;
+            const b = comptime op & 0x0F;
             op >>= 12;
 
             switch (op) {
@@ -668,39 +705,39 @@ pub const ecc = struct {
         return result;
     }
 
-    fn MUL31(x: u32, y: u32) callconv(.Inline) u64 {
+    inline fn MUL31(x: u32, y: u32) u64 {
         return @as(u64, x) * @as(u64, y);
     }
 
-    fn MUL31_lo(x: u32, y: u32) callconv(.Inline) u32 {
+    inline fn MUL31_lo(x: u32, y: u32) u32 {
         return (x *% y) & 0x7FFFFFFF;
     }
 
-    fn MUX(ctl: u32, x: u32, y: u32) callconv(.Inline) u32 {
+    inline fn MUX(ctl: u32, x: u32, y: u32) u32 {
         return y ^ (@bitCast(u32, -@bitCast(i32, ctl)) & (x ^ y));
     }
-    fn NOT(ctl: u32) callconv(.Inline) u32 {
+    inline fn NOT(ctl: u32) u32 {
         return ctl ^ 1;
     }
-    fn NEQ(x: u32, y: u32) callconv(.Inline) u32 {
+    inline fn NEQ(x: u32, y: u32) u32 {
         const q = x ^ y;
         return (q | @bitCast(u32, -@bitCast(i32, q))) >> 31;
     }
-    fn EQ(x: u32, y: u32) callconv(.Inline) u32 {
+    inline fn EQ(x: u32, y: u32) u32 {
         const q = x ^ y;
         return NOT((q | @bitCast(u32, -@bitCast(i32, q))) >> 31);
     }
-    fn CMP(x: u32, y: u32) callconv(.Inline) i32 {
+    inline fn CMP(x: u32, y: u32) i32 {
         return @bitCast(i32, GT(x, y)) | -@bitCast(i32, GT(y, x));
     }
-    fn GT(x: u32, y: u32) callconv(.Inline) u32 {
+    inline fn GT(x: u32, y: u32) u32 {
         const z = y -% x;
         return (z ^ ((x ^ y) & (x ^ z))) >> 31;
     }
-    fn LT(x: u32, y: u32) callconv(.Inline) u32 {
+    inline fn LT(x: u32, y: u32) u32 {
         return GT(y, x);
     }
-    fn GE(x: u32, y: u32) callconv(.Inline) u32 {
+    inline fn GE(x: u32, y: u32) u32 {
         return NOT(GT(y, x));
     }
 
@@ -710,7 +747,7 @@ pub const ecc = struct {
         }
     }
 
-    fn set_zero(out: [*]u32, bit_len: u32) callconv(.Inline) void {
+    inline fn set_zero(out: [*]u32, bit_len: u32) void {
         out[0] = bit_len;
         mem.set(u32, (out + 1)[0 .. (bit_len + 31) >> 5], 0);
     }
@@ -739,7 +776,7 @@ pub const ecc = struct {
         return q;
     }
 
-    fn div(hi: u32, lo: u32, d: u32) callconv(.Inline) u32 {
+    inline fn div(hi: u32, lo: u32, d: u32) u32 {
         var r: u32 = undefined;
         return divrem(hi, lo, d, &r);
     }
@@ -806,12 +843,11 @@ pub const ecc = struct {
         t1: *[jacobian_len(Curve)]u32,
         t2: *[jacobian_len(Curve)]u32,
     ) void {
-        comptime const jaclen = jacobian_len(Curve);
         t1.* = x.*;
         to_monty(t1, &Curve.P);
         set_zero(x, Curve.P[0]);
         x[1] = 1;
-        comptime const bitlen = (Curve.point_len / 2) << 3;
+        const bitlen = comptime (Curve.point_len / 2) << 3;
         var k: usize = 0;
         while (k < bitlen) : (k += 1) {
             const ctl = (e[Curve.point_len / 2 - 1 - (k >> 3)] >> (@truncate(u3, k & 7))) & 1;
@@ -944,16 +980,16 @@ test "elliptic curve functions with secp384r1 curve" {
     {
         // Decode to Jacobian then encode again with no operations
         var P: ecc.Jacobian(ecc.SECP384R1) = undefined;
-        var res: u32 = ecc.decode_to_jacobian(ecc.SECP384R1, &P, ecc.SECP384R1.base_point);
+        _ = ecc.decode_to_jacobian(ecc.SECP384R1, &P, ecc.SECP384R1.base_point);
         var out: [96]u8 = undefined;
         ecc.encode_from_jacobian(ecc.SECP384R1, &out, P);
-        std.testing.expectEqual(ecc.SECP384R1.base_point, out);
+        try std.testing.expectEqual(ecc.SECP384R1.base_point, out);
 
         // Multiply by one, check that the result is still the base point
         mem.set(u8, &out, 0);
         ecc.point_mul(ecc.SECP384R1, &P, &[1]u8{1});
         ecc.encode_from_jacobian(ecc.SECP384R1, &out, P);
-        std.testing.expectEqual(ecc.SECP384R1.base_point, out);
+        try std.testing.expectEqual(ecc.SECP384R1.base_point, out);
     }
 
     {
@@ -973,7 +1009,7 @@ test "elliptic curve functions with secp384r1 curve" {
 
         const shared1 = try ecc.scalarmult(ecc.SECP384R1, kp1.public_key, &kp2.secret_key);
         const shared2 = try ecc.scalarmult(ecc.SECP384R1, kp2.public_key, &kp1.secret_key);
-        std.testing.expectEqual(shared1, shared2);
+        try std.testing.expectEqual(shared1, shared2);
     }
 
     // @TODO Add tests with known points.

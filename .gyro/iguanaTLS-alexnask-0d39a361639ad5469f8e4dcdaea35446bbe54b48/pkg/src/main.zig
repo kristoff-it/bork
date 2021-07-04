@@ -26,33 +26,37 @@ fn handshake_record_length(reader: anytype) !usize {
     return try record_length(0x16, reader);
 }
 
-pub const RecordTagLength = struct {
-    tag: u8,
-    length: u16,
+pub const RecordHeader = struct {
+    data: [5]u8,
+
+    pub inline fn tag(self: @This()) u8 {
+        return self.data[0];
+    }
+
+    pub inline fn len(self: @This()) u16 {
+        return mem.readIntSliceBig(u16, self.data[3..]);
+    }
 };
-pub fn record_tag_length(reader: anytype) !RecordTagLength {
-    const record_tag = try reader.readByte();
 
-    var record_header: [4]u8 = undefined;
-    try reader.readNoEof(&record_header);
+pub fn record_header(reader: anytype) !RecordHeader {
+    var header: [5]u8 = undefined;
+    try reader.readNoEof(&header);
 
-    if (!mem.eql(u8, record_header[0..2], "\x03\x03") and !mem.eql(u8, record_header[0..2], "\x03\x01"))
+    if (!mem.eql(u8, header[1..3], "\x03\x03") and !mem.eql(u8, header[1..3], "\x03\x01"))
         return error.ServerInvalidVersion;
 
-    const len = mem.readIntSliceBig(u16, record_header[2..4]);
-    return RecordTagLength{
-        .tag = record_tag,
-        .length = len,
+    return RecordHeader{
+        .data = header,
     };
 }
 
 pub fn record_length(t: u8, reader: anytype) !usize {
     try check_record_type(t, reader);
-    var record_header: [4]u8 = undefined;
-    try reader.readNoEof(&record_header);
-    if (!mem.eql(u8, record_header[0..2], "\x03\x03") and !mem.eql(u8, record_header[0..2], "\x03\x01"))
+    var header: [4]u8 = undefined;
+    try reader.readNoEof(&header);
+    if (!mem.eql(u8, header[0..2], "\x03\x03") and !mem.eql(u8, header[0..2], "\x03\x01"))
         return error.ServerInvalidVersion;
-    return mem.readIntSliceBig(u16, record_header[2..4]);
+    return mem.readIntSliceBig(u16, header[2..4]);
 }
 
 pub const ServerAlert = error{
@@ -94,6 +98,7 @@ fn check_record_type(
         try reader.skipBytes(4, .{});
 
         const severity = try reader.readByte();
+        _ = severity;
         const err_num = try reader.readByte();
         return alert_byte_to_error(err_num);
     }
@@ -326,6 +331,8 @@ fn read_der_utc_timestamp(reader: anytype) !i64 {
 }
 
 fn check_cert_timestamp(time: i64, tag_byte: u8, length: usize, reader: anytype) !void {
+    _ = tag_byte;
+    _ = length;
     if (time < (try read_der_utc_timestamp(reader)))
         return error.CertificateVerificationFailed;
     if (time > (try read_der_utc_timestamp(reader)))
@@ -333,10 +340,14 @@ fn check_cert_timestamp(time: i64, tag_byte: u8, length: usize, reader: anytype)
 }
 
 fn add_dn_field(state: *VerifierCaptureState, tag: u8, length: usize, reader: anytype) !void {
+    _ = length;
+    _ = tag;
+
     const seq_tag = try reader.readByte();
     if (seq_tag != 0x30)
         return error.CertificateVerificationFailed;
     const seq_length = try asn1.der.parse_length(reader);
+    _ = seq_length;
 
     const oid_tag = try reader.readByte();
     if (oid_tag != 0x06)
@@ -367,7 +378,10 @@ fn add_cert_subject_dn(state: *VerifierCaptureState, tag: u8, length: usize, rea
     try asn1.der.parse_schema_tag_len(tag, length, schema, captures, reader);
 }
 
-fn add_cert_public_key(state: *VerifierCaptureState, _: u8, length: usize, reader: anytype) !void {
+fn add_cert_public_key(state: *VerifierCaptureState, tag: u8, length: usize, reader: anytype) !void {
+    _ = tag;
+    _ = length;
+
     state.list.items[state.list.items.len - 1].public_key = x509.parse_public_key(
         state.allocator,
         reader,
@@ -378,6 +392,9 @@ fn add_cert_public_key(state: *VerifierCaptureState, _: u8, length: usize, reade
 }
 
 fn add_cert_extensions(state: *VerifierCaptureState, tag: u8, length: usize, reader: anytype) !void {
+    _ = tag;
+    _ = length;
+
     const schema = .{
         .sequence_of,
         .{ .capture, 0, .sequence },
@@ -390,6 +407,9 @@ fn add_cert_extensions(state: *VerifierCaptureState, tag: u8, length: usize, rea
 }
 
 fn add_cert_extension(state: *VerifierCaptureState, tag: u8, length: usize, reader: anytype) !void {
+    _ = tag;
+    _ = length;
+
     const start = state.fbs.pos;
 
     // The happy path is allocation free
@@ -411,6 +431,7 @@ fn add_cert_extension(state: *VerifierCaptureState, tag: u8, length: usize, read
             if (san_tag != @enumToInt(asn1.Tag.octet_string)) return error.DoesNotMatchSchema;
 
             const san_length = try asn1.der.parse_length(reader);
+            _ = san_length;
 
             const body_tag = try reader.readByte();
             if (body_tag != @enumToInt(asn1.Tag.sequence)) return error.DoesNotMatchSchema;
@@ -494,12 +515,18 @@ fn add_server_cert(state: *VerifierCaptureState, tag_byte: u8, length: usize, re
     };
 }
 
-fn set_signature_algorithm(state: *VerifierCaptureState, _: u8, length: usize, reader: anytype) !void {
+fn set_signature_algorithm(state: *VerifierCaptureState, tag: u8, length: usize, reader: anytype) !void {
+    _ = tag;
+    _ = length;
+
     const cert = &state.list.items[state.list.items.len - 1];
     cert.signature_algorithm = (try x509.get_signature_algorithm(reader)) orelse return error.CertificateVerificationFailed;
 }
 
 fn set_signature_value(state: *VerifierCaptureState, tag: u8, length: usize, reader: anytype) !void {
+    _ = tag;
+    _ = length;
+
     const unused_bits = try reader.readByte();
     const bit_count = (length - 1) * 8 - unused_bits;
     const signature_bytes = try state.allocator.alloc(u8, length - 1);
@@ -740,7 +767,6 @@ pub fn extract_cert_public_key(allocator: *Allocator, reader: anytype, length: u
         .allocator = allocator,
     };
 
-    var pub_key: x509.PublicKey = undefined;
     const schema = .{
         .sequence, .{
             // tbsCertificate
@@ -767,7 +793,10 @@ pub fn extract_cert_public_key(allocator: *Allocator, reader: anytype, length: u
     };
     const captures = .{
         &capture_state, struct {
-            fn f(state: *CaptureState, tag: u8, _: usize, subreader: anytype) !void {
+            fn f(state: *CaptureState, tag: u8, _length: usize, subreader: anytype) !void {
+                _ = tag;
+                _ = _length;
+
                 state.pub_key = x509.parse_public_key(state.allocator, subreader) catch |err| switch (err) {
                     error.MalformedDER => return error.ServerMalformedResponse,
                     else => |e| return e,
@@ -798,7 +827,7 @@ pub const curves = struct {
         const pub_key_len = 32;
         const Keys = std.crypto.dh.X25519.KeyPair;
 
-        fn make_key_pair(rand: *std.rand.Random) callconv(.Inline) Keys {
+        inline fn make_key_pair(rand: *std.rand.Random) Keys {
             while (true) {
                 var seed: [32]u8 = undefined;
                 rand.bytes(&seed);
@@ -806,11 +835,11 @@ pub const curves = struct {
             } else unreachable;
         }
 
-        fn make_pre_master_secret(
+        inline fn make_pre_master_secret(
             key_pair: Keys,
             pre_master_secret_buf: []u8,
             server_public_key: *const [32]u8,
-        ) callconv(.Inline) ![]const u8 {
+        ) ![]const u8 {
             pre_master_secret_buf[0..32].* = std.crypto.dh.X25519.scalarmult(
                 key_pair.secret_key,
                 server_public_key.*,
@@ -825,17 +854,17 @@ pub const curves = struct {
         const pub_key_len = 97;
         const Keys = crypto.ecc.KeyPair(crypto.ecc.SECP384R1);
 
-        fn make_key_pair(rand: *std.rand.Random) callconv(.Inline) Keys {
+        inline fn make_key_pair(rand: *std.rand.Random) Keys {
             var seed: [48]u8 = undefined;
             rand.bytes(&seed);
             return crypto.ecc.make_key_pair(crypto.ecc.SECP384R1, seed);
         }
 
-        fn make_pre_master_secret(
+        inline fn make_pre_master_secret(
             key_pair: Keys,
             pre_master_secret_buf: []u8,
             server_public_key: *const [97]u8,
-        ) callconv(.Inline) ![]const u8 {
+        ) ![]const u8 {
             pre_master_secret_buf[0..96].* = crypto.ecc.scalarmult(
                 crypto.ecc.SECP384R1,
                 server_public_key[1..].*,
@@ -851,17 +880,17 @@ pub const curves = struct {
         const pub_key_len = 65;
         const Keys = crypto.ecc.KeyPair(crypto.ecc.SECP256R1);
 
-        fn make_key_pair(rand: *std.rand.Random) callconv(.Inline) Keys {
+        inline fn make_key_pair(rand: *std.rand.Random) Keys {
             var seed: [32]u8 = undefined;
             rand.bytes(&seed);
             return crypto.ecc.make_key_pair(crypto.ecc.SECP256R1, seed);
         }
 
-        fn make_pre_master_secret(
+        inline fn make_pre_master_secret(
             key_pair: Keys,
             pre_master_secret_buf: []u8,
             server_public_key: *const [65]u8,
-        ) callconv(.Inline) ![]const u8 {
+        ) ![]const u8 {
             pre_master_secret_buf[0..64].* = crypto.ecc.scalarmult(
                 crypto.ecc.SECP256R1,
                 server_public_key[1..].*,
@@ -911,7 +940,7 @@ pub const curves = struct {
         });
     }
 
-    fn make_key_pair(comptime list: anytype, curve_id: u16, rand: *std.rand.Random) callconv(.Inline) KeyPair(list) {
+    inline fn make_key_pair(comptime list: anytype, curve_id: u16, rand: *std.rand.Random) KeyPair(list) {
         inline for (list) |curve| {
             if (curve.tag == curve_id) {
                 return @unionInit(KeyPair(list), curve.name, curve.make_key_pair(rand));
@@ -920,13 +949,13 @@ pub const curves = struct {
         unreachable;
     }
 
-    fn make_pre_master_secret(
+    inline fn make_pre_master_secret(
         comptime list: anytype,
         curve_id: u16,
         key_pair: KeyPair(list),
         pre_master_secret_buf: *[max_pre_master_secret_len(list)]u8,
         server_public_key: [max_pub_key_len(list)]u8,
-    ) callconv(.Inline) ![]const u8 {
+    ) ![]const u8 {
         inline for (list) |curve| {
             if (curve.tag == curve_id) {
                 return try curve.make_pre_master_secret(
@@ -1034,7 +1063,7 @@ pub fn client_connect(
             // Same as above, couldnt achieve this with a single buffer.
             // TLS_EMPTY_RENEGOTIATION_INFO_SCSV
             var ciphersuite_buf: []const u8 = &[2]u8{ 0x00, 0x0f };
-            for (suites) |cs, i| {
+            for (suites) |cs| {
                 // Also check for properties of the ciphersuites here
                 if (cs.key_exchange != .ecdhe)
                     @compileError("Non ECDHE key exchange is not supported yet.");
@@ -1208,6 +1237,7 @@ pub fn client_connect(
     var certificate_public_key: x509.PublicKey = undefined;
     {
         const length = try handshake_record_length(reader);
+        _ = length;
         {
             var handshake_header: [4]u8 = undefined;
             try hashing_reader.readNoEof(&handshake_header);
@@ -1248,6 +1278,7 @@ pub fn client_connect(
     var pub_key_len: u8 = undefined;
     {
         const length = try handshake_record_length(reader);
+        _ = length;
         {
             var handshake_header: [4]u8 = undefined;
             try hashing_reader.readNoEof(&handshake_header);
@@ -1349,7 +1380,12 @@ pub fn client_connect(
         } else if (record_type == 13) {
             // Certificate request
             const certificate_request_bytes = try hashing_reader.readIntBig(u24);
-            if (length != certificate_request_bytes + 8)
+            const hello_done_in_same_record =
+                if (length == certificate_request_bytes + 8)
+                true
+            else if (length != certificate_request_bytes)
+                false
+            else
                 return error.ServerMalformedResponse;
             // TODO: For now, we are ignoring the certificate types, as they have been somewhat
             // superceded by the supported_signature_algorithms field
@@ -1415,7 +1451,11 @@ pub fn client_connect(
                     return error.ServerMalformedResponse;
             }
             // Server hello done
-            // @TODO Will this always be in the same record as the certificate request?
+            if (!hello_done_in_same_record) {
+                const hello_done_record_len = try handshake_record_length(reader);
+                if (hello_done_record_len != 4)
+                    return error.ServerMalformedResponse;
+            }
             const hello_record_type = try hashing_reader.readByte();
             if (hello_record_type != 14)
                 return error.ServerMalformedResponse;
@@ -1570,11 +1610,11 @@ pub fn client_connect(
         };
 
         const next_32_bytes = struct {
-            fn f(
+            inline fn f(
                 state: *KeyExpansionState,
                 comptime chunk_idx: comptime_int,
                 chunk: *[32]u8,
-            ) callconv(.Inline) void {
+            ) void {
                 if (chunk_idx == 0) {
                     Hmac256.create(state.a1[0..32], state.seed, state.master_secret);
                     Hmac256.create(chunk, state.a1, state.master_secret);
@@ -1681,7 +1721,6 @@ pub fn client_connect(
     return Client(@TypeOf(reader), @TypeOf(writer), suites, has_alpn){
         .ciphersuite = ciphersuite,
         .key_data = key_data,
-        .state = ciphers.client_state_default(suites, ciphersuite),
         .rand = rand,
         .parent_reader = reader,
         .parent_writer = writer,
@@ -1696,15 +1735,25 @@ pub fn Client(
     comptime has_protocol: bool,
 ) type {
     return struct {
-        const ReaderError = _Reader.Error || ServerAlert || error{ ServerMalformedResponse, ServerInvalidVersion };
+        const ReaderError = _Reader.Error || ServerAlert || error{ ServerMalformedResponse, ServerInvalidVersion, AuthenticationFailed };
         pub const Reader = std.io.Reader(*@This(), ReaderError, read);
         pub const Writer = std.io.Writer(*@This(), _Writer.Error, write);
+
+        const InRecordState = ciphers.InRecordState(_ciphersuites);
+        const ReadState = union(enum) {
+            none,
+            in_record: struct {
+                record_length: usize,
+                index: usize = 0,
+                state: InRecordState,
+            },
+        };
 
         ciphersuite: u16,
         client_seq: u64 = 1,
         server_seq: u64 = 1,
         key_data: ciphers.KeyData(_ciphersuites),
-        state: ciphers.ClientState(_ciphersuites),
+        read_state: ReadState = .none,
         rand: *std.rand.Random,
 
         parent_reader: _Reader,
@@ -1721,20 +1770,147 @@ pub fn Client(
         }
 
         pub fn read(self: *@This(), buffer: []u8) ReaderError!usize {
-            inline for (_ciphersuites) |cs| {
-                if (self.ciphersuite == cs.tag) {
-                    // @TODO Make this buffer size configurable
-                    return try cs.read(
-                        1024,
-                        &@field(self.state, cs.name),
-                        &self.key_data,
-                        self.parent_reader,
-                        &self.server_seq,
-                        buffer,
-                    );
-                }
+            const buf_size = 1024;
+
+            switch (self.read_state) {
+                .none => {
+                    const header = record_header(self.parent_reader) catch |err| switch (err) {
+                        error.EndOfStream => return 0,
+                        else => |e| return e,
+                    };
+
+                    const len_overhead = inline for (_ciphersuites) |cs| {
+                        if (self.ciphersuite == cs.tag) {
+                            break cs.mac_length + cs.prefix_data_length;
+                        }
+                    } else unreachable;
+
+                    const rec_length = header.len();
+                    if (rec_length < len_overhead)
+                        return error.ServerMalformedResponse;
+                    const len = rec_length - len_overhead;
+
+                    if ((header.tag() != 0x17 and header.tag() != 0x15) or
+                        (header.tag() == 0x15 and len != 2))
+                    {
+                        return error.ServerMalformedResponse;
+                    }
+
+                    inline for (_ciphersuites) |cs| {
+                        if (self.ciphersuite == cs.tag) {
+                            var prefix_data: [cs.prefix_data_length]u8 = undefined;
+                            if (cs.prefix_data_length > 0) {
+                                self.parent_reader.readNoEof(&prefix_data) catch |err| switch (err) {
+                                    error.EndOfStream => return error.ServerMalformedResponse,
+                                    else => |e| return e,
+                                };
+                            }
+                            self.read_state = .{ .in_record = .{
+                                .record_length = len,
+                                .state = @unionInit(
+                                    InRecordState,
+                                    cs.name,
+                                    cs.init_state(prefix_data, self.server_seq, &self.key_data, header),
+                                ),
+                            } };
+                        }
+                    }
+
+                    if (header.tag() == 0x15) {
+                        var encrypted: [2]u8 = undefined;
+                        self.parent_reader.readNoEof(&encrypted) catch |err| switch (err) {
+                            error.EndOfStream => return error.ServerMalformedResponse,
+                            else => |e| return e,
+                        };
+
+                        var result: [2]u8 = undefined;
+                        inline for (_ciphersuites) |cs| {
+                            if (self.ciphersuite == cs.tag) {
+                                // This decrypt call should always consume the whole record
+                                cs.decrypt_part(
+                                    &self.key_data,
+                                    self.read_state.in_record.record_length,
+                                    &self.read_state.in_record.index,
+                                    &@field(self.read_state.in_record.state, cs.name),
+                                    &encrypted,
+                                    &result,
+                                );
+                                std.debug.assert(self.read_state.in_record.index == self.read_state.in_record.record_length);
+                                try cs.verify_mac(
+                                    self.parent_reader,
+                                    self.read_state.in_record.record_length,
+                                    &@field(self.read_state.in_record.state, cs.name),
+                                );
+                            }
+                        }
+                        self.read_state = .none;
+                        self.server_seq += 1;
+                        // CloseNotify
+                        if (result[1] == 0)
+                            return 0;
+                        return alert_byte_to_error(result[1]);
+                    } else if (header.tag() == 0x17) {
+                        const curr_bytes = std.math.min(std.math.min(len, buf_size), buffer.len);
+                        // Partially decrypt the data.
+                        var encrypted: [buf_size]u8 = undefined;
+                        const actually_read = try self.parent_reader.read(encrypted[0..curr_bytes]);
+
+                        inline for (_ciphersuites) |cs| {
+                            if (self.ciphersuite == cs.tag) {
+                                cs.decrypt_part(
+                                    &self.key_data,
+                                    self.read_state.in_record.record_length,
+                                    &self.read_state.in_record.index,
+                                    &@field(self.read_state.in_record.state, cs.name),
+                                    encrypted[0..actually_read],
+                                    buffer[0..actually_read],
+                                );
+
+                                if (self.read_state.in_record.index == self.read_state.in_record.record_length) {
+                                    try cs.verify_mac(
+                                        self.parent_reader,
+                                        self.read_state.in_record.record_length,
+                                        &@field(self.read_state.in_record.state, cs.name),
+                                    );
+                                    self.server_seq += 1;
+                                    self.read_state = .none;
+                                }
+                            }
+                        }
+                        return actually_read;
+                    } else unreachable;
+                },
+                .in_record => |*in_record| {
+                    const curr_bytes = std.math.min(std.math.min(buf_size, buffer.len), in_record.record_length - in_record.index);
+                    // Partially decrypt the data.
+                    var encrypted: [buf_size]u8 = undefined;
+                    const actually_read = try self.parent_reader.read(encrypted[0..curr_bytes]);
+
+                    inline for (_ciphersuites) |cs| {
+                        if (self.ciphersuite == cs.tag) {
+                            cs.decrypt_part(
+                                &self.key_data,
+                                in_record.record_length,
+                                &in_record.index,
+                                &@field(in_record.state, cs.name),
+                                encrypted[0..actually_read],
+                                buffer[0..actually_read],
+                            );
+
+                            if (in_record.index == in_record.record_length) {
+                                try cs.verify_mac(
+                                    self.parent_reader,
+                                    in_record.record_length,
+                                    &@field(in_record.state, cs.name),
+                                );
+                                self.server_seq += 1;
+                                self.read_state = .none;
+                            }
+                        }
+                    }
+                    return actually_read;
+                },
             }
-            unreachable;
         }
 
         pub fn write(self: *@This(), buffer: []const u8) _Writer.Error!usize {
@@ -1808,13 +1984,12 @@ test "HTTPS request on wikipedia main page" {
         .curves = .{curves.x25519},
     }, "en.wikipedia.org");
     defer client.close_notify() catch {};
-
-    std.testing.expectEqualStrings("http/1.1", client.protocol);
+    try std.testing.expectEqualStrings("http/1.1", client.protocol);
     try client.writer().writeAll("GET /wiki/Main_Page HTTP/1.1\r\nHost: en.wikipedia.org\r\nAccept: */*\r\n\r\n");
 
     {
         const header = try client.reader().readUntilDelimiterAlloc(std.testing.allocator, '\n', std.math.maxInt(usize));
-        std.testing.expectEqualStrings("HTTP/1.1 200 OK", mem.trim(u8, header, &std.ascii.spaces));
+        try std.testing.expectEqualStrings("HTTP/1.1 200 OK", mem.trim(u8, header, &std.ascii.spaces));
         std.testing.allocator.free(header);
     }
 
@@ -1833,7 +2008,7 @@ test "HTTPS request on wikipedia main page" {
             content_length = try std.fmt.parseUnsigned(usize, hdr_contents[16..], 10);
         }
     }
-    std.testing.expect(content_length != null);
+    try std.testing.expect(content_length != null);
     const html_contents = try std.testing.allocator.alloc(u8, content_length.?);
     defer std.testing.allocator.free(html_contents);
 
@@ -1888,7 +2063,7 @@ test "HTTPS request on twitch oath2 endpoint" {
         .cert_verifier = .none,
         .protocols = &[_][]const u8{"http/1.1"},
     }, "id.twitch.tv");
-    std.testing.expectEqualStrings("http/1.1", client.protocol);
+    try std.testing.expectEqualStrings("http/1.1", client.protocol);
     defer client.close_notify() catch {};
 
     try client.writer().writeAll("GET /oauth2/validate HTTP/1.1\r\nHost: id.twitch.tv\r\nAccept: */*\r\n\r\n");
@@ -1906,7 +2081,7 @@ test "HTTPS request on twitch oath2 endpoint" {
             content_length = try std.fmt.parseUnsigned(usize, hdr_contents[16..], 10);
         }
     }
-    std.testing.expect(content_length != null);
+    try std.testing.expect(content_length != null);
     const html_contents = try std.testing.allocator.alloc(u8, content_length.?);
     defer std.testing.allocator.free(html_contents);
 
@@ -1928,14 +2103,18 @@ test "Connecting to expired.badssl.com returns an error" {
         break :blk &std.rand.DefaultCsprng.init(seed).random;
     };
 
-    std.testing.expectError(error.CertificateVerificationFailed, client_connect(.{
+    if (client_connect(.{
         .rand = rand,
         .reader = sock.reader(),
         .writer = sock.writer(),
         .cert_verifier = .default,
         .temp_allocator = std.testing.allocator,
         .trusted_certificates = trusted_chain.data.items,
-    }, "expired.badssl.com"));
+    }, "expired.badssl.com")) |_| {
+        return error.ExpectedVerificationFailed;
+    } else |err| {
+        try std.testing.expect(err == error.CertificateVerificationFailed);
+    }
 }
 
 test "Connecting to wrong.host.badssl.com returns an error" {
@@ -1953,14 +2132,18 @@ test "Connecting to wrong.host.badssl.com returns an error" {
         break :blk &std.rand.DefaultCsprng.init(seed).random;
     };
 
-    std.testing.expectError(error.CertificateVerificationFailed, client_connect(.{
+    if (client_connect(.{
         .rand = rand,
         .reader = sock.reader(),
         .writer = sock.writer(),
         .cert_verifier = .default,
         .temp_allocator = std.testing.allocator,
         .trusted_certificates = trusted_chain.data.items,
-    }, "wrong.host.badssl.com"));
+    }, "wrong.host.badssl.com")) |_| {
+        return error.ExpectedVerificationFailed;
+    } else |err| {
+        try std.testing.expect(err == error.CertificateVerificationFailed);
+    }
 }
 
 test "Connecting to self-signed.badssl.com returns an error" {
@@ -1978,14 +2161,18 @@ test "Connecting to self-signed.badssl.com returns an error" {
         break :blk &std.rand.DefaultCsprng.init(seed).random;
     };
 
-    std.testing.expectError(error.CertificateVerificationFailed, client_connect(.{
+    if (client_connect(.{
         .rand = rand,
         .reader = sock.reader(),
         .writer = sock.writer(),
         .cert_verifier = .default,
         .temp_allocator = std.testing.allocator,
         .trusted_certificates = trusted_chain.data.items,
-    }, "self-signed.badssl.com"));
+    }, "self-signed.badssl.com")) |_| {
+        return error.ExpectedVerificationFailed;
+    } else |err| {
+        try std.testing.expect(err == error.CertificateVerificationFailed);
+    }
 }
 
 test "Connecting to client.badssl.com with a client certificate" {
@@ -2024,5 +2211,5 @@ test "Connecting to client.badssl.com with a client certificate" {
 
     const line = try client.reader().readUntilDelimiterAlloc(std.testing.allocator, '\n', std.math.maxInt(usize));
     defer std.testing.allocator.free(line);
-    std.testing.expectEqualStrings("HTTP/1.1 200 OK\r", line);
+    try std.testing.expectEqualStrings("HTTP/1.1 200 OK\r", line);
 }

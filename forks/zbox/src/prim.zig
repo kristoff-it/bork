@@ -1,3 +1,8 @@
+//! the primitive terminal module is mainly responsible for providing a simple
+//! and portable interface to pseudo terminal IO and control primitives to
+//! higher level modules. You probably shouldn't be using this directly from
+//! application code.
+
 const std = @import("std");
 const fs = std.fs;
 const os = std.os;
@@ -10,11 +15,6 @@ const ArrayList = std.ArrayList;
 const Allocator = mem.Allocator;
 
 usingnamespace @import("util.zig");
-
-//! the primitive terminal module is mainly responsible for providing a simple
-//! and portable interface to pseudo terminal IO and control primitives to
-//! higher level modules. You probably shouldn't be using this directly from
-//! application code.
 
 /// Input events
 pub const Event = union(enum) {
@@ -333,7 +333,7 @@ const TermState = struct {
 };
 var termState: ?TermState = null;
 
-fn state() callconv(.Inline) *TermState {
+inline fn state() *TermState {
     if (std.debug.runtime_safety) {
         if (termState) |*self| return self else @panic("terminal is not initialized");
     } else return &termState.?;

@@ -132,14 +132,14 @@ pub fn fetch(self: *Self, emote_list: []Emote) !void {
             // };
 
             var encode_buf = try self.allocator.alloc(u8, std.base64.standard.Encoder.calcSize(img.len));
-            result.entry.value = .{
+            result.value_ptr.* = .{
                 .data = b64.encode(encode_buf, img),
                 .idx = self.idx_counter,
             };
             self.idx_counter += 1;
         }
 
-        emote.img_data = result.entry.value.data;
-        emote.idx = result.entry.value.idx;
+        emote.img_data = result.value_ptr.data;
+        emote.idx = result.value_ptr.idx;
     }
 }
