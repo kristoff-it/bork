@@ -62,6 +62,7 @@ pub fn parse_public_key(allocator: *Allocator, reader: anytype) !PublicKey {
     if ((try reader.readByte()) != 0x30)
         return error.MalformedDER;
     const seq_len = try asn1.der.parse_length(reader);
+    _ = seq_len;
 
     if ((try reader.readByte()) != 0x06)
         return error.MalformedDER;
@@ -202,7 +203,10 @@ pub const Certificate = struct {
         dn_allocated: bool = false,
         pk_allocated: bool = false,
     };
-    fn initSubjectDn(state: *CaptureState, tag_byte: u8, length: usize, reader: anytype) !void {
+
+    fn initSubjectDn(state: *CaptureState, tag: u8, length: usize, reader: anytype) !void {
+        _ = tag;
+
         const dn_mem = try state.allocator.alloc(u8, length);
         errdefer state.allocator.free(dn_mem);
         try reader.readNoEof(dn_mem);
@@ -210,7 +214,10 @@ pub const Certificate = struct {
         state.dn_allocated = true;
     }
 
-    fn processExtension(state: *CaptureState, tag_byte: u8, length: usize, reader: anytype) !void {
+    fn processExtension(state: *CaptureState, tag: u8, length: usize, reader: anytype) !void {
+        _ = tag;
+        _ = length;
+
         const object_id = try asn1.der.parse_value(state.allocator, reader);
         defer object_id.deinit(state.allocator);
         if (object_id != .object_identifier) return error.DoesNotMatchSchema;
@@ -226,7 +233,7 @@ pub const Certificate = struct {
         defer basic_constraints.deinit(state.allocator);
 
         switch (basic_constraints) {
-            .bool => |b| state.self.is_ca = true,
+            .bool => state.self.is_ca = true,
             .octet_string => |s| {
                 if (s.len != 5 or s[0] != 0x30 or s[1] != 0x03 or s[2] != 0x01 or s[3] != 0x01)
                     return error.DoesNotMatchSchema;
@@ -236,7 +243,10 @@ pub const Certificate = struct {
         }
     }
 
-    fn initExtensions(state: *CaptureState, tag_byte: u8, length: usize, reader: anytype) !void {
+    fn initExtensions(state: *CaptureState, tag: u8, length: usize, reader: anytype) !void {
+        _ = tag;
+        _ = length;
+
         const schema = .{
             .sequence_of,
             .{ .capture, 0, .sequence },
@@ -247,7 +257,10 @@ pub const Certificate = struct {
         try asn1.der.parse_schema(schema, captures, reader);
     }
 
-    fn initPublicKeyInfo(state: *CaptureState, tag_byte: u8, length: usize, reader: anytype) !void {
+    fn initPublicKeyInfo(state: *CaptureState, tag: u8, length: usize, reader: anytype) !void {
+        _ = tag;
+        _ = length;
+
         state.self.public_key = try parse_public_key(state.allocator, reader);
         state.pk_allocated = true;
     }
@@ -316,6 +329,9 @@ pub const Certificate = struct {
     }
 
     pub fn format(self: @This(), comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        _ = fmt;
+        _ = options;
+
         try writer.print(
             \\CERTIFICATE
             \\-----------
@@ -500,6 +516,9 @@ pub const ClientCertificateChain = struct {
                         state,
                         struct {
                             fn capture(_state: anytype, tag: u8, length: usize, reader: anytype) !void {
+                                _ = tag;
+                                _ = reader;
+
                                 // TODO: Some way to get tag + length buffer directly in the capture callback?
                                 const encoded_length = asn1.der.encode_length(length).slice();
                                 const pos = _state.fbs.pos;
@@ -510,6 +529,9 @@ pub const ClientCertificateChain = struct {
                         state,
                         struct {
                             fn capture(_state: anytype, tag: u8, length: usize, reader: anytype) !void {
+                                _ = tag;
+                                _ = length;
+
                                 if (_state.dns.items.len == 1)
                                     _state.signature_algorithm.* = (try get_signature_algorithm(reader)) orelse
                                         return error.InvalidSignatureAlgorithm;
@@ -558,6 +580,8 @@ pub const ClientCertificateChain = struct {
                         state,
                         struct {
                             fn capture(_state: anytype, tag: u8, length: usize, reader: anytype) !void {
+                                _ = tag;
+
                                 _state.modulus.* = (try asn1.der.parse_int_with_length(
                                     _state.allocator,
                                     length,
@@ -568,6 +592,8 @@ pub const ClientCertificateChain = struct {
                         state,
                         struct {
                             fn capture(_state: anytype, tag: u8, length: usize, reader: anytype) !void {
+                                _ = tag;
+
                                 _state.exponent.* = (try asn1.der.parse_int_with_length(
                                     _state.allocator,
                                     length,
@@ -734,6 +760,8 @@ fn PEMSectionIterator(comptime Reader: type, comptime options: PEMSectionIterato
         },
     });
 
+    const _biggest_name_len = biggest_name_len;
+
     return struct {
         pub const SectionReader = PEMSectionReader(Reader, options);
         pub const StateAndName = struct {
@@ -771,7 +799,7 @@ fn PEMSectionIterator(comptime Reader: type, comptime options: PEMSectionIterato
                         '-' => {
                             if (try self.reader.isBytes("----BEGIN ")) {
                                 var name_char_idx: usize = 0;
-                                var name_buf: [biggest_name_len]u8 = undefined;
+                                var name_buf: [_biggest_name_len]u8 = undefined;
 
                                 while (true) {
                                     const next_byte = try self.reader.readByte();
@@ -793,7 +821,7 @@ fn PEMSectionIterator(comptime Reader: type, comptime options: PEMSectionIterato
                                         },
                                         '\n' => return error.MalformedPEM,
                                         else => {
-                                            if (name_char_idx == biggest_name_len) {
+                                            if (name_char_idx == _biggest_name_len) {
                                                 try self.reader.skipUntilDelimiterOrEof('\n');
                                                 self.state = .other;
                                                 continue :outer_loop;
@@ -885,12 +913,12 @@ fn expected_pem_certificate_chain(bytes: []const u8, certs: []const []const u8) 
     while (try it.next()) |cert_reader| : (idx += 1) {
         const result_bytes = try cert_reader.readAllAlloc(std.testing.allocator, std.math.maxInt(usize));
         defer std.testing.allocator.free(result_bytes);
-        std.testing.expectEqualSlices(u8, certs[idx], result_bytes);
+        try std.testing.expectEqualSlices(u8, certs[idx], result_bytes);
     }
     if (idx != certs.len) {
         std.debug.panic("Read {} certificates, wanted {}", .{ idx, certs.len });
     }
-    std.testing.expect((try it.next()) == null);
+    try std.testing.expect((try it.next()) == null);
 }
 
 fn expected_pem_certificate(bytes: []const u8, cert_bytes: []const u8) !void {
@@ -935,8 +963,8 @@ test "pemCertificateIterator" {
             const first_reader = (try it.next()) orelse return error.NoCertificate;
             var first_few: [8]u8 = undefined;
             const bytes = try first_reader.readAll(&first_few);
-            std.testing.expectEqual(first_few.len, bytes);
-            std.testing.expectEqualSlices(u8, github_der[0..bytes], &first_few);
+            try std.testing.expectEqual(first_few.len, bytes);
+            try std.testing.expectEqualSlices(u8, github_der[0..bytes], &first_few);
         }
 
         const next_reader = (try it.next()) orelse return error.NoCertificate;
@@ -950,8 +978,8 @@ test "pemCertificateIterator" {
                 std.debug.panic("index {}: expected 0x{X}, found 0x{X}", .{ idx, github_der[idx], byte });
             }
         }
-        std.testing.expectEqual(github_der.len, idx);
-        std.testing.expect((try it.next()) == null);
+        try std.testing.expectEqual(github_der.len, idx);
+        try std.testing.expect((try it.next()) == null);
     }
 }
 
