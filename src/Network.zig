@@ -166,21 +166,21 @@ fn receiveMessages(self: *Self) void {
 }
 
 // Public interface for sending commands (messages, bans, ...)
-pub fn sendCommand(self: *Self, cmd: UserCommand) !void {
-    return self.send(Command{ .user = cmd });
-    if (self.isReconnecting()) {
-        return error.Reconnecting;
-    }
+// pub fn sendCommand(self: *Self, cmd: UserCommand) !void {
+//     return self.send(Command{ .user = cmd });
+//     if (self.isReconnecting()) {
+//         return error.Reconnecting;
+//     }
 
-    // NOTE: it could still be possible for a command
-    //       to remain stuck here while we are reconnecting,
-    //       but in most cases we'll be able to correctly
-    //       report that we can't carry out any command.
-    //       if the twitch chat system had unique command ids,
-    //       we could have opted to retry instead of failing
-    //       immediately, but without unique ids you risk
-    //       sending the same command twice.
-}
+//     // NOTE: it could still be possible for a command
+//     //       to remain stuck here while we are reconnecting,
+//     //       but in most cases we'll be able to correctly
+//     //       report that we can't carry out any command.
+//     //       if the twitch chat system had unique command ids,
+//     //       we could have opted to retry instead of failing
+//     //       immediately, but without unique ids you risk
+//     //       sending the same command twice.
+// }
 
 fn send(self: *Self, cmd: Command) void {
     var held = self.writer_lock.acquire();
@@ -192,7 +192,7 @@ fn send(self: *Self, cmd: Command) void {
         .user => {},
     };
 
-    if (comm) |_| {} else |err| {
+    if (comm) |_| {} else |_| {
         // Try to start the reconnect procedure
         self.reconnect(held);
     }
@@ -269,7 +269,7 @@ fn _reconnect(self: *Self, writer_held: ?std.event.Lock.Held) void {
         //     }
         // };
         while (true) {
-            var s = connect(self.allocator, self.name, self.oauth) catch |err| {
+            var s = connect(self.allocator, self.name, self.oauth) catch {
                 // TODO: panic on non-transient errors.
                 std.time.sleep(backoff[retries] * std.time.ns_per_ms);
                 if (retries < backoff.len - 1) {

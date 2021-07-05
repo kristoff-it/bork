@@ -88,7 +88,7 @@ pub const Message = struct {
         img_data: ?[]const u8 = null, // TODO: should this be in
         idx: u32 = 0, // surely this will never cause problematic bugs
         // Used to sort the emote list by ending poisition.
-        pub fn lessThan(context: void, lhs: Emote, rhs: Emote) bool {
+        pub fn lessThan(_: void, lhs: Emote, rhs: Emote) bool {
             return lhs.end < rhs.end;
         }
     };

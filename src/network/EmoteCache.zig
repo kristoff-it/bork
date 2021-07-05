@@ -76,7 +76,7 @@ pub fn fetch(self: *Self, emote_list: []Emote) !void {
                 );
                 defer self.allocator.free(path);
 
-                client.writeStatusLine("GET", path) catch |err| {
+                client.writeStatusLine("GET", path) catch {
                     return error.Error;
                 };
                 client.writeHeaderValue("Host", hostname) catch unreachable;

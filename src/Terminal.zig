@@ -5,7 +5,6 @@ const Chat = @import("Chat.zig");
 const GlobalEventUnion = @import("main.zig").Event;
 
 const ziglyph = @import("ziglyph");
-var uw = comptime ziglyph.Width.new();
 
 // We expose directly the event type produced by zbox
 pub const Event = zbox.Event;
@@ -127,7 +126,9 @@ pub fn init(alloc: *std.mem.Allocator, ch: *Channel(GlobalEventUnion), streamer_
 
 // Flag touched by whichChandler and startTicking
 var dirty: bool = false;
-fn winchHandler(signum: c_int) callconv(.C) void {
+fn winchHandler(
+    _: c_int, // signum
+) callconv(.C) void {
     _ = @atomicRmw(bool, &dirty, .Xchg, true, .SeqCst);
 }
 
@@ -521,7 +522,7 @@ fn printWordWrap(
         const word_len = try std.unicode.utf8CountCodepoints(word);
         codepoints += word_len;
 
-        const word_width = @intCast(usize, try uw.strWidth(word, .half));
+        const word_width = @intCast(usize, try ziglyph.Width.strWidth(word, .half));
 
         if (emulator == .kitty and emote_array_idx < emotes.len and
             emotes[emote_array_idx].end == codepoints - 1)
@@ -965,7 +966,7 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                                         );
                                     }
                                 },
-                                .username => |tm| {
+                                .username => |_| {
 
                                     // if (tm == term_message) {
                                     //     try renderUserActionsOverlay(
@@ -1123,7 +1124,7 @@ pub fn handleClick(self: *Self, row: usize, col: usize) !bool {
                     while (next) |n| : (next = n.next) {
                         switch (n.kind) {
                             else => break,
-                            .sub_gift => |c| {
+                            .sub_gift => |_| {
                                 var term_message = @fieldParentPtr(TerminalMessage, "chat_message", n);
                                 term_message.is_selected = false;
                             },
@@ -1172,7 +1173,7 @@ fn renderSubBadgeOverlay(months: usize, buf: *zbox.Buffer, row: usize, badges_wi
 }
 
 fn renderUserActionsOverlay(
-    c: Chat.Message.Comment,
+    _: Chat.Message.Comment,
     buf: *zbox.Buffer,
     row: usize,
     col: usize,
@@ -1209,7 +1210,7 @@ fn renderUserActionsOverlay(
 }
 
 fn renderMessageActionsOverlay(
-    c: Chat.Message.Comment,
+    _: Chat.Message.Comment,
     buf: *zbox.Buffer,
     row: usize,
 ) !void {
