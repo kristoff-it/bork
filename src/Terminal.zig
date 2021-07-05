@@ -579,7 +579,7 @@ fn printWordWrap(
                     cursor.context.link = word;
                     try cursor.writeAll(word[0..1]);
                     cursor.context.link = null;
-                    try cursor.writeAll(word[0 .. word.len - 1]);
+                    try cursor.writeAll(word[1 .. word.len - 1]);
                     cursor.context.is_link_end = true;
                     try cursor.writeAll(word[word.len - 1 ..]);
                     cursor.context.is_link_end = false;
