@@ -105,7 +105,7 @@ pub const StatusCode = enum(u10) {
 
     _,
 
-    pub fn code(self: StatusCode) @TagType(StatusCode) {
+    pub fn code(self: StatusCode) std.meta.TagType(StatusCode) {
         return @enumToInt(self);
     }
 

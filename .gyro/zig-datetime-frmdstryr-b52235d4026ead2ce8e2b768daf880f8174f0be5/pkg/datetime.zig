@@ -18,7 +18,7 @@ const testing = std.testing;
 const assert = std.debug.assert;
 
 // Number of days in each month not accounting for leap year
-pub const Weekday = enum {
+pub const Weekday = enum(u4) {
     Monday = 1,
     Tuesday,
     Wednesday,
@@ -28,7 +28,7 @@ pub const Weekday = enum {
     Sunday,
 };
 
-pub const Month = enum {
+pub const Month = enum(u4) {
     January = 1,
     February,
     March,
@@ -217,9 +217,9 @@ pub const Date = struct {
         assert(ordinal >= 1 and ordinal <= MAX_ORDINAL);
 
         var n = ordinal - 1;
-        comptime const DI400Y = daysBeforeYear(401); // Num of days in 400 years
-        comptime const DI100Y = daysBeforeYear(101); // Num of days in 100 years
-        comptime const DI4Y = daysBeforeYear(5); // Num of days in 4   years
+        const DI400Y = daysBeforeYear(401); // Num of days in 400 years
+        const DI100Y = daysBeforeYear(101); // Num of days in 100 years
+        const DI4Y = daysBeforeYear(5); // Num of days in 4   years
         const n400 = @divFloor(n, DI400Y);
         n = @mod(n, DI400Y);
         var year = n400 * 400 + 1; //  ..., -399, 1, 401, ...
@@ -460,7 +460,7 @@ pub const Date = struct {
 };
 
 test "date-now" {
-    var date = Date.now();
+    _ = Date.now();
 }
 
 test "date-compare" {
@@ -777,7 +777,7 @@ test "time-create" {
 }
 
 test "time-now" {
-    const t = Time.now();
+    _ = Time.now();
 }
 
 test "time-from-seconds" {
@@ -1185,7 +1185,7 @@ pub const Datetime = struct {
 };
 
 test "datetime-now" {
-    var t = Datetime.now();
+    _ = Datetime.now();
 }
 
 test "datetime-create-timestamp" {

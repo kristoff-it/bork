@@ -16,7 +16,6 @@ pub fn checkTokenValidity(allocator: *std.mem.Allocator, token: []const u8) !boo
 
     var randBuf: [32]u8 = undefined;
     try std.os.getrandom(&randBuf);
-    var rng = std.rand.DefaultCsprng.init(randBuf);
 
     var rand = blk: {
         var seed: [std.rand.DefaultCsprng.secret_seed_length]u8 = undefined;
@@ -47,7 +46,7 @@ pub fn checkTokenValidity(allocator: *std.mem.Allocator, token: []const u8) !boo
     const header_oauth = try std.fmt.allocPrint(allocator, "OAuth {s}", .{it.next().?});
     defer allocator.free(header_oauth);
 
-    client.writeStatusLine("GET", "/oauth2/validate") catch |err| {
+    client.writeStatusLine("GET", "/oauth2/validate") catch {
         return error.Error;
     };
     client.writeHeaderValue("Host", hostname) catch unreachable;

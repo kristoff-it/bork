@@ -5,7 +5,6 @@ const assert = std.debug.assert;
 const Allocator = mem.Allocator;
 
 const ziglyph = @import("ziglyph");
-const uw = ziglyph.Width.new();
 
 pub const term = @import("prim.zig");
 
@@ -199,7 +198,7 @@ pub const Buffer = struct {
             var cp_iter = (try std.unicode.Utf8View.init(bytes)).iterator();
             var bytes_written: usize = 0;
             while (cp_iter.nextCodepoint()) |cp| {
-                const char_w = @intCast(usize, uw.codePointWidth(cp, .half));
+                const char_w = @intCast(usize, ziglyph.Width.codePointWidth(cp, .half));
 
                 if (self.col_num + char_w > self.buffer.width) {
                     if (!self.wrap) @panic("tried to print past the row end");
@@ -404,8 +403,8 @@ pub const Buffer = struct {
     // std.fmt compatibility for debugging
     pub fn format(
         self: Buffer,
-        comptime fmt: []const u8,
-        options: std.fmt.FormatOptions,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
         writer: anytype,
     ) @TypeOf(writer).Error!void {
         var row_num: usize = 0;
