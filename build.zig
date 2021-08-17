@@ -1,18 +1,18 @@
 const std = @import("std");
-const pkgs = @import("deps.zig").pkgs;
+const deps = @import("./deps.zig");
 
 pub fn build(b: *std.build.Builder) void {
     const target = b.standardTargetOptions(.{});
 
     const mode = b.standardReleaseOptions();
     const exe = b.addExecutable("bork", "src/main.zig");
-    pkgs.addAllTo(exe);
 
     const local = b.option(bool, "local", "not using real data and testing locally") orelse false;
     exe.addBuildOption(bool, "local", local);
 
     exe.setTarget(target);
     exe.setBuildMode(mode);
+    deps.addAllTo(exe);
     exe.install();
 
     const run_cmd = exe.run();
