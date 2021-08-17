@@ -1,5 +1,5 @@
 const std = @import("std");
-const datetime = @import("datetime");
+const datetime = @import("datetime").datetime;
 const Chat = @import("../Chat.zig");
 
 const ParseResult = union(enum) {

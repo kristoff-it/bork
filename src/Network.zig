@@ -1,5 +1,5 @@
 const std = @import("std");
-const datetime = @import("datetime");
+const datetime = @import("datetime").datetime;
 const Channel = @import("utils/channel.zig").Channel;
 const GlobalEventUnion = @import("main.zig").Event;
 const Chat = @import("Chat.zig");

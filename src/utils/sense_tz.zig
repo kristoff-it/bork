@@ -1,5 +1,5 @@
 const std = @import("std");
-const datetime = @import("datetime");
+const datetime = @import("datetime").datetime;
 const tzif = @import("tzif");
 
 pub fn senseUserTZ(allocator: *std.mem.Allocator) !datetime.Timezone {
