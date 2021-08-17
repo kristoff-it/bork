@@ -98,13 +98,13 @@ pub fn ResponseParser(comptime Reader: type) type {
                     const line = try verifyLineEnding((try self.reader.readUntilDelimiterOrEof(self.read_buffer, '\n')) orelse return error.EndOfStream);
                     if (line.len == 0) return Event.skip; // RFC 7230 Section 3.5
 
-                    var line_it = mem.split(line, " ");
+                    var line_it = mem.split(u8, line, " ");
 
                     const http_version_buffer = line_it.next() orelse return error.InvalidStatusLine;
                     const code_buffer = line_it.next() orelse return error.InvalidStatusLine;
                     const reason_buffer = line_it.rest();
 
-                    var version_it = mem.split(http_version_buffer, "/");
+                    var version_it = mem.split(u8, http_version_buffer, "/");
 
                     const http = version_it.next() orelse return error.InvalidStatusLine;
                     const version_buffer = version_it.next() orelse return error.InvalidStatusLine;

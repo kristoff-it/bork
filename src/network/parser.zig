@@ -69,7 +69,7 @@ pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, tz: datetime.Timezone
     const trailer = remaining_data[0..]; // Empty string if no trailer
     std.log.debug("trailer: [{s}]", .{trailer});
 
-    var cmd_and_args_it = std.mem.tokenize(cmd_and_args, " ");
+    var cmd_and_args_it = std.mem.tokenize(u8, cmd_and_args, " ");
     const cmd = cmd_and_args_it.next().?; // Calling the iterator once should never fail
 
     // Prepare fields common to multiple msg types
@@ -378,15 +378,15 @@ fn parseEmotes(data: []const u8, allocator: *std.mem.Allocator) ![]Chat.Message.
     var emotes = try allocator.alloc(Chat.Message.Emote, count);
     errdefer allocator.free(emotes);
 
-    var emote_it = std.mem.tokenize(data, "/");
+    var emote_it = std.mem.tokenize(u8, data, "/");
     var i: usize = 0;
     while (emote_it.next()) |e| {
         const colon_pos = std.mem.indexOf(u8, e, ":") orelse return error.NoColon;
         const emote_id = e[0..colon_pos];
 
-        var pos_it = std.mem.tokenize(e[colon_pos + 1 ..], ",");
+        var pos_it = std.mem.tokenize(u8, e[colon_pos + 1 ..], ",");
         while (pos_it.next()) |pos| : (i += 1) {
-            var it = std.mem.tokenize(pos, "-");
+            var it = std.mem.tokenize(u8, pos, "-");
             const start = blk: {
                 const str = it.next() orelse return error.NoStart;
                 break :blk try std.fmt.parseInt(usize, str, 10);
@@ -420,7 +420,7 @@ const Badge = struct {
 };
 
 fn parseBadge(data: []const u8) !Badge {
-    var it = std.mem.tokenize(data, "/");
+    var it = std.mem.tokenize(u8, data, "/");
     return Badge{
         .name = it.next().?, // first call will not fail
         .count = try std.fmt.parseInt(usize, it.rest(), 10),
@@ -465,12 +465,12 @@ fn parseMetaSubsetLinear(meta: []const u8, keys: anytype) ![keys.len][]const u8 
     // `emote-only` which is present when a message contains only emotes,
     // but disappears when there's also non-emote content. GJ Twitch!
     var values: [keys.len][]const u8 = undefined;
-    var it = std.mem.tokenize(meta, ";");
+    var it = std.mem.tokenize(u8, meta, ";");
 
     // linear scan
     var first_miss: usize = outer: for (keys) |k, i| {
         while (it.next()) |kv| {
-            var kv_it = std.mem.tokenize(kv, "=");
+            var kv_it = std.mem.tokenize(u8, kv, "=");
             const meta_k = kv_it.next().?; // First call will always succeed
             const meta_v = kv_it.rest();
             if (std.mem.eql(u8, k, meta_k)) {
@@ -492,9 +492,9 @@ fn parseMetaSubsetLinear(meta: []const u8, keys: anytype) ![keys.len][]const u8 
 
     // bad scan
     outer: for (keys[first_miss..]) |k, i| {
-        it = std.mem.tokenize(meta, ";"); // we now reset every loop
+        it = std.mem.tokenize(u8, meta, ";"); // we now reset every loop
         while (it.next()) |kv| {
-            var kv_it = std.mem.tokenize(kv, "=");
+            var kv_it = std.mem.tokenize(u8, kv, "=");
             const meta_k = kv_it.next().?; // First call will always succeed
             const meta_v = kv_it.rest();
             if (std.mem.eql(u8, k, meta_k)) {

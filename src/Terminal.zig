@@ -514,7 +514,7 @@ fn printWordWrap(
     const width = buffer.width;
     var height = buffer.height; // TODO: do we really need to track this?
 
-    var it = std.mem.tokenize(text, " ");
+    var it = std.mem.tokenize(u8, text, " ");
     var emote_array_idx: usize = 0;
     var codepoints: usize = 0;
     while (it.next()) |word| : (codepoints += 1) { // we add the space, twitch removes extra spaces
