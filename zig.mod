@@ -4,7 +4,7 @@ description: A Twitch chat client for the terminal.
 dev_dependencies:
   - src: local zbox forks/zbox
   - src: git https://github.com/frmdstryr/zig-datetime
-  - src: local clap .gyro/zig-clap-Hejsil-e7822aaf172704c557ad063468b2229131ce2aef/pkg/clap.zig
+  - src: git https://github.com/Hejsil/zig-clap branch-zig-master
   - src: local iguanaTLS .gyro/iguanaTLS-alexnask-0d39a361639ad5469f8e4dcdaea35446bbe54b48/pkg/src/main.zig
   - src: local hzzp .gyro/hzzp-truemedian-b4e874ed921f76941dce2870677b713c8e0ebc6c/pkg/src/main.zig
   - src: local tzif .gyro/zig-tzif-leroycep-bf91177e6ff7f52cffc44c33b6d755392ed7f9d7/pkg/tzif.zig
