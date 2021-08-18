@@ -2,6 +2,7 @@ id: 1jewxv8y57bejcvi9onjm0uetewi8rn3gwrttjy8pta40s03
 name: bork
 bin: True
 provides: ["bork"]
+license: MIT
 description: A Twitch chat client for the terminal.
 dev_dependencies:
   - src: local zbox forks/zbox
