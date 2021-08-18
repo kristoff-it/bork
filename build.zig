@@ -12,7 +12,11 @@ pub fn build(b: *std.build.Builder) void {
 
     exe.setTarget(target);
     exe.setBuildMode(mode);
-    deps.addAllTo(exe);
+    if (@hasDecl(deps, "addAllTo")) {
+        deps.addAllTo(exe);
+    } else {
+        deps.pkgs.addAllTo(exe);
+    }
     exe.install();
 
     const run_cmd = exe.run();
