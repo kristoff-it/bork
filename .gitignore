@@ -1,6 +1,5 @@
-zig-cache/
+zig-*
 .DS_Store
 *.log
-zig-out/
 .zigmod
 deps.zig
