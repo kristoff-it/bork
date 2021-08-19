@@ -4,3 +4,4 @@ git https://github.com/frmdstryr/zig-datetime commit-0d7bfc51ce04f51372e71db0ac5
 git https://github.com/Hejsil/zig-clap commit-c5fb22823a9a4a699acaefc1e9febfee0b8e506c
 git https://github.com/alexnask/iguanaTLS commit-0d39a361639ad5469f8e4dcdaea35446bbe54b48
 git https://github.com/truemedian/hzzp commit-492107d44caa2676c7b5aa4e934e1e937232d652
+git https://github.com/nektro/zig-tzif commit-8ee95f696b24062e73a8918b0aa2525763ccce80
