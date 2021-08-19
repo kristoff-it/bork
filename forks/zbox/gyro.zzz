@@ -11,7 +11,7 @@ pkgs:
       src/*.zig
 deps:
   ziglyph:
-    root: src/ziglyph.zig
+    root: src/Ziglyph.zig
     src:
       github:
         user: jecolon

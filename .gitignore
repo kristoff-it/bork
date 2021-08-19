@@ -3,3 +3,4 @@ zig-*
 *.log
 .zigmod
 deps.zig
+.gyro

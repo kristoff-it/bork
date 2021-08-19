@@ -17,7 +17,7 @@ deps:
     src:
       local: forks/zbox
   datetime:
-    root: datetime.zig
+    root: src/main.zig
     src:
       github:
         repo: zig-datetime
@@ -46,7 +46,7 @@ deps:
     root: tzif.zig
     src:
       github:
-        user: leroycep
+        user: nektro
         repo: zig-tzif
         ref: master
   ziglyph:
