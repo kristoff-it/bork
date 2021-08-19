@@ -39,4 +39,5 @@ jobs:
       - uses: nektro/actions-setup-zigmod@v1.0.0
       - run: zigmod version
       - run: zigmod ci
+      - run: cat deps.zig
       - run: zig build
