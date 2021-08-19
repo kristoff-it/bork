@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  gyro:
+    strategy:
+      fail-fast: false
+      matrix:
+        host: [ ubuntu-latest, macos-latest, windows-latest ]
+    runs-on: ${{matrix.host}}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: goto-bus-stop/setup-zig@v1
+        with:
+          version: master
+      - run: zig version
+      - run: zig env
+      - uses: mattnite/setup-gyro@v1
+      - run: gyro build
+
+  zigmod:
+    strategy:
+      fail-fast: false
+      matrix:
+        host: [ ubuntu-latest, macos-latest, windows-latest ]
+    runs-on: ${{matrix.host}}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: goto-bus-stop/setup-zig@v1
+        with:
+          version: master
+      - run: zig version
+      - run: zig env
+      - uses: nektro/actions-setup-zigmod@v1.0.0
+      - run: zigmod version
+      - run: zigmod ci
+      - run: zig build
