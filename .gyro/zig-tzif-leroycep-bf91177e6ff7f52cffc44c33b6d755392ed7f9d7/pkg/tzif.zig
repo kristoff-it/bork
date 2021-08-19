@@ -387,7 +387,7 @@ fn hhmmss_offset_to_s(_string: []const u8, idx: *usize) !i32 {
 
     var result: i32 = 0;
 
-    var segment_iter = std.mem.split(string, ":");
+    var segment_iter = std.mem.split(u8, string, ":");
     const hour_string = segment_iter.next() orelse return error.EmptyString;
     const hours = try std.fmt.parseInt(u32, hour_string, 10);
     if (hours > 167) {
@@ -432,7 +432,7 @@ fn parsePosixTZ_rule(_string: []const u8) !PosixTZ.Rule {
         if (julian_day0 > 365) return error.InvalidFormat;
         return PosixTZ.Rule{ .JulianDay = .{ .oneBased = false, .day = julian_day0, .time = time } };
     } else if (string[0] == 'M') {
-        var split_iter = std.mem.split(string[1..], ".");
+        var split_iter = std.mem.split(u8, string[1..], ".");
         const m_str = split_iter.next() orelse return error.InvalidFormat;
         const n_str = split_iter.next() orelse return error.InvalidFormat;
         const d_str = split_iter.next() orelse return error.InvalidFormat;

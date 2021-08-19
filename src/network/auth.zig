@@ -41,7 +41,7 @@ pub fn checkTokenValidity(allocator: *std.mem.Allocator, token: []const u8) !boo
         tls_sock.writer(),
     );
 
-    var it = std.mem.tokenize(token, ":");
+    var it = std.mem.tokenize(u8, token, ":");
     _ = it.next();
     const header_oauth = try std.fmt.allocPrint(allocator, "OAuth {s}", .{it.next().?});
     defer allocator.free(header_oauth);
