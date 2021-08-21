@@ -10,5 +10,5 @@ dev_dependencies:
   - src: git https://github.com/Hejsil/zig-clap branch-zig-master
   - src: git https://github.com/alexnask/iguanaTLS
   - src: git https://github.com/truemedian/hzzp
-  - src: git https://github.com/nektro/zig-tzif
+  - src: git https://github.com/leroycep/zig-tzif
   - src: git https://github.com/jecolon/ziglyph
