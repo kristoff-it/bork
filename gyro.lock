@@ -2,5 +2,5 @@ github frmdstryr zig-datetime master src/main.zig 0d7bfc51ce04f51372e71db0ac5546
 github Hejsil zig-clap zig-master clap.zig c5fb22823a9a4a699acaefc1e9febfee0b8e506c
 github alexnask iguanaTLS master src/main.zig 0d39a361639ad5469f8e4dcdaea35446bbe54b48
 github truemedian hzzp master src/main.zig 492107d44caa2676c7b5aa4e934e1e937232d652
-github nektro zig-tzif master tzif.zig 8ee95f696b24062e73a8918b0aa2525763ccce80
-github jecolon ziglyph main src/Ziglyph.zig f0b680081ebac378fda4a8826e003cfb37f9f73e
+github leroycep zig-tzif master tzif.zig cfe53b1979e13d886583c34f8e53ff111fb5d70c
+github jecolon ziglyph main src/Ziglyph.zig ed58cc489aa62bcd216c197d6f34fe10210493aa

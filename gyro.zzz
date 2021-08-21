@@ -46,7 +46,7 @@ deps:
     root: tzif.zig
     src:
       github:
-        user: nektro
+        user: leroycep
         repo: zig-tzif
         ref: master
   ziglyph:
