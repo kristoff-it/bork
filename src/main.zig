@@ -255,7 +255,7 @@ fn askUserNewToken(alloc: *std.mem.Allocator, maybe_home: []const u8, oauth_file
     var termios = original_termios;
 
     // disable echo
-    termios.lflag &= ~@as(std.os.tcflag_t, std.os.ECHO);
+    termios.lflag &= ~@as(std.os.linux.tcflag_t, std.os.linux.ECHO);
 
     try std.os.tcsetattr(in.handle, .FLUSH, termios);
     defer std.os.tcsetattr(in.handle, .FLUSH, original_termios) catch {};

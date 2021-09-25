@@ -5,7 +5,7 @@
 
 const std = @import("std");
 const fs = std.fs;
-const os = std.os;
+const os = std.os.linux;
 const io = std.io;
 const mem = std.mem;
 const fmt = std.fmt;
@@ -170,8 +170,8 @@ pub fn endSync() ErrorSet.BufWrite!void {
 const TermSize = struct { height: usize, width: usize };
 pub fn size() anyerror!TermSize {
     var winsize = mem.zeroes(os.winsize);
-    const err = os.system.ioctl(state().tty.in.context.handle, os.TIOCGWINSZ, @ptrToInt(&winsize));
-    if (os.errno(err) == 0)
+    const err = std.os.system.ioctl(state().tty.in.context.handle, os.T.IOCGWINSZ, @ptrToInt(&winsize));
+    if (os.getErrno(err) == os.E.SUCCESS)
         return TermSize{ .height = winsize.ws_row, .width = winsize.ws_col };
     return error.IoctlError;
     // return os.unexpectedErrno(err);
@@ -221,7 +221,7 @@ pub fn setup(alloc: *Allocator) ErrorSet.Setup!void {
 
     // store current terminal settings
     // and setup the terminal for graphical IO
-    self.original_termios = try os.tcgetattr(self.tty.in.context.handle);
+    self.original_termios = try std.os.tcgetattr(self.tty.in.context.handle);
     var termios = self.original_termios;
 
     // termios flags for 'raw' mode.
@@ -242,8 +242,8 @@ pub fn setup(alloc: *Allocator) ErrorSet.Setup!void {
     termios.cc[VMIN] = 0; // read can timeout before any data is actually written; async timer
     termios.cc[VTIME] = 1; // 1/10th of a second
 
-    try os.tcsetattr(self.tty.in.context.handle, .FLUSH, termios);
-    errdefer os.tcsetattr(self.tty.in.context.handle, .FLUSH, self.original_termios) catch {};
+    try std.os.tcsetattr(self.tty.in.context.handle, .FLUSH, termios);
+    errdefer std.os.tcsetattr(self.tty.in.context.handle, .FLUSH, self.original_termios) catch {};
     try enterAltScreen();
     errdefer exitAltScreen() catch unreachable;
 
@@ -284,7 +284,7 @@ pub fn teardown() void {
     exitMouseMode() catch {};
     exitAltScreen() catch {};
     flush() catch {};
-    os.tcsetattr(self.tty.in.context.handle, .FLUSH, self.original_termios) catch {};
+    std.os.tcsetattr(self.tty.in.context.handle, .FLUSH, self.original_termios) catch {};
 
     self.tty.in.context.close();
     self.tty.out.context.close();
