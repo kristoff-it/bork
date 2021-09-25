@@ -8,7 +8,10 @@ pub fn build(b: *std.build.Builder) void {
     const exe = b.addExecutable("bork", "src/main.zig");
 
     const local = b.option(bool, "local", "not using real data and testing locally") orelse false;
-    exe.addBuildOption(bool, "local", local);
+
+    const options = b.addOptions();
+    options.addOption(bool, "local", local);
+    exe.addOptions("build_options", options);
 
     exe.setTarget(target);
     exe.setBuildMode(mode);
