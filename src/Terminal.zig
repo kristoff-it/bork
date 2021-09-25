@@ -522,7 +522,7 @@ fn printWordWrap(
         const word_len = try std.unicode.utf8CountCodepoints(word);
         codepoints += word_len;
 
-        const word_width = @intCast(usize, try ziglyph.Width.strWidth(buffer.allocator, word, .half));
+        const word_width = @intCast(usize, try ziglyph.display_width.strWidth(buffer.allocator, word, .half));
 
         if (emulator == .kitty and emote_array_idx < emotes.len and
             emotes[emote_array_idx].end == codepoints - 1)
