@@ -200,7 +200,7 @@ fn send(self: *Self, cmd: Command) void {
     held.release();
 }
 
-fn isReconnecting(self: *self) bool {
+fn isReconnecting(self: *Self) bool {
     return @atomicLoad(bool, &self._atomic_reconnecting, .SeqCst);
 }
 
