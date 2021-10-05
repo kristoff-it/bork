@@ -213,6 +213,7 @@ pub fn main() !void {
                     need_repaint = chat.addMessage(msg);
                 },
                 .clear => |c| {
+                    display.clearActiveInteraction(c);
                     chat.clearChat(c);
                     need_repaint = true;
                 },

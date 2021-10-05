@@ -1160,6 +1160,24 @@ pub fn handleClick(self: *Self, row: usize, col: usize) !bool {
     return true;
 }
 
+pub fn clearActiveInteraction(self: *Self, all_or_name: ?[]const u8) void {
+    if (all_or_name) |name| {
+        const msg_name = switch (self.active_interaction) {
+            .subscriber_badge => |m| m.chat_message.login_name,
+            .username => |m| m.chat_message.login_name,
+            .chat_message => |m| m.chat_message.login_name,
+            .event_message => |m| m.chat_message.login_name,
+            else => return,
+        };
+
+        if (!std.mem.eql(u8, name, msg_name)) {
+            return;
+        }
+    }
+
+    self.active_interaction = .none;
+}
+
 fn renderSubBadgeOverlay(months: usize, buf: *zbox.Buffer, row: usize, badges_width: usize) !void {
     const fmt = " Sub for {d} months ";
     const fmt_len = std.fmt.count(fmt, .{months});
