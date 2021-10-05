@@ -14,6 +14,7 @@ pub const Event = union(enum) {
     connected,
     disconnected,
     reconnected,
+    clear: ?[]const u8, // optional nickname, if empty delete all
 };
 
 pub const UserCommand = union(enum) {
@@ -112,6 +113,9 @@ fn receiveMessages(self: *Self) void {
             .ping => {
                 self.send(.pong);
             },
+            .clear => |c| {
+                self.ch.put(GlobalEventUnion{ .network = .{ .clear = c } });
+            },
             .message => |msg| {
                 switch (msg.kind) {
                     else => {},
@@ -140,9 +144,9 @@ fn receiveMessages(self: *Self) void {
                             self.ch.put(GlobalEventUnion{
                                 .network = .{
                                     .message = Chat.Message{
+                                        .login_name = msg.login_name,
                                         .kind = .{
                                             .chat = .{
-                                                .login_name = r.login_name,
                                                 .display_name = r.display_name,
                                                 .text = r.resub_message,
                                                 .time = r.time,
@@ -200,7 +204,7 @@ fn send(self: *Self, cmd: Command) void {
     held.release();
 }
 
-fn isReconnecting(self: *self) bool {
+fn isReconnecting(self: *Self) bool {
     return @atomicLoad(bool, &self._atomic_reconnecting, .SeqCst);
 }
 

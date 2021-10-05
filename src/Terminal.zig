@@ -471,6 +471,7 @@ fn renderMessage(self: *Self, msg: *TerminalMessage) !void {
             {
                 cursor.context.attribs = .{ .fg_cyan = true };
                 try printWordWrap(
+                    self.allocator,
                     "*",
                     &[0]Chat.Message.Emote{},
                     &msg.buffer,
@@ -479,6 +480,7 @@ fn renderMessage(self: *Self, msg: *TerminalMessage) !void {
 
                 cursor.context.attribs = .{ .feint = true };
                 try printWordWrap(
+                    self.allocator,
                     c.text[action_preamble.len .. c.text.len - 1],
                     c.emotes,
                     &msg.buffer,
@@ -487,6 +489,7 @@ fn renderMessage(self: *Self, msg: *TerminalMessage) !void {
 
                 cursor.context.attribs = .{ .fg_cyan = true };
                 try printWordWrap(
+                    self.allocator,
                     "*",
                     &[0]Chat.Message.Emote{},
                     &msg.buffer,
@@ -494,6 +497,7 @@ fn renderMessage(self: *Self, msg: *TerminalMessage) !void {
                 );
             } else {
                 try printWordWrap(
+                    self.allocator,
                     c.text,
                     c.emotes,
                     &msg.buffer,
@@ -506,6 +510,7 @@ fn renderMessage(self: *Self, msg: *TerminalMessage) !void {
 }
 
 fn printWordWrap(
+    allocator: *std.mem.Allocator,
     text: []const u8,
     emotes: []const Chat.Message.Emote,
     buffer: *zbox.Buffer,
@@ -522,7 +527,11 @@ fn printWordWrap(
         const word_len = try std.unicode.utf8CountCodepoints(word);
         codepoints += word_len;
 
-        const word_width = @intCast(usize, try ziglyph.Width.strWidth(word, .half));
+        const word_width = @intCast(usize, try ziglyph.display_width.strWidth(
+            allocator,
+            word,
+            .half,
+        ));
 
         if (emulator == .kitty and emote_array_idx < emotes.len and
             emotes[emote_array_idx].end == codepoints - 1)
@@ -834,11 +843,7 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                     blk: {
                         if (row > 0) {
                             if (m.prev) |prev| {
-                                const same_name = switch (prev.kind) {
-                                    else => false,
-                                    .chat => |c_prev| std.mem.eql(u8, c.login_name, c_prev.login_name),
-                                };
-                                if (same_name) {
+                                if (std.mem.eql(u8, m.login_name, prev.login_name)) {
                                     const prev_time = prev.kind.chat.time;
                                     if (std.meta.eql(prev_time, c.time)) {
                                         var cur = self.chatBuf.cursorAt(row, 0);
@@ -918,7 +923,7 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                             // Badges
                             const badges_width: usize = if (c.is_mod) 4 else 3;
                             if (c.sub_months > 0 and
-                                !std.mem.eql(u8, self.streamer_name, c.login_name))
+                                !std.mem.eql(u8, self.streamer_name, m.login_name))
                             {
                                 var sub_cur = self.chatBuf.cursorAt(
                                     cur.row_num,
@@ -1089,13 +1094,13 @@ pub fn handleClick(self: *Self, row: usize, col: usize) !bool {
                 // Username elements can't point to .line messages
                 tm.is_selected = false;
 
-                const name = tm.chat_message.kind.chat.login_name;
+                const name = tm.chat_message.login_name;
                 var next = tm.chat_message.next;
                 while (next) |n| : (next = n.next) {
                     switch (n.kind) {
                         else => break,
-                        .chat => |c| {
-                            if (!std.mem.eql(u8, c.login_name, name)) break;
+                        .chat => {
+                            if (!std.mem.eql(u8, n.login_name, name)) break;
                             var term_message = @fieldParentPtr(TerminalMessage, "chat_message", n);
                             term_message.is_selected = false;
                         },
@@ -1136,13 +1141,13 @@ pub fn handleClick(self: *Self, row: usize, col: usize) !bool {
                 // Username elements can't point to .line messages
                 tm.is_selected = true;
 
-                const name = tm.chat_message.kind.chat.login_name;
+                const name = tm.chat_message.login_name;
                 var next = tm.chat_message.next;
                 while (next) |n| : (next = n.next) {
                     switch (n.kind) {
                         else => break,
-                        .chat => |c| {
-                            if (!std.mem.eql(u8, c.login_name, name)) break;
+                        .chat => {
+                            if (!std.mem.eql(u8, n.login_name, name)) break;
                             var term_message = @fieldParentPtr(TerminalMessage, "chat_message", n);
                             term_message.is_selected = true;
                         },

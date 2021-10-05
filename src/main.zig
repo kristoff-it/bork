@@ -212,6 +212,10 @@ pub fn main() !void {
                     const msg = try display.prepareMessage(m);
                     need_repaint = chat.addMessage(msg);
                 },
+                .clear => |c| {
+                    chat.clearChat(c);
+                    need_repaint = true;
+                },
             },
         }
 
@@ -255,7 +259,7 @@ fn askUserNewToken(alloc: *std.mem.Allocator, maybe_home: []const u8, oauth_file
     var termios = original_termios;
 
     // disable echo
-    termios.lflag &= ~@as(std.os.tcflag_t, std.os.ECHO);
+    termios.lflag &= ~@as(std.os.system.tcflag_t, std.os.system.ECHO);
 
     try std.os.tcsetattr(in.handle, .FLUSH, termios);
     defer std.os.tcsetattr(in.handle, .FLUSH, original_termios) catch {};
@@ -271,7 +275,7 @@ fn askUserNewToken(alloc: *std.mem.Allocator, maybe_home: []const u8, oauth_file
             \\ 
             \\    {s}/{s}
             \\ 
-            \\ Press any key to and continue.
+            \\ Press any key to continue.
             \\ 
         , .{ maybe_home, oauth_file_name });
         try std.os.tcsetattr(in.handle, .FLUSH, original_termios);

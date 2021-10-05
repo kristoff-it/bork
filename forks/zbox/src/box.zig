@@ -198,7 +198,7 @@ pub const Buffer = struct {
             var cp_iter = (try std.unicode.Utf8View.init(bytes)).iterator();
             var bytes_written: usize = 0;
             while (cp_iter.nextCodepoint()) |cp| {
-                const char_w = @intCast(usize, ziglyph.Width.codePointWidth(cp, .half));
+                const char_w = @intCast(usize, ziglyph.display_width.codePointWidth(cp, .half));
 
                 if (self.col_num + char_w > self.buffer.width) {
                     if (!self.wrap) @panic("tried to print past the row end");

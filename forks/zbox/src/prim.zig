@@ -4,6 +4,7 @@
 //! application code.
 
 const std = @import("std");
+const builtin = @import("builtin");
 const fs = std.fs;
 const os = std.os;
 const io = std.io;
@@ -165,13 +166,27 @@ pub fn endSync() ErrorSet.BufWrite!void {
     try send("\x1BP=2s\x1B\\");
 }
 
+// These bits were in the stdlib, got deleted, maybe contribute them back
+// one day. These are some missing termios bits for darwin.
+pub const TIOCGWINSZ = switch (builtin.os.tag) {
+    .linux => 0x5413,
+    .macos => ior(0x40000000, 't', 104, @sizeOf(os.system.winsize)),
+    else => @compileError("Missing termiosbits for this target, sorry."),
+};
+
+pub const IOCPARM_MASK = 0x1fff;
+fn ior(inout: u32, group: usize, num: usize, len: usize) usize {
+    return (inout | ((len & IOCPARM_MASK) << 16) | ((group) << 8) | (num));
+}
+
 /// provides size of screen as the bottom right most position that you can move
 /// your cursor to.
 const TermSize = struct { height: usize, width: usize };
 pub fn size() anyerror!TermSize {
-    var winsize = mem.zeroes(os.winsize);
-    const err = os.system.ioctl(state().tty.in.context.handle, os.TIOCGWINSZ, @ptrToInt(&winsize));
-    if (os.errno(err) == 0)
+    var winsize = mem.zeroes(os.system.winsize);
+
+    const err = os.system.ioctl(state().tty.in.context.handle, TIOCGWINSZ, @ptrToInt(&winsize));
+    if (os.errno(err) == .SUCCESS)
         return TermSize{ .height = winsize.ws_row, .width = winsize.ws_col };
     return error.IoctlError;
     // return os.unexpectedErrno(err);
@@ -226,18 +241,16 @@ pub fn setup(alloc: *Allocator) ErrorSet.Setup!void {
 
     // termios flags for 'raw' mode.
     termios.iflag &= ~@as(
-        os.tcflag_t,
-        os.IGNBRK | os.BRKINT | os.PARMRK | os.ISTRIP |
-            os.INLCR | os.IGNCR | os.ICRNL | os.IXON,
+        os.system.tcflag_t,
+        os.system.IGNBRK | os.system.BRKINT | os.system.PARMRK | os.system.ISTRIP |
+            os.system.INLCR | os.system.IGNCR | os.system.ICRNL | os.system.IXON,
     );
     termios.lflag &= ~@as(
-        os.tcflag_t,
-        os.ICANON | os.ECHO | os.ECHONL | os.IEXTEN | os.ISIG,
+        os.system.tcflag_t,
+        os.system.ICANON | os.system.ECHO | os.system.ECHONL | os.system.IEXTEN | os.system.ISIG,
     );
-    termios.oflag &= ~@as(os.tcflag_t, os.OPOST);
-    termios.cflag &= ~@as(os.tcflag_t, os.CSIZE | os.PARENB);
-
-    termios.cflag |= os.CS8;
+    termios.oflag &= ~@as(os.system.tcflag_t, os.system.OPOST);
+    termios.cflag |= os.system.CS8;
 
     termios.cc[VMIN] = 0; // read can timeout before any data is actually written; async timer
     termios.cc[VTIME] = 1; // 1/10th of a second

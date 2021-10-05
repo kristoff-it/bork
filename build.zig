@@ -17,8 +17,10 @@ pub fn build(b: *Builder) void {
     pkgs.addAllTo(exe);
 
     const local = b.option(bool, "local", "not using real data and testing locally") orelse false;
-    exe.addBuildOption(bool, "local", local);
+    const exe_options = b.addOptions();
+    exe_options.addOption(bool, "local", local);
 
+    exe.addOptions("build_options", exe_options);
     exe.setTarget(target);
     exe.setBuildMode(mode);
     exe.install();
