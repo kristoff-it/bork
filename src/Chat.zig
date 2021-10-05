@@ -159,10 +159,31 @@ pub fn addMessage(self: *Self, msg: *Message) bool {
     return need_render;
 }
 
-/// TODO: we leakin
+/// TODO: we leakin, we scanning
 pub fn clearChat(self: *Self, all_or_name: ?[]const u8) void {
     if (all_or_name) |login_name| {
         std.log.debug("clear chat: {s}", .{login_name});
+        var current = self.last_message;
+        while (current) |c| : (current = c.prev) {
+            if (std.mem.eql(u8, login_name, c.login_name)) {
+                if (c.prev) |p| p.next = c.next;
+                if (c.next) |n| n.prev = c.prev;
+
+                // If it's the bottom message, scroll the view
+                if (self.bottom_message) |b| {
+                    if (c == b) {
+                        if (c.next) |n| {
+                            self.bottom_message = n;
+                        } else {
+                            self.bottom_message = c.prev;
+                        }
+                    }
+                }
+
+                // If it's the last message, update the reference
+                if (c == self.last_message) self.last_message = c.prev;
+            }
+        }
     } else {
         std.log.debug("clear chat all", .{});
         self.last_message = null;
