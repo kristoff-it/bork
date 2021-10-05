@@ -4,6 +4,7 @@ const Chat = @import("../Chat.zig");
 
 const ParseResult = union(enum) {
     ping,
+    clear: ?[]const u8,
     message: Chat.Message,
 };
 
@@ -100,9 +101,9 @@ pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, tz: datetime.Timezone
 
         return ParseResult{
             .message = Chat.Message{
+                .login_name = display_name,
                 .kind = .{
                     .chat = .{
-                        .login_name = display_name,
                         .text = trailer,
                         .time = time,
                         .display_name = display_name,
@@ -114,6 +115,14 @@ pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, tz: datetime.Timezone
                     },
                 },
             },
+        };
+    } else if (std.mem.eql(u8, cmd, "CLEARCHAT")) {
+        // @ban-duration=600;
+        // room-id=102701971;
+        // target-user-id=137180345;
+        // tmi-sent-ts=1625379632217 :tmi.twitch.tv CLEARCHAT #kristoff_it :soul_serpent
+        return ParseResult{
+            .clear = if (trailer.len > 0) trailer else null,
         };
     } else if (std.mem.eql(u8, cmd, "USERNOTICE")) {
         // Welcome to a new world of pain.
@@ -170,10 +179,10 @@ pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, tz: datetime.Timezone
             const count = try std.fmt.parseInt(usize, meta[3], 10);
             return ParseResult{
                 .message = Chat.Message{
+                    .login_name = meta[1],
                     .kind = .{
                         .raid = .{
                             .display_name = meta[0],
-                            .login_name = meta[1],
                             .profile_picture_url = meta[2],
                             .count = count,
                         },
@@ -214,10 +223,10 @@ pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, tz: datetime.Timezone
 
             return ParseResult{
                 .message = Chat.Message{
+                    .login_name = meta[1],
                     .kind = .{
                         .sub_mistery_gift = .{
                             .display_name = meta[0],
-                            .login_name = meta[1],
                             .count = count,
                             .tier = tier,
                         },
@@ -264,10 +273,10 @@ pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, tz: datetime.Timezone
 
             return ParseResult{
                 .message = Chat.Message{
+                    .login_name = meta[1],
                     .kind = .{
                         .sub_gift = .{
                             .sender_display_name = meta[0],
-                            .sender_login_name = meta[1],
                             .months = months,
                             .tier = tier,
                             .recipient_display_name = meta[3],
@@ -287,9 +296,9 @@ pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, tz: datetime.Timezone
 
             return ParseResult{
                 .message = Chat.Message{
+                    .login_name = meta[1],
                     .kind = .{
                         .sub = .{
-                            .login_name = meta[1],
                             .display_name = meta[0],
                             .tier = tier,
                         },
@@ -332,9 +341,9 @@ pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, tz: datetime.Timezone
 
             return ParseResult{
                 .message = Chat.Message{
+                    .login_name = meta[2],
                     .kind = .{
                         .resub = .{
-                            .login_name = meta[2],
                             .display_name = meta[0],
                             .count = count,
                             .tier = tier,

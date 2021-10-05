@@ -11,6 +11,10 @@ const Self = @This();
 pub const Message = struct {
     prev: ?*Message = null,
     next: ?*Message = null,
+    login_name: []const u8,
+    // TODO: line doesn't really have a associated login name,
+    //       check how much of a problem that is.
+
     kind: union(enum) {
         chat: Comment,
         line,
@@ -22,7 +26,6 @@ pub const Message = struct {
     },
 
     pub const Comment = struct {
-        login_name: []const u8,
         text: []const u8,
         time: [5]u8,
         /// Author's name (w/ unicode support, empty if not present)
@@ -40,7 +43,6 @@ pub const Message = struct {
     };
 
     pub const Raid = struct {
-        login_name: []const u8,
         display_name: []const u8,
         profile_picture_url: []const u8,
         /// How many raiders
@@ -49,14 +51,12 @@ pub const Message = struct {
 
     /// When somebody gifts X subs to random people
     pub const SubMisteryGift = struct {
-        login_name: []const u8,
         display_name: []const u8,
         count: usize,
         tier: SubTier,
     };
 
     pub const SubGift = struct {
-        sender_login_name: []const u8,
         sender_display_name: []const u8,
         months: usize,
         tier: SubTier,
@@ -65,12 +65,11 @@ pub const Message = struct {
     };
 
     pub const Sub = struct {
-        login_name: []const u8,
         display_name: []const u8,
         tier: SubTier,
     };
+
     pub const Resub = struct {
-        login_name: []const u8,
         display_name: []const u8,
         count: usize,
         tier: SubTier,
@@ -78,6 +77,7 @@ pub const Message = struct {
         resub_message: []const u8,
         resub_message_emotes: []Emote,
     };
+
     // ------
 
     pub const SubTier = enum { prime, t1, t2, t3 };
@@ -104,7 +104,7 @@ pub fn setConnectionStatus(self: *Self, status: enum { disconnected, reconnected
                 const last = self.last_message orelse return;
                 if (last.kind != .line) {
                     var msg = try self.allocator.create(Message);
-                    msg.* = Message{ .kind = .line };
+                    msg.* = Message{ .kind = .line, .login_name = &[0]u8{} };
                     _ = self.addMessage(msg);
                 }
             }
@@ -157,4 +157,15 @@ pub fn addMessage(self: *Self, msg: *Message) bool {
     self.last_message = msg;
 
     return need_render;
+}
+
+/// TODO: we leakin
+pub fn clearChat(self: *Self, all_or_name: ?[]const u8) void {
+    if (all_or_name) |login_name| {
+        std.log.debug("clear chat: {s}", .{login_name});
+    } else {
+        std.log.debug("clear chat all", .{});
+        self.last_message = null;
+        self.bottom_message = null;
+    }
 }

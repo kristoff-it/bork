@@ -6,7 +6,7 @@ pub const pkgs = struct {
         .dependencies = &[_]std.build.Pkg{
             std.build.Pkg{
                 .name = "ziglyph",
-                .path = .{ .path = ".gyro/ziglyph-jecolon-39a65437dfc59d47b66abde5846cb7f918b68c29/pkg/src/Ziglyph.zig" },
+                .path = .{ .path = ".gyro/ziglyph-jecolon-c37d93b6c8e6a65aaf7f76157a8a95f9c9c43f61/pkg/src/Ziglyph.zig" },
             },
         },
     };
@@ -23,12 +23,12 @@ pub const pkgs = struct {
 
     pub const iguanaTLS = std.build.Pkg{
         .name = "iguanaTLS",
-        .path = .{ .path = ".gyro/iguanaTLS-alexnask-0d39a361639ad5469f8e4dcdaea35446bbe54b48/pkg/src/main.zig" },
+        .path = .{ .path = ".gyro/iguanaTLS-nektro-953ad821fae6c920fb82399493663668cd91bde7/pkg/src/main.zig" },
     };
 
     pub const hzzp = std.build.Pkg{
         .name = "hzzp",
-        .path = .{ .path = ".gyro/hzzp-truemedian-b4e874ed921f76941dce2870677b713c8e0ebc6c/pkg/src/main.zig" },
+        .path = .{ .path = ".gyro/hzzp-truemedian-417eb13fefb05835c0534e622b5a6e2dc2fcd3d7/pkg/src/main.zig" },
     };
 
     pub const tzif = std.build.Pkg{
@@ -38,7 +38,7 @@ pub const pkgs = struct {
 
     pub const ziglyph = std.build.Pkg{
         .name = "ziglyph",
-        .path = .{ .path = ".gyro/ziglyph-jecolon-39a65437dfc59d47b66abde5846cb7f918b68c29/pkg/src/Ziglyph.zig" },
+        .path = .{ .path = ".gyro/ziglyph-jecolon-c37d93b6c8e6a65aaf7f76157a8a95f9c9c43f61/pkg/src/Ziglyph.zig" },
     };
 
     pub fn addAllTo(artifact: *std.build.LibExeObjStep) void {
@@ -55,8 +55,8 @@ pub const base_dirs = struct {
     pub const zbox = "forks/zbox";
     pub const datetime = ".gyro/zig-datetime-frmdstryr-b52235d4026ead2ce8e2b768daf880f8174f0be5/pkg";
     pub const clap = ".gyro/zig-clap-Hejsil-e7822aaf172704c557ad063468b2229131ce2aef/pkg";
-    pub const iguanaTLS = ".gyro/iguanaTLS-alexnask-0d39a361639ad5469f8e4dcdaea35446bbe54b48/pkg";
-    pub const hzzp = ".gyro/hzzp-truemedian-b4e874ed921f76941dce2870677b713c8e0ebc6c/pkg";
+    pub const iguanaTLS = ".gyro/iguanaTLS-nektro-953ad821fae6c920fb82399493663668cd91bde7/pkg";
+    pub const hzzp = ".gyro/hzzp-truemedian-417eb13fefb05835c0534e622b5a6e2dc2fcd3d7/pkg";
     pub const tzif = ".gyro/zig-tzif-leroycep-bf91177e6ff7f52cffc44c33b6d755392ed7f9d7/pkg";
-    pub const ziglyph = ".gyro/ziglyph-jecolon-39a65437dfc59d47b66abde5846cb7f918b68c29/pkg";
+    pub const ziglyph = ".gyro/ziglyph-jecolon-c37d93b6c8e6a65aaf7f76157a8a95f9c9c43f61/pkg";
 };
