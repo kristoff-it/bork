@@ -112,6 +112,7 @@ pub fn main() !void {
                 try oauth_file.setEndPos(0);
                 break :auth try askUserNewToken(alloc, maybe_home, oauth_file);
             }
+
             break :auth old_tok;
         } else {
             std.debug.print(
@@ -151,7 +152,6 @@ pub fn main() !void {
     var chaos = false;
     while (true) {
         var need_repaint = false;
-
         const event = ch.get();
         switch (event) {
             .display => |de| {
