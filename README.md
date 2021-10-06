@@ -1,18 +1,22 @@
 # bork
+A TUI chat client specifically tailored for live coding on Twitch. Currently in alpha stage.
 
-A Twitch chat client for the terminal.
+ 
+## What?
+Bork is a Twitch chat client meant to be shown on stream. It's a Terminal-UI client and as such is best suited for livecoders.
 
-Unlike irssi, bork is not an IRC client. This means that bork supports concepts unique to Twitch such as new subscriptions, sub gifts, highlighted messages, and more.
+Main features:
+- Understands Twitch-specifict concepts (subcriptions, gifted subs, ...).
+- Allows to highlight messages to show visually to which comment you're replying.
+- Displayis Twitch emotes in the terminal, **including your custom emotes!**
 
-bork also supports rendering twitch emotes to the terminal!
 
-bork is meant to be used as a twitch chat feed to be displayed on stream.
+## Usage
+todo
 
-Currently in alpha stage.
+## Build
+todo 
 
-A better readme will be written once I manage to learn Colemak. At the moment life is pain.
 
 ## Demo
-Watch demo in meantime
-
 https://youtu.be/Px8rVB3ZpKA
