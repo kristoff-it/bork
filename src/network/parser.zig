@@ -83,6 +83,22 @@ pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, tz: datetime.Timezone
 
     // Switch over all possible message types
     if (std.mem.eql(u8, cmd, "PRIVMSG")) {
+        // @badge-info=;
+        // badges=;
+        // client-nonce=69fcc90179a36691a27dcf8f91a706a9;
+        // color=;
+        // display-name=SebastianKeller_;
+        // emotes=;
+        // flags=;
+        // id=77bcc67d-2941-4c9d-a281-f83f9cc4fad4;
+        // mod=0;
+        // room-id=102701971;
+        // subscriber=0;
+        // tmi-sent-ts=1633534241992;
+        // turbo=0;
+        // user-id=79632778;
+        // user-type= :sebastiankeller_!sebastiankeller_@sebastiankeller_.tmi.twitch.tv
+        // PRIVMSG #kristoff_it :im not, ban me
         const meta = try parseMetaSubsetLinear(metadata, [_][]const u8{
             "badge-info", // 0
             "display-name", // 1
@@ -99,9 +115,14 @@ pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, tz: datetime.Timezone
         const is_mod = std.mem.eql(u8, meta[3], "1");
         const highlight_pos = std.mem.indexOf(u8, metadata, "msg-id=highlighted-message;");
 
+        // Parse the proper login name, which is similar to the display name
+        // but not exactly the same and it's needed for cleaning up messages
+        // when banning somebody.
+        const login_name = prefix[0..(std.mem.indexOfScalar(u8, prefix, '!') orelse 0)];
+
         return ParseResult{
             .message = Chat.Message{
-                .login_name = display_name,
+                .login_name = login_name,
                 .kind = .{
                     .chat = .{
                         .text = trailer,
