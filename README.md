@@ -17,7 +17,7 @@ It's also common to use terminal applications to show chat on screen, partially 
 Bork is designed to replace irssi for this usecase by providing all the functionality that a general-purpose IRC client can't provide.
 
 ## Requirements
-To be able to see emotes in the terminal, you muyst use [Kitty](https://github.com/kovidgoyal/kitty), or any terminal emulator that supports the Kitty image protocol.
+To be able to see emotes in the terminal, you muyst use [Kitty](https://github.com/kovidgoyal/kitty), or any terminal emulator that supports the Kitty graphics protocol.
 Bork will otherwise fallback to showing the emote name (eg Kappa).
 
 ## Usage
