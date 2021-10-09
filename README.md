@@ -1,5 +1,5 @@
 # bork
-*A TUI chat client tailored for live coding on Twitch, currently in alpha stage.*
+*A TUI chat client tailored for livecoding on Twitch, currently in alpha stage.*
 
 <img src=".github/bork.png"  align="right" width="350px"/>
 
