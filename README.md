@@ -1,11 +1,13 @@
 # bork
 A TUI chat client tailored for live coding on Twitch. Currently in alpha stage.
 
-Main features:
-- Displays Twitch emotes in the terminal, **including your custom emotes!**
-- Understands Twitch-specifict concepts (subcriptions, gifted subs, ...).
-- Supports clearing chat and deletes messages from banned users.
-- Click on a message to highlight it and let your viewers know who you're relpying to.
+<img src=".github/bork.png"  align="right" width="350px"/>
+
+- Displays Twitch emotes in the terminal, **including your custom emotes!**  
+- Understands Twitch-specifict concepts (subcriptions, gifted subs, ...). 
+- Displays badges for your subs, mods, etc.
+- Supports clearing chat and deletes messages from banned users. 
+- Click on a message to highlight it and let your viewers know who you're relpying to. 
 
 ## Why?
 Many livecoders show their chat feed on stream. It makes sense for the livecoding genre, since the content is text-heavy and you want viewers to be aware of all social interactions taking place, even when they put the video in full screen mode.
@@ -15,7 +17,7 @@ Another thing that livecoders often do, is use terminal applications to show cha
 Bork is designed to replace irssi for this usecase by providing all the functionality that a general-purpose IRC client can't provide.
 
 ## Requirements
-To be able to display emotes in the terminal, [Kitty](https://github.com/kovidgoyal/kitty) is required.
+To be able to see emotes in the terminal, you muyst use [Kitty](https://github.com/kovidgoyal/kitty), or any terminal emulator that supports the Kitty image protocol.
 Bork will otherwise fallback to showing the emote name (eg Kappa).
 
 ## Usage
