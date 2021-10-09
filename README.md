@@ -3,6 +3,7 @@ A TUI chat client tailored for live coding on Twitch. Currently in alpha stage.
 
 <img src=".github/bork.png"  align="right" width="350px"/>
 
+**Main features:**
 - Displays Twitch emotes in the terminal, **including your custom emotes!**  
 - Understands Twitch-specifict concepts (subcriptions, gifted subs, ...). 
 - Displays badges for your subs, mods, etc.
