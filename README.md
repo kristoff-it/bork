@@ -4,7 +4,7 @@
 <img src=".github/bork.png"  align="right" width="350px"/>
 
 ### Main features
-- Displays Twitch emotes in the terminal, **including your custom emotes!**  
+- Displays Twitch emotes in the terminal, **including your own custom emotes!**  
 - Understands Twitch-specific concepts (subcriptions, gifted subs, ...). 
 - Displays badges for your subs, mods, etc.
 - Supports clearing chat and deletes messages from banned users. 
