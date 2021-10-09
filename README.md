@@ -5,7 +5,7 @@
 
 ### Main features
 - Displays Twitch emotes in the terminal, **including your custom emotes!**  
-- Understands Twitch-specifict concepts (subcriptions, gifted subs, ...). 
+- Understands Twitch-specific concepts (subcriptions, gifted subs, ...). 
 - Displays badges for your subs, mods, etc.
 - Supports clearing chat and deletes messages from banned users. 
 - Click on a message to highlight it and let your viewers know who you're relpying to. 
