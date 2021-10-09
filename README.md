@@ -7,9 +7,6 @@ Main features:
 - Supports clearing chat and deletes messages from banned users.
 - Click on a message to highlight it and let your viewers know who you're relpying to.
 
-## What?
-Bork is a Twitch chat client meant to be shown on stream while livecoding. 
-
 ## Why?
 Many livecoders show their chat feed on stream. It makes sense for the livecoding genre, since the content is text-heavy and you want viewers to be aware of all social interactions taking place, even when they put the video in full screen mode.
 
