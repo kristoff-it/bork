@@ -15,7 +15,7 @@ Many livecoders show their chat feed on stream. It makes sense for the livecodin
 
 It's also common for livecoders to use terminal applications to show chat on screen, partially out of convenience, partially because of the appeal of the terminal aestetic. Unfortunately the most common solution, irssi, is an IRC client that can show basic Twitch messages, but that doesn't understand any of the Twitch-specific concepts such as subs, sub gifts, highlighted messages, etc.
 
-Bork is designed to replace irssi for this usecase by providing all the functionality that a general-purpose IRC client can't provide.
+Bork is designed to replace irssi for this usecase by providing all the functionality that can't be present in a general-purpose IRC client.
 
 ## Requirements
 To see Twitch emotes in the terminal, you will need [Kitty](https://github.com/kovidgoyal/kitty), or any terminal emulator that supports the Kitty graphics protocol.
