@@ -19,7 +19,11 @@ Bork is designed to replace irssi for this usecase by providing all the function
 
 ## Requirements
 To see Twitch emotes in the terminal, you will need [Kitty](https://github.com/kovidgoyal/kitty), or any terminal emulator that supports the Kitty graphics protocol.
-Bork will otherwise fallback to showing the emote name (eg Kappa).
+Bork will otherwise fallback to showing the emote name (eg "Kappa").
+
+Support for more graphics protocols will be considered in the future.  
+Protocols that will not be implemented:
+- iTerm, because of abysmal performance when trying to draw even just a handful of emotes.
 
 ## Usage
 todo
