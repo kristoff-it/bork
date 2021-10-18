@@ -22,8 +22,6 @@ To see Twitch emotes in the terminal, you will need [Kitty](https://github.com/k
 Bork will otherwise fallback to showing the emote name (eg "Kappa").
 
 Support for more graphics protocols will be considered in the future.  
-Protocols that will not be implemented:
-- iTerm, because of abysmal performance when trying to draw even just a handful of emotes.
 
 ## Usage
 todo
