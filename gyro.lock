@@ -1,8 +1,6 @@
-github frmdstryr zig-datetime master datetime.zig b52235d4026ead2ce8e2b768daf880f8174f0be5
-url src/box.zig file://forks/zbox
-github leroycep zig-tzif master tzif.zig bf91177e6ff7f52cffc44c33b6d755392ed7f9d7
-github Hejsil zig-clap zig-master clap.zig e7822aaf172704c557ad063468b2229131ce2aef
-github jecolon ziglyph main src/Ziglyph.zig c37d93b6c8e6a65aaf7f76157a8a95f9c9c43f61
+github Hejsil zig-clap zig-master clap.zig 844c9370bcecf063daff697f296d6ae979190649
+github nektro iguanaTLS master src/main.zig 954fd016964d44dfe8648985fd7c06f0067be6b0
+github truemedian hzzp master src/main.zig 91ab8e741992e8db30b3ee1cd9e7cd5a072ca294
+github leroycep zig-tzif master tzif.zig cbb1d9f6f4a06dac30da685d51f4f6f261f17bda
 github jecolon ziglyph main src/ziglyph.zig c37d93b6c8e6a65aaf7f76157a8a95f9c9c43f61
-github truemedian hzzp master src/main.zig 417eb13fefb05835c0534e622b5a6e2dc2fcd3d7
-github nektro iguanaTLS master src/main.zig 953ad821fae6c920fb82399493663668cd91bde7
+github frmdstryr zig-datetime master src/datetime.zig 4782701cf1dbcf2d96dfcb2560f290cb74c54725

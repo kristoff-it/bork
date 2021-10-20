@@ -1,62 +1,88 @@
 const std = @import("std");
+const Pkg = std.build.Pkg;
+const FileSource = std.build.FileSource;
+
 pub const pkgs = struct {
-    pub const zbox = std.build.Pkg{
+    pub const datetime = Pkg{
+        .name = "datetime",
+        .path = FileSource{
+            .path = ".gyro/zig-datetime-frmdstryr-github-4782701cf1dbcf2d96dfcb2560f290cb74c54725/pkg/src/datetime.zig",
+        },
+    };
+
+    pub const clap = Pkg{
+        .name = "clap",
+        .path = FileSource{
+            .path = ".gyro/zig-clap-Hejsil-github-844c9370bcecf063daff697f296d6ae979190649/pkg/clap.zig",
+        },
+    };
+
+    pub const iguanaTLS = Pkg{
+        .name = "iguanaTLS",
+        .path = FileSource{
+            .path = ".gyro/iguanaTLS-nektro-github-954fd016964d44dfe8648985fd7c06f0067be6b0/pkg/src/main.zig",
+        },
+    };
+
+    pub const hzzp = Pkg{
+        .name = "hzzp",
+        .path = FileSource{
+            .path = ".gyro/hzzp-truemedian-github-91ab8e741992e8db30b3ee1cd9e7cd5a072ca294/pkg/src/main.zig",
+        },
+    };
+
+    pub const tzif = Pkg{
+        .name = "tzif",
+        .path = FileSource{
+            .path = ".gyro/zig-tzif-leroycep-github-cbb1d9f6f4a06dac30da685d51f4f6f261f17bda/pkg/tzif.zig",
+        },
+    };
+
+    pub const ziglyph = Pkg{
+        .name = "ziglyph",
+        .path = FileSource{
+            .path = ".gyro/ziglyph-jecolon-github-c37d93b6c8e6a65aaf7f76157a8a95f9c9c43f61/pkg/src/ziglyph.zig",
+        },
+    };
+
+    pub const zbox = Pkg{
         .name = "zbox",
-        .path = .{ .path = "forks/zbox/src/box.zig" },
-        .dependencies = &[_]std.build.Pkg{
-            std.build.Pkg{
+        .path = FileSource{
+            .path = "forks/zbox/src/box.zig",
+        },
+        .dependencies = &[_]Pkg{
+            Pkg{
                 .name = "ziglyph",
-                .path = .{ .path = ".gyro/ziglyph-jecolon-c37d93b6c8e6a65aaf7f76157a8a95f9c9c43f61/pkg/src/Ziglyph.zig" },
+                .path = FileSource{
+                    .path = ".gyro/ziglyph-jecolon-github-c37d93b6c8e6a65aaf7f76157a8a95f9c9c43f61/pkg/src/ziglyph.zig",
+                },
             },
         },
     };
 
-    pub const datetime = std.build.Pkg{
-        .name = "datetime",
-        .path = .{ .path = ".gyro/zig-datetime-frmdstryr-b52235d4026ead2ce8e2b768daf880f8174f0be5/pkg/datetime.zig" },
-    };
-
-    pub const clap = std.build.Pkg{
-        .name = "clap",
-        .path = .{ .path = ".gyro/zig-clap-Hejsil-e7822aaf172704c557ad063468b2229131ce2aef/pkg/clap.zig" },
-    };
-
-    pub const iguanaTLS = std.build.Pkg{
-        .name = "iguanaTLS",
-        .path = .{ .path = ".gyro/iguanaTLS-nektro-953ad821fae6c920fb82399493663668cd91bde7/pkg/src/main.zig" },
-    };
-
-    pub const hzzp = std.build.Pkg{
-        .name = "hzzp",
-        .path = .{ .path = ".gyro/hzzp-truemedian-417eb13fefb05835c0534e622b5a6e2dc2fcd3d7/pkg/src/main.zig" },
-    };
-
-    pub const tzif = std.build.Pkg{
-        .name = "tzif",
-        .path = .{ .path = ".gyro/zig-tzif-leroycep-bf91177e6ff7f52cffc44c33b6d755392ed7f9d7/pkg/tzif.zig" },
-    };
-
-    pub const ziglyph = std.build.Pkg{
-        .name = "ziglyph",
-        .path = .{ .path = ".gyro/ziglyph-jecolon-c37d93b6c8e6a65aaf7f76157a8a95f9c9c43f61/pkg/src/Ziglyph.zig" },
-    };
-
     pub fn addAllTo(artifact: *std.build.LibExeObjStep) void {
-        @setEvalBranchQuota(1_000_000);
-        inline for (std.meta.declarations(pkgs)) |decl| {
-            if (decl.is_pub and decl.data == .Var) {
-                artifact.addPackage(@field(pkgs, decl.name));
-            }
-        }
+        artifact.addPackage(pkgs.datetime);
+        artifact.addPackage(pkgs.clap);
+        artifact.addPackage(pkgs.iguanaTLS);
+        artifact.addPackage(pkgs.hzzp);
+        artifact.addPackage(pkgs.tzif);
+        artifact.addPackage(pkgs.ziglyph);
+        artifact.addPackage(pkgs.zbox);
     }
 };
 
-pub const base_dirs = struct {
-    pub const zbox = "forks/zbox";
-    pub const datetime = ".gyro/zig-datetime-frmdstryr-b52235d4026ead2ce8e2b768daf880f8174f0be5/pkg";
-    pub const clap = ".gyro/zig-clap-Hejsil-e7822aaf172704c557ad063468b2229131ce2aef/pkg";
-    pub const iguanaTLS = ".gyro/iguanaTLS-nektro-953ad821fae6c920fb82399493663668cd91bde7/pkg";
-    pub const hzzp = ".gyro/hzzp-truemedian-417eb13fefb05835c0534e622b5a6e2dc2fcd3d7/pkg";
-    pub const tzif = ".gyro/zig-tzif-leroycep-bf91177e6ff7f52cffc44c33b6d755392ed7f9d7/pkg";
-    pub const ziglyph = ".gyro/ziglyph-jecolon-c37d93b6c8e6a65aaf7f76157a8a95f9c9c43f61/pkg";
+pub const exports = struct {
+    pub const bork = Pkg{
+        .name = "bork",
+        .path = "src/main.zig",
+        .dependencies = &[_]Pkg{
+            pkgs.datetime,
+            pkgs.clap,
+            pkgs.iguanaTLS,
+            pkgs.hzzp,
+            pkgs.tzif,
+            pkgs.ziglyph,
+            pkgs.zbox,
+        },
+    };
 };
