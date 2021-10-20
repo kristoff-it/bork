@@ -844,8 +844,9 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                         if (row > 0) {
                             if (m.prev) |prev| {
                                 if (std.mem.eql(u8, m.login_name, prev.login_name)) {
-                                    const prev_time = prev.kind.chat.time;
-                                    if (std.meta.eql(prev_time, c.time)) {
+                                    const prev_time = prev.time;
+
+                                    if (std.meta.eql(prev_time, m.time)) {
                                         var cur = self.chatBuf.cursorAt(row, 0);
                                         cur.attribs = .{
                                             .fg_blue = true,
@@ -856,7 +857,7 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                                         cur.attribs = .{
                                             .feint = true,
                                         };
-                                        try cur.writer().writeAll(&c.time);
+                                        try cur.writer().writeAll(&m.time);
                                     }
                                     break :blk;
                                 }
@@ -872,7 +873,7 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                             {
                                 try cur.writer().print(
                                     "{s} ",
-                                    .{c.time},
+                                    .{m.time},
                                 );
                             }
 

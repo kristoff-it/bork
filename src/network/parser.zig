@@ -123,10 +123,10 @@ pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, tz: datetime.Timezone
         return ParseResult{
             .message = Chat.Message{
                 .login_name = login_name,
+                .time = time,
                 .kind = .{
                     .chat = .{
                         .text = trailer,
-                        .time = time,
                         .display_name = display_name,
                         .sub_months = sub_badge.count,
                         .is_founder = std.mem.eql(u8, sub_badge.name, "founder"),
@@ -201,6 +201,7 @@ pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, tz: datetime.Timezone
             return ParseResult{
                 .message = Chat.Message{
                     .login_name = meta[1],
+                    .time = time,
                     .kind = .{
                         .raid = .{
                             .display_name = meta[0],
@@ -245,6 +246,7 @@ pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, tz: datetime.Timezone
             return ParseResult{
                 .message = Chat.Message{
                     .login_name = meta[1],
+                    .time = time,
                     .kind = .{
                         .sub_mistery_gift = .{
                             .display_name = meta[0],
@@ -295,6 +297,7 @@ pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, tz: datetime.Timezone
             return ParseResult{
                 .message = Chat.Message{
                     .login_name = meta[1],
+                    .time = time,
                     .kind = .{
                         .sub_gift = .{
                             .sender_display_name = meta[0],
@@ -318,6 +321,7 @@ pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, tz: datetime.Timezone
             return ParseResult{
                 .message = Chat.Message{
                     .login_name = meta[1],
+                    .time = time,
                     .kind = .{
                         .sub = .{
                             .display_name = meta[0],
@@ -363,12 +367,12 @@ pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, tz: datetime.Timezone
             return ParseResult{
                 .message = Chat.Message{
                     .login_name = meta[2],
+                    .time = time,
                     .kind = .{
                         .resub = .{
                             .display_name = meta[0],
                             .count = count,
                             .tier = tier,
-                            .time = time,
                             .resub_message = trailer,
                             .resub_message_emotes = emotes,
                         },
