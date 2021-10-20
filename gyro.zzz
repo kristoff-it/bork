@@ -14,7 +14,7 @@ deps:
         user: frmdstryr
         repo: zig-datetime
         ref: master
-    root: datetime.zig
+    root: src/datetime.zig
   clap:
     src:
       github:
@@ -47,5 +47,5 @@ deps:
         user: jecolon
         repo: ziglyph
         ref: main
-    root: src/Ziglyph.zig
+    root: src/ziglyph.zig
 
