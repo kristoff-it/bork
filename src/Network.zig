@@ -138,6 +138,8 @@ fn receiveMessages(self: *Self) void {
                 // Hack: when receiving resub events, we generate a fake chat message
                 //       to display the resub message. In the future this should be
                 //       dropped in favor of actually representing properly the resub.
+                //       Also this message is pointing to data that "belongs" to another
+                //       message. Kind of a bad idea.
                 switch (msg.kind) {
                     .resub => |r| {
                         if (r.resub_message.len > 0) {
@@ -145,11 +147,11 @@ fn receiveMessages(self: *Self) void {
                                 .network = .{
                                     .message = Chat.Message{
                                         .login_name = msg.login_name,
+                                        .time = msg.time,
                                         .kind = .{
                                             .chat = .{
                                                 .display_name = r.display_name,
                                                 .text = r.resub_message,
-                                                .time = r.time,
                                                 .sub_months = r.count,
                                                 .is_founder = false, // std.mem.eql(u8, sub_badge.name, "founder"),
                                                 .emotes = r.resub_message_emotes,

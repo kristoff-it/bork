@@ -12,6 +12,7 @@ pub const Message = struct {
     prev: ?*Message = null,
     next: ?*Message = null,
     login_name: []const u8,
+    time: [5]u8,
     // TODO: line doesn't really have a associated login name,
     //       check how much of a problem that is.
 
@@ -27,7 +28,6 @@ pub const Message = struct {
 
     pub const Comment = struct {
         text: []const u8,
-        time: [5]u8,
         /// Author's name (w/ unicode support, empty if not present)
         display_name: []const u8,
         /// Total months the user was subbed (0 = non sub)
@@ -73,7 +73,6 @@ pub const Message = struct {
         display_name: []const u8,
         count: usize,
         tier: SubTier,
-        time: [5]u8,
         resub_message: []const u8,
         resub_message_emotes: []Emote,
     };
@@ -103,9 +102,10 @@ pub fn setConnectionStatus(self: *Self, status: enum { disconnected, reconnected
 
                 const last = self.last_message orelse return;
                 if (last.kind != .line) {
-                    var msg = try self.allocator.create(Message);
-                    msg.* = Message{ .kind = .line, .login_name = &[0]u8{} };
-                    _ = self.addMessage(msg);
+                    // TODO print a line or something also it needs a time.
+                    // var msg = try self.allocator.create(Message);
+                    // msg.* = Message{ .kind = .line, .login_name = &[0]u8{}, tim };
+                    // _ = self.addMessage(msg);
                 }
             }
         },
