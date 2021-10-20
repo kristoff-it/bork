@@ -98,15 +98,15 @@ pub fn main() !void {
         if (try oauth_file.reader().readUntilDelimiterOrEofAlloc(alloc, '\n', 1024)) |old_tok| {
             if (!try Network.checkTokenValidity(alloc, old_tok)) {
                 std.debug.print(
-                    \\ 
-                    \\ The Twitch OAuth token expired, we must refresh it.
-                    \\ 
-                    \\ Please open the following URL and paste in here the
-                    \\ oauth token you will be shown after logging in.
-                    \\  
-                    \\    https://twitchapps.com/tmi/
-                    \\ 
-                    \\ Token (input is hidden): 
+                    \\ 
+                    \\ The Twitch OAuth token expired, we must refresh it.
+                    \\ 
+                    \\ Please open the following URL and paste in here the
+                    \\ oauth token you will be shown after logging in.
+                    \\  
+                    \\    https://twitchapps.com/tmi/
+                    \\ 
+                    \\ Token (input is hidden): 
                 , .{});
                 try oauth_file.seekTo(0);
                 try oauth_file.setEndPos(0);
@@ -116,15 +116,15 @@ pub fn main() !void {
             break :auth old_tok;
         } else {
             std.debug.print(
-                \\ 
-                \\ The Twitch OAuth token expired, we must refresh it.
-                \\ 
-                \\ Please open the following URL and paste in here the
-                \\ oauth token you will be shown after logging in.
-                \\  
-                \\    https://twitchapps.com/tmi/
-                \\ 
-                \\ Token (input is hidden): 
+                \\ 
+                \\ The Twitch OAuth token expired, we must refresh it.
+                \\ 
+                \\ Please open the following URL and paste in here the
+                \\ oauth token you will be shown after logging in.
+                \\  
+                \\    https://twitchapps.com/tmi/
+                \\ 
+                \\ Token (input is hidden): 
             , .{});
             try oauth_file.seekTo(0);
             try oauth_file.setEndPos(0);
