@@ -562,7 +562,7 @@ fn printWordWrap(
         } else {
             if (word_width >= width) {
                 // a link or a very big word
-                const is_link = std.mem.startsWith(u8, word, "http");
+                const is_link = std.mem.startsWith(u8, word, "http") or std.mem.startsWith(u8, word, "(http");
 
                 // How many rows considering that we might be on a row
                 // with something already written on it?
@@ -585,13 +585,32 @@ fn printWordWrap(
                 // Write the word, make use of the wrapping cursor
                 // add link markers if necessary
                 if (is_link) {
-                    cursor.context.link = word;
-                    try cursor.writeAll(word[0..1]);
+
+                    // ignore enclosing parens
+                    var start: usize = 0;
+                    var end: usize = word.len;
+                    const url = url: {
+                        if (word[0] == '(') {
+                            start = 1;
+                            if (word[word.len - 1] == ')') {
+                                end = word.len - 1;
+                            }
+                        }
+
+                        break :url word[start..end];
+                    };
+
+                    if (start != 0) try cursor.writeAll("(");
+
+                    cursor.context.link = url;
+                    try cursor.writeAll(url[0..1]);
                     cursor.context.link = null;
-                    try cursor.writeAll(word[1 .. word.len - 1]);
+                    try cursor.writeAll(url[1 .. url.len - 1]);
                     cursor.context.is_link_end = true;
-                    try cursor.writeAll(word[word.len - 1 ..]);
+                    try cursor.writeAll(url[url.len - 1 ..]);
                     cursor.context.is_link_end = false;
+
+                    if (end != word.len) try cursor.writeAll(")");
                 } else {
                     try cursor.writeAll(word);
                 }
