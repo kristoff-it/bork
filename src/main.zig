@@ -231,7 +231,7 @@ pub fn log(
 
 pub fn panic(msg: []const u8, trace: ?*std.builtin.StackTrace) noreturn {
     nosuspend Terminal.panic();
-    log(.emerg, .default, "{s}", .{msg});
+    log(.err, .default, "{s}", .{msg});
     std.builtin.default_panic(msg, trace);
 }
 
