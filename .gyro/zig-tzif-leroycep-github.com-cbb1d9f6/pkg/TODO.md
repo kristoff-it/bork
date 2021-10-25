@@ -1,0 +1,3 @@
+- [ ] Make use of leap seconds
+- [ ] Make use of `transitionIsStd`
+- [ ] Make use of `transitionIsUT`
