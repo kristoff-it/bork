@@ -19,7 +19,7 @@ pub const Event = union(enum) {
 
 pub const UserCommand = union(enum) {
     message: []const u8,
-    ban: []const u8,
+    // ban: []const u8,
 };
 const Command = union(enum) {
     user: UserCommand,
@@ -172,12 +172,12 @@ fn receiveMessages(self: *Self) void {
 }
 
 // Public interface for sending commands (messages, bans, ...)
-// pub fn sendCommand(self: *Self, cmd: UserCommand) !void {
-//     return self.send(Command{ .user = cmd });
-//     if (self.isReconnecting()) {
-//         return error.Reconnecting;
-//     }
-
+pub fn sendCommand(self: *Self, cmd: UserCommand) void {
+    // if (self.isReconnecting()) {
+    //     return error.Reconnecting;
+    // }
+    return self.send(Command{ .user = cmd });
+}
 //     // NOTE: it could still be possible for a command
 //     //       to remain stuck here while we are reconnecting,
 //     //       but in most cases we'll be able to correctly
@@ -195,7 +195,14 @@ fn send(self: *Self, cmd: Command) void {
             std.log.debug("PONG!", .{});
             break :blk self.writer.print("PONG :tmi.twitch.tv\n", .{});
         },
-        .user => {},
+        .user => |uc| blk: {
+            switch (uc) {
+                .message => |msg| {
+                    std.log.debug("SEND MESSAGE!", .{});
+                    break :blk self.writer.print("PRIVMSG #{s} :{s}\n", .{ self.name, msg });
+                },
+            }
+        },
     };
 
     if (comm) |_| {} else |_| {

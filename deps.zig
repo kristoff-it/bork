@@ -60,6 +60,13 @@ pub const pkgs = struct {
         },
     };
 
+    pub const @"known-folders" = Pkg{
+        .name = "known-folders",
+        .path = FileSource{
+            .path = ".gyro/known-folders-ziglibs-github.com-f299244d/pkg/known-folders.zig",
+        },
+    };
+
     pub fn addAllTo(artifact: *std.build.LibExeObjStep) void {
         artifact.addPackage(pkgs.zbox);
         artifact.addPackage(pkgs.datetime);
@@ -68,6 +75,7 @@ pub const pkgs = struct {
         artifact.addPackage(pkgs.hzzp);
         artifact.addPackage(pkgs.tzif);
         artifact.addPackage(pkgs.ziglyph);
+        artifact.addPackage(pkgs.@"known-folders");
     }
 };
 
@@ -83,6 +91,7 @@ pub const exports = struct {
             pkgs.hzzp,
             pkgs.tzif,
             pkgs.ziglyph,
+            pkgs.@"known-folders",
         },
     };
 };
