@@ -4,3 +4,4 @@ git https://github.com/truemedian/hzzp.git master src/main.zig 91ab8e741992e8db3
 git https://github.com/leroycep/zig-tzif.git master tzif.zig cbb1d9f6f4a06dac30da685d51f4f6f261f17bda
 git https://github.com/jecolon/ziglyph.git main src/ziglyph.zig c37d93b6c8e6a65aaf7f76157a8a95f9c9c43f61
 git https://github.com/frmdstryr/zig-datetime.git master src/datetime.zig 4782701cf1dbcf2d96dfcb2560f290cb74c54725
+git https://github.com/ziglibs/known-folders.git master known-folders.zig f299244d787a02dd49bc8b10b8c2722a13655c48

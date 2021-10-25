@@ -42,3 +42,9 @@ deps:
       git:
         url: "https://github.com/jecolon/ziglyph.git"
         ref: main
+  known-folders:
+    root: known-folders.zig
+    src:
+      git:
+        url: "https://github.com/ziglibs/known-folders.git"
+        ref: master
