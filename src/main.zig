@@ -359,32 +359,21 @@ fn create_config(alloc: *std.mem.Allocator, base: std.fs.Dir) !BorkConfig {
 
         std.debug.print(
             \\ 
-            \\ The username provided does not
-            \\ appear to be valid.
-            \\ 
+            \\ The username provided doesn't seem valid.
             \\ Please try again.
             \\ 
             \\ Your Twitch username: 
         , .{});
-    } else unreachable;
-
-    const exclamation = switch (std.hash.Crc32.hash(nickname) % 4) {
-        else => "Beautiful name!",
-        1 => "Nice nick!",
-        2 => "That's a good nickname!",
-        3 => "Great username!",
-    };
+    } else unreachable; // TODO: remove in stage 2
 
     std.debug.print(
         \\
-        \\ {s}
-        \\ NOTE: this comment might have been hardcoded 
+        \\ OK!
         \\
-    , .{exclamation});
+    , .{});
 
     const remote_port: ?u16 = remote_port: {
-        // This scope delimits the period in which we enable
-        // immediate mode for use input.
+        // Inside this scope user input is set to immediate mode.
         {
             const original_termios = try std.os.tcgetattr(in.handle);
             defer std.os.tcsetattr(in.handle, .FLUSH, original_termios) catch {};
@@ -410,7 +399,7 @@ fn create_config(alloc: *std.mem.Allocator, base: std.fs.Dir) !BorkConfig {
                 \\ 
                 \\ NOTE: some of these commands are still WIP :^)
                 \\
-                \\ Press any key to continue...
+                \\ Press any key to continue reading...
                 \\
                 \\
             , .{});
@@ -419,9 +408,9 @@ fn create_config(alloc: *std.mem.Allocator, base: std.fs.Dir) !BorkConfig {
 
             std.debug.print(
                 \\         ======> ! IMPORTANT ! <======
-                \\ To protect you from accidentally closing Bork, with this
-                \\ feature enabled, Bork will not close when you press
-                \\ CTRL+C. 
+                \\ To protect you from accidentally closing Bork while
+                \\ streaming, with this feature enabled, Bork will not
+                \\ close when you press CTRL+C. 
                 \\
                 \\ To close it, you will instead have to execute in a 
                 \\ separate shell:
@@ -459,7 +448,7 @@ fn create_config(alloc: *std.mem.Allocator, base: std.fs.Dir) !BorkConfig {
             \\ Remote control enabled!
             \\ Which port should Bork listen to?
             \\
-            \\ Port? [{}] 
+            \\ Port? [{}]: 
         , .{BorkConfig.default_port});
 
         while (true) {
