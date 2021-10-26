@@ -66,7 +66,7 @@ pub fn main() !void {
         };
     };
 
-    const cat = try get_config_and_token(alloc);
+    const cat = try get_config_and_token(alloc, subcommand == .start);
     const config = cat.config;
     const token = cat.token;
     // const config = BorkConfig{ .nick = "blah" };
@@ -270,7 +270,7 @@ const ConfigAndToken = struct {
     token: []const u8,
 };
 
-fn get_config_and_token(alloc: *std.mem.Allocator) !ConfigAndToken {
+fn get_config_and_token(alloc: *std.mem.Allocator, check_token: bool) !ConfigAndToken {
     var base = (try folders.open(alloc, .home, .{})) orelse
         (try folders.open(alloc, .executable_dir, .{})) orelse
         @panic("couldn't find a way of creating a config file");
@@ -311,8 +311,12 @@ fn get_config_and_token(alloc: *std.mem.Allocator) !ConfigAndToken {
             const token_raw = try file.reader().readAllAlloc(alloc, 4096);
             const token = std.mem.trim(u8, token_raw, " \n");
 
-            // Check that the token is not expired in the meantime
-            if (try Network.checkTokenValidity(alloc, token)) {
+            if (check_token) {
+                // Check that the token is not expired in the meantime
+                if (try Network.checkTokenValidity(alloc, token)) {
+                    break :token token;
+                }
+            } else {
                 break :token token;
             }
         }
