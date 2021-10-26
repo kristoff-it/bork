@@ -41,6 +41,7 @@ var log_level: std.log.Level = .warn;
 
 const Subcommand = enum {
     start,
+    links,
     send,
     quit,
 };
@@ -76,10 +77,14 @@ pub fn main() !void {
         .start => try bork_start(alloc, config, token),
         .send => try remote.client.send(alloc, config, &it),
         .quit => try remote.client.quit(alloc, config, &it),
+        .links => try remote.client.links(alloc, config, &it),
     }
 }
 
 fn bork_start(alloc: *std.mem.Allocator, config: BorkConfig, token: []const u8) !void {
+    // king's fault
+    defer if (config.remote) std.os.exit(0);
+
     var buf: [24]Event = undefined;
     var ch = Channel(Event).init(&buf);
 
@@ -88,7 +93,7 @@ fn bork_start(alloc: *std.mem.Allocator, config: BorkConfig, token: []const u8) 
     // another instance of Bork running.
     var remote_server: remote.Server = undefined;
     if (config.remote) {
-        remote_server.init(config.remote_port, alloc, &ch) catch |err| {
+        remote_server.init(config, token, alloc, &ch) catch |err| {
             switch (err) {
                 error.AddressInUse => {
                     std.debug.print(
@@ -117,7 +122,7 @@ fn bork_start(alloc: *std.mem.Allocator, config: BorkConfig, token: []const u8) 
     try network.init(alloc, &ch, config.nick, token, try senseUserTZ(alloc));
     defer network.deinit();
 
-    var chat = Chat{ .allocator = alloc };
+    var chat = Chat{ .allocator = alloc, .nick = config.nick };
     // Initial paint!
     try display.renderChat(&chat);
 
@@ -129,15 +134,13 @@ fn bork_start(alloc: *std.mem.Allocator, config: BorkConfig, token: []const u8) 
         switch (event) {
             .remote => |re| {
                 switch (re) {
-                    .quit => {
-                        // this is because king refuses to
-                        // implement a better evloop in the stdlib
-                        display.deinit();
-                        std.os.exit(0);
-                    },
+                    .quit => return,
                     .send => |msg| {
                         std.log.debug("got send event in channel: {s}", .{msg});
                         network.sendCommand(.{ .message = msg });
+                    },
+                    .links => |conn| {
+                        remote.Server.replyLinks(&chat, conn);
                     },
                 }
             },
@@ -175,10 +178,7 @@ fn bork_start(alloc: *std.mem.Allocator, config: BorkConfig, token: []const u8) 
                         if (config.remote) {
                             // TODO: show something
                         } else {
-                            // this is because king refuses to
-                            // implement a better evloop in the stdlib
-                            display.deinit();
-                            std.os.exit(0);
+                            return;
                         }
                     },
                     .up, .wheelUp, .pageUp => {
@@ -255,12 +255,13 @@ fn print_help() void {
     std.debug.print(
         \\ Bork is a TUI chat client for Twitch.
         \\
-        \\ Available commands: start, send, quit.
+        \\ Available commands: start, quit, send, links.
         \\
         \\ Examples:
         \\   ./bork start
-        \\   ./bork send "welcome to my stream Kappa"
         \\   ./bork quit
+        \\   ./bork send "welcome to my stream Kappa"
+        \\   ./bork links
         \\
     , .{});
 }

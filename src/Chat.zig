@@ -1,9 +1,13 @@
 const std = @import("std");
 const display = @import("zbox");
+const url = @import("./utils/url.zig");
 
 allocator: *std.mem.Allocator,
+nick: []const u8,
 last_message: ?*Message = null,
+last_link_message: ?*Message = null,
 bottom_message: ?*Message = null,
+
 disconnected: bool = false,
 
 const Self = @This();
@@ -11,6 +15,11 @@ const Self = @This();
 pub const Message = struct {
     prev: ?*Message = null,
     next: ?*Message = null,
+
+    // Points to the closest previous message that contains a link.
+    prev_links: ?*Message = null,
+    next_links: ?*Message = null,
+
     login_name: []const u8,
     time: [5]u8,
     // TODO: line doesn't really have a associated login name,
@@ -142,6 +151,32 @@ pub fn scroll(self: *Self, direction: enum { up, down }, n: usize) bool {
 pub fn addMessage(self: *Self, msg: *Message) bool {
     std.log.debug("message", .{});
 
+    // Find if the message has URLs and attach it
+    // to the URL linked list, unless it's our own
+    // message.
+    if (!std.mem.eql(u8, msg.login_name, self.nick)) {
+        switch (msg.kind) {
+            .chat => |c| {
+                var it = std.mem.tokenize(u8, c.text, " ");
+                while (it.next()) |word| {
+                    if (url.sense(word)) {
+                        if (self.last_link_message) |old| {
+                            msg.prev_links = old;
+                            old.next_links = msg;
+                        }
+
+                        self.last_link_message = msg;
+                        break;
+                    }
+                }
+            },
+            else => {
+                // TODO: when the resub msg hack gets removed
+                //       we'll need to analize also that type of message.
+            },
+        }
+    }
+
     var need_render = false;
     if (self.last_message == self.bottom_message) {
         // Scroll!
@@ -166,8 +201,23 @@ pub fn clearChat(self: *Self, all_or_name: ?[]const u8) void {
         var current = self.last_message;
         while (current) |c| : (current = c.prev) {
             if (std.mem.eql(u8, login_name, c.login_name)) {
-                if (c.prev) |p| p.next = c.next;
-                if (c.next) |n| n.prev = c.prev;
+                // Update main linked list
+                {
+                    if (c.prev) |p| p.next = c.next;
+                    if (c.next) |n| n.prev = c.prev;
+
+                    // If it's the last message, update the reference
+                    if (c == self.last_message) self.last_message = c.prev;
+                }
+
+                // Update URLs linked list
+                {
+                    if (c.prev_links) |p| p.next_links = c.next_links;
+                    if (c.next_links) |n| n.prev_links = c.prev_links;
+
+                    // If it's the last message, update the reference
+                    if (c == self.last_link_message) self.last_link_message = c.prev_links;
+                }
 
                 // If it's the bottom message, scroll the view
                 if (self.bottom_message) |b| {
@@ -179,14 +229,12 @@ pub fn clearChat(self: *Self, all_or_name: ?[]const u8) void {
                         }
                     }
                 }
-
-                // If it's the last message, update the reference
-                if (c == self.last_message) self.last_message = c.prev;
             }
         }
     } else {
         std.log.debug("clear chat all", .{});
         self.last_message = null;
         self.bottom_message = null;
+        self.last_link_message = null;
     }
 }
