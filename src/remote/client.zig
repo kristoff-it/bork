@@ -14,3 +14,13 @@ pub fn send(alloc: *std.mem.Allocator, config: BorkConfig, it: *std.process.ArgI
     try conn.writer().writeAll("SEND\n");
     try conn.writer().writeAll(message);
 }
+
+pub fn quit(alloc: *std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIterator) !void {
+    // TODO: validation
+    _ = it;
+
+    const conn = try std.net.tcpConnectToHost(alloc, "127.0.0.1", config.remote_port);
+    defer conn.close();
+
+    try conn.writer().writeAll("QUIT\n");
+}

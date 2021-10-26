@@ -3,7 +3,7 @@ const Channel = @import("../utils/channel.zig").Channel;
 const GlobalEventUnion = @import("../main.zig").Event;
 
 pub const Event = union(enum) {
-    close,
+    quit,
     send: []const u8,
 };
 
@@ -37,7 +37,12 @@ pub fn init(
 
 // TODO: concurrency
 pub fn deinit(self: *@This()) void {
+    std.log.debug("deiniting Remote Server", .{});
+    std.os.shutdown(self.listener.sockfd.?, .both) catch |err| {
+        std.log.debug("remote shutdown encountered an error: {}", .{err});
+    };
     self.listener.deinit();
+    std.log.debug("deinit done", .{});
 }
 
 fn listen(self: *@This()) void {
@@ -72,5 +77,9 @@ fn handle(self: *@This(), conn: std.net.StreamServer.Connection) void {
 
         std.log.debug("remote msg: {s}", .{msg});
         self.ch.put(GlobalEventUnion{ .remote = .{ .send = msg } });
+    }
+
+    if (std.mem.eql(u8, cmd, "QUIT")) {
+        self.ch.put(GlobalEventUnion{ .remote = .quit });
     }
 }

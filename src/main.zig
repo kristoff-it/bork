@@ -42,6 +42,7 @@ var log_level: std.log.Level = .warn;
 const Subcommand = enum {
     start,
     send,
+    quit,
 };
 
 pub fn main() !void {
@@ -74,6 +75,7 @@ pub fn main() !void {
     switch (subcommand) {
         .start => try bork_start(alloc, config, token),
         .send => try remote.client.send(alloc, config, &it),
+        .quit => try remote.client.quit(alloc, config, &it),
     }
 }
 
@@ -127,7 +129,12 @@ fn bork_start(alloc: *std.mem.Allocator, config: BorkConfig, token: []const u8) 
         switch (event) {
             .remote => |re| {
                 switch (re) {
-                    .close => {},
+                    .quit => {
+                        // this is because king refuses to
+                        // implement a better evloop in the stdlib
+                        display.deinit();
+                        std.os.exit(0);
+                    },
                     .send => |msg| {
                         std.log.debug("got send event in channel: {s}", .{msg});
                         network.sendCommand(.{ .message = msg });
@@ -164,7 +171,16 @@ fn bork_start(alloc: *std.mem.Allocator, config: BorkConfig, token: []const u8) 
                         need_repaint = try display.handleClick(pos.row - 1, pos.col - 1);
                     },
 
-                    .CTRL_C => return,
+                    .CTRL_C => {
+                        if (config.remote) {
+                            // TODO: show something
+                        } else {
+                            // this is because king refuses to
+                            // implement a better evloop in the stdlib
+                            display.deinit();
+                            std.os.exit(0);
+                        }
+                    },
                     .up, .wheelUp, .pageUp => {
                         need_repaint = chat.scroll(.up, 1);
                     },
@@ -239,10 +255,12 @@ fn print_help() void {
     std.debug.print(
         \\ Bork is a TUI chat client for Twitch.
         \\
-        \\ Available commands: run, quit.
+        \\ Available commands: start, send, quit.
         \\
         \\ Examples:
-        \\   ./bork run
+        \\   ./bork start
+        \\   ./bork send "welcome to my stream Kappa"
+        \\   ./bork quit
         \\
     , .{});
 }
@@ -348,8 +366,9 @@ fn create_config(alloc: *std.mem.Allocator, base: std.fs.Dir) !BorkConfig {
 
     std.debug.print(
         \\
-        \\ Success!
-        \\ 
+        \\ Beautiful name!
+        \\ NOTE: this comment might have been 
+        \\       hardcoded in the program
         \\
     , .{});
 
@@ -368,6 +387,9 @@ fn create_config(alloc: *std.mem.Allocator, base: std.fs.Dir) !BorkConfig {
 
             std.debug.print(
                 \\ 
+                \\
+                \\ ===========================================================
+                \\
                 \\ Bork allows you to interact with it in two ways: clicking
                 \\ on messages, which will allow you to highlight them, and
                 \\ by invoking the Bork executable with various subcommands 
@@ -377,7 +399,27 @@ fn create_config(alloc: *std.mem.Allocator, base: std.fs.Dir) !BorkConfig {
                 \\ chat, display popups in Bork, set AFK status, etc.
                 \\ 
                 \\ NOTE: some of these commands are still WIP :^)
+                \\
+                \\ Press any key to continue...
+                \\
+                \\
+            , .{});
+
+            _ = try in_reader.readByte();
+
+            std.debug.print(
+                \\         ======> ! IMPORTANT ! <======
+                \\ To protect you from accidentally closing Bork,
+                \\ with this feature enabled, Bork will not close
+                \\ when you press CTRL+C. 
+                \\
+                \\ To close it, you will instead have to execute 
+                \\ in a separate shell:
+                \\
+                \\                 `bork quit`
                 \\ 
+                \\ NOTE: yes, this command is already implemented :^)
+                \\
                 \\ To enable this second feature Bork will need to listen to 
                 \\ a port on localhost.
                 \\ 
@@ -469,6 +511,8 @@ fn create_token(alloc: *std.mem.Allocator, base: std.fs.Dir, action: TokenActon)
 
     switch (action) {
         .new => std.debug.print(
+            \\ 
+            \\ ======================================================
             \\ 
             \\ Bork needs a Twitch OAuth token to connect to Twitch. 
             \\ Unfortunately, this procedure can't be fully automated
