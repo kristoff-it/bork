@@ -368,13 +368,19 @@ fn create_config(alloc: *std.mem.Allocator, base: std.fs.Dir) !BorkConfig {
         , .{});
     } else unreachable;
 
+    const exclamation = switch (std.hash.Crc32.hash(nickname) % 4) {
+        else => "Beautiful name!",
+        1 => "Nice nick!",
+        2 => "That's a good nickname!",
+        3 => "Great username!",
+    };
+
     std.debug.print(
         \\
-        \\ Beautiful name!
-        \\ NOTE: this comment might have been 
-        \\       hardcoded in the program
+        \\ {s}
+        \\ NOTE: this comment might have been hardcoded 
         \\
-    , .{});
+    , .{exclamation});
 
     const remote_port: ?u16 = remote_port: {
         // This scope delimits the period in which we enable
@@ -413,21 +419,21 @@ fn create_config(alloc: *std.mem.Allocator, base: std.fs.Dir) !BorkConfig {
 
             std.debug.print(
                 \\         ======> ! IMPORTANT ! <======
-                \\ To protect you from accidentally closing Bork,
-                \\ with this feature enabled, Bork will not close
-                \\ when you press CTRL+C. 
+                \\ To protect you from accidentally closing Bork, with this
+                \\ feature enabled, Bork will not close when you press
+                \\ CTRL+C. 
                 \\
-                \\ To close it, you will instead have to execute 
-                \\ in a separate shell:
+                \\ To close it, you will instead have to execute in a 
+                \\ separate shell:
                 \\
                 \\                 `bork quit`
                 \\ 
                 \\ NOTE: yes, this command is already implemented :^)
                 \\
-                \\ To enable this second feature Bork will need to listen to 
-                \\ a port on localhost.
+                \\ To enable this second feature Bork will need to listen 
+                \\ to a port on localhost.
                 \\ 
-                \\ Enable this feature? [Y/n] 
+                \\ Enable remote control? [Y/n] 
             , .{});
 
             const enable = try in_reader.readByte();
@@ -437,7 +443,7 @@ fn create_config(alloc: *std.mem.Allocator, base: std.fs.Dir) !BorkConfig {
                         \\
                         \\
                         \\ Remote control is disabled.
-                        \\ You can enable it in the future by editing the
+                        \\ You can enable it in the future by editing the 
                         \\ configuration file.
                         \\ 
                         \\
