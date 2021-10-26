@@ -326,7 +326,7 @@ fn _reconnect(self: *Self, writer_held: ?std.event.Lock.Held) void {
     }
 }
 
-fn connect(alloc: *std.mem.Allocator, name: []const u8, oauth: []const u8) !std.net.Stream {
+pub fn connect(alloc: *std.mem.Allocator, name: []const u8, oauth: []const u8) !std.net.Stream {
     var socket = if (build_opts.local)
         try std.net.tcpConnectToHost(alloc, "localhost", 6667)
     else

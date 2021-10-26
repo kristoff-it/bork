@@ -1,26 +1,38 @@
 const std = @import("std");
 const Channel = @import("../utils/channel.zig").Channel;
+const url = @import("../utils/url.zig");
 const GlobalEventUnion = @import("../main.zig").Event;
+const Chat = @import("../Chat.zig");
+const BorkConfig = @import("../main.zig").BorkConfig;
+const Network = @import("../Network.zig");
 
 pub const Event = union(enum) {
     quit,
+    links: std.net.StreamServer.Connection,
     send: []const u8,
 };
 
 address: std.net.Address,
 listener: std.net.StreamServer,
+config: BorkConfig,
+token: []const u8,
 alloc: *std.mem.Allocator,
 ch: *Channel(GlobalEventUnion),
 
 pub fn init(
     self: *@This(),
-    port: u16,
+    config: BorkConfig,
+    token: []const u8,
     alloc: *std.mem.Allocator,
     ch: *Channel(GlobalEventUnion),
 ) !void {
-    self.address = try std.net.Address.parseIp("127.0.0.1", port);
-    self.ch = ch;
+    self.config = config;
+    self.token = token;
+
     self.alloc = alloc;
+    self.ch = ch;
+
+    self.address = try std.net.Address.parseIp("127.0.0.1", config.remote_port);
 
     self.listener = std.net.StreamServer.init(.{
         .reuse_address = true,
@@ -70,16 +82,55 @@ fn handle(self: *@This(), conn: std.net.StreamServer.Connection) void {
     std.log.debug("remote cmd: {s}", .{cmd});
 
     if (std.mem.eql(u8, cmd, "SEND")) {
-        const msg = conn.stream.reader().readAllAlloc(self.alloc, 4096) catch |err| {
+        const msg = conn.stream.reader().readUntilDelimiterAlloc(self.alloc, '\n', 4096) catch |err| {
             std.log.debug("remote could read: {}", .{err});
             return;
         };
 
         std.log.debug("remote msg: {s}", .{msg});
-        self.ch.put(GlobalEventUnion{ .remote = .{ .send = msg } });
+
+        // Since sending the message from the main connection
+        // makes it so that twitch doesn't echo it back, we're
+        // opening a one-off connection to send the message.
+        // This way we don't have to implement locally emote
+        // parsing.
+        var twitch_conn = Network.connect(self.alloc, self.config.nick, self.token) catch return;
+        defer twitch_conn.close();
+        twitch_conn.writer().print("PRIVMSG #{s} :{s}\n", .{ self.config.nick, msg }) catch return;
     }
 
     if (std.mem.eql(u8, cmd, "QUIT")) {
         self.ch.put(GlobalEventUnion{ .remote = .quit });
     }
+
+    if (std.mem.eql(u8, cmd, "LINKS")) {
+        self.ch.put(GlobalEventUnion{ .remote = .{ .links = conn } });
+    }
+}
+
+// NOTE: this function should only be called by
+// the thread that's also running the main control
+// loop
+pub fn replyLinks(chat: *Chat, conn: std.net.StreamServer.Connection) void {
+    var maybe_current = chat.last_link_message;
+    while (maybe_current) |c| : (maybe_current = c.prev_links) {
+        const text = switch (c.kind) {
+            .chat => |comment| comment.text,
+            else => continue,
+        };
+        var it = std.mem.tokenize(u8, text, " ");
+        while (it.next()) |word| {
+            if (url.sense(word)) {
+                const indent = "   >>";
+                conn.stream.writer().print("{s} [{s}]\n{s} {s}\n\n", .{
+                    c.time,
+                    c.login_name,
+                    indent,
+                    url.clean(word),
+                }) catch return;
+            }
+        }
+    }
+
+    conn.stream.close();
 }

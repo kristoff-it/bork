@@ -3,6 +3,7 @@ const zbox = @import("zbox");
 const Channel = @import("utils/channel.zig").Channel;
 const Chat = @import("Chat.zig");
 const GlobalEventUnion = @import("main.zig").Event;
+const senseUrl = @import("./utils/url.zig").sense;
 
 const ziglyph = @import("ziglyph");
 
@@ -562,7 +563,7 @@ fn printWordWrap(
         } else {
             if (word_width >= width) {
                 // a link or a very big word
-                const is_link = std.mem.startsWith(u8, word, "http") or std.mem.startsWith(u8, word, "(http");
+                const is_link = senseUrl(word);
 
                 // How many rows considering that we might be on a row
                 // with something already written on it?
