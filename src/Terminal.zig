@@ -33,13 +33,16 @@ const EmoteCache = std.AutoHashMap(u32, void);
 
 // State
 streamer_name: []const u8,
+remote_enabled: bool,
 allocator: *std.mem.Allocator,
+ch: *Channel(GlobalEventUnion),
 output: zbox.Buffer,
 chatBuf: zbox.Buffer,
 overlayBuf: zbox.Buffer,
 ticker: @Frame(startTicking),
 active_interaction: InteractiveElement = .none,
 emote_cache: EmoteCache,
+ctrlc_pressed: bool = false,
 
 // Static config
 // The message is padded on each line
@@ -52,7 +55,7 @@ const Self = @This();
 var done_init = false;
 var terminal_inited = false;
 var notifs: @Frame(notifyDisplayEvents) = undefined;
-pub fn init(alloc: *std.mem.Allocator, ch: *Channel(GlobalEventUnion), streamer_name: []const u8) !Self {
+pub fn init(alloc: *std.mem.Allocator, ch: *Channel(GlobalEventUnion), streamer_name: []const u8, remote_enabled: bool) !Self {
     {
         if (done_init) @panic("Terminal should only be initialized once, like a singleton.");
         done_init = true;
@@ -113,16 +116,38 @@ pub fn init(alloc: *std.mem.Allocator, ch: *Channel(GlobalEventUnion), streamer_
     var overlayBuf = try zbox.Buffer.init(alloc, size.height - 2, size.width - 2);
     errdefer overlayBuf.deinit();
 
-    notifs = async notifyDisplayEvents(ch);
+    notifs = async notifyDisplayEvents(ch, remote_enabled);
     return Self{
         .streamer_name = streamer_name,
         .allocator = alloc,
+        .ch = ch,
+        .remote_enabled = remote_enabled,
         .chatBuf = chatBuf,
         .output = output,
         .overlayBuf = overlayBuf,
         .ticker = undefined, //async startTicking(ch),
         .emote_cache = EmoteCache.init(alloc),
     };
+}
+
+pub fn toggleCtrlCMessage(self: *Self, new: bool) !bool {
+    if (self.ctrlc_pressed == new) return false;
+
+    if (new) {
+        try std.event.Loop.instance.?.runDetached(
+            self.allocator,
+            disableCtrlCMessage,
+            .{self},
+        );
+    }
+
+    self.ctrlc_pressed = new;
+    return true;
+}
+
+fn disableCtrlCMessage(self: *Self) void {
+    std.time.sleep(3 * std.time.ns_per_s);
+    self.ch.put(GlobalEventUnion{ .display = .disableCtrlCMessage });
 }
 
 // Flag touched by whichChandler and startTicking
@@ -668,13 +693,13 @@ pub fn startTicking(ch: *Channel(GlobalEventUnion)) void {
     }
 }
 
-pub fn notifyDisplayEvents(ch: *Channel(GlobalEventUnion)) !void {
+pub fn notifyDisplayEvents(ch: *Channel(GlobalEventUnion), remote_enabled: bool) !void {
     defer std.log.debug("notfyDisplayEvents returning", .{});
     std.event.Loop.instance.?.yield();
     while (true) {
         if (try zbox.nextEvent()) |event| {
             ch.put(GlobalEventUnion{ .display = event });
-            if (event == .CTRL_C) return;
+            if (!remote_enabled and event == .CTRL_C) return;
         }
     }
 }
@@ -1014,7 +1039,24 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
     // Render the bottom bar
     {
         const width = self.output.width - 1;
-        if (chat.disconnected) {
+
+        // The temporary CTRLC message has higher priority
+        // than all other messages.
+        if (self.ctrlc_pressed) {
+            const msg = "run `./bork quit`";
+            if (width > msg.len) {
+                var column = @divTrunc(width, 2) + (width % 2) - @divTrunc(msg.len, 2) - (msg.len % 2); // TODO: test this math lmao
+                try self.output.cursorAt(self.output.height - 1, column).writer().writeAll(msg);
+            }
+
+            var i: usize = 1;
+            while (i < width) : (i += 1) {
+                self.output.cellRef(self.output.height - 1, i).attribs = .{
+                    .bg_white = true,
+                    .fg_red = true,
+                };
+            }
+        } else if (chat.disconnected) {
             const msg = "DISCONNECTED";
             if (width > msg.len) {
                 var column = @divTrunc(width, 2) + (width % 2) - @divTrunc(msg.len, 2) - (msg.len % 2); // TODO: test this math lmao

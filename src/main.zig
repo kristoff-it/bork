@@ -115,7 +115,7 @@ fn bork_start(alloc: *std.mem.Allocator, config: BorkConfig, token: []const u8) 
     }
     defer if (config.remote) remote_server.deinit();
 
-    var display = try Terminal.init(alloc, &ch, config.nick);
+    var display = try Terminal.init(alloc, &ch, config.nick, config.remote);
     defer display.deinit();
 
     var network: Network = undefined;
@@ -158,6 +158,9 @@ fn bork_start(alloc: *std.mem.Allocator, config: BorkConfig, token: []const u8) 
                         // try display.sizeChanged();
                         // need_repaint = true;
                     },
+                    .disableCtrlCMessage => {
+                        need_repaint = try display.toggleCtrlCMessage(false);
+                    },
                     .other => |c| {
                         std.log.debug("[key] [{s}]", .{c});
                         switch (c[0]) {
@@ -177,6 +180,7 @@ fn bork_start(alloc: *std.mem.Allocator, config: BorkConfig, token: []const u8) 
                     .CTRL_C => {
                         if (config.remote) {
                             // TODO: show something
+                            need_repaint = try display.toggleCtrlCMessage(true);
                         } else {
                             return;
                         }
