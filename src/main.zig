@@ -280,7 +280,7 @@ fn get_config_and_token(alloc: *std.mem.Allocator, check_token: bool) !ConfigAnd
     // Ensure existence of .bork/
     try base.makePath(".bork");
 
-    const config: BorkConfig = config: {
+    var config: BorkConfig = config: {
         const file = base.openFile(".bork/config.json", .{}) catch |err| switch (err) {
             else => return err,
             error.FileNotFound => break :config try create_config(alloc, base),
@@ -300,6 +300,9 @@ fn get_config_and_token(alloc: *std.mem.Allocator, check_token: bool) !ConfigAnd
 
         break :config res;
     };
+
+    const port_override = std.os.getenv("BORK_PORT");
+    if (port_override) |po| config.remote_port = try std.fmt.parseInt(u16, po, 10);
 
     const token: []const u8 = token: {
         {
