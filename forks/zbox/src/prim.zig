@@ -22,6 +22,7 @@ pub const Event = union(enum) {
     tick,
     chaos,
     calm,
+    disableCtrlCMessage,
     escape,
     up,
     down,
@@ -143,7 +144,7 @@ pub fn sendSGR(sgr: SGR) ErrorSet.BufWrite!void {
     if (sgr.fg_cyan) try send(";36");
     if (sgr.bg_cyan) try send(";46");
     if (sgr.fg_white) try send(";37");
-    if (sgr.bg_white) try send(";74");
+    if (sgr.bg_white) try send(";47");
     try send("m");
 }
 
