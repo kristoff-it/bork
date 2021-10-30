@@ -17,14 +17,16 @@ pub fn checkTokenValidity(allocator: *std.mem.Allocator, token: []const u8) !boo
     var randBuf: [32]u8 = undefined;
     try std.os.getrandom(&randBuf);
 
-    var rand = blk: {
+    var defaultCsprng = blk: {
         var seed: [std.rand.DefaultCsprng.secret_seed_length]u8 = undefined;
         try std.os.getrandom(&seed);
-        break :blk &std.rand.DefaultCsprng.init(seed).random;
+        break :blk std.rand.DefaultCsprng.init(seed);
     };
 
+    var rand = defaultCsprng.random();
+
     var tls_sock = try tls.client_connect(.{
-        .rand = rand,
+        .rand = &rand,
         .temp_allocator = allocator,
         .reader = sock.reader(),
         .writer = sock.writer(),
