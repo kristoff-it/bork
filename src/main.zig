@@ -43,6 +43,7 @@ const Subcommand = enum {
     start,
     links,
     send,
+    ban,
     quit,
 };
 
@@ -78,6 +79,7 @@ pub fn main() !void {
         .send => try remote.client.send(alloc, config, &it),
         .quit => try remote.client.quit(alloc, config, &it),
         .links => try remote.client.links(alloc, config, &it),
+        .ban => try remote.client.ban(alloc, config, &it),
     }
 }
 
