@@ -106,6 +106,24 @@ fn handle(self: *@This(), conn: std.net.StreamServer.Connection) void {
     if (std.mem.eql(u8, cmd, "LINKS")) {
         self.ch.put(GlobalEventUnion{ .remote = .{ .links = conn } });
     }
+
+    if (std.mem.eql(u8, cmd, "BAN")) {
+        const user = conn.stream.reader().readUntilDelimiterAlloc(self.alloc, '\n', 4096) catch |err| {
+            std.log.debug("remote could read: {}", .{err});
+            return;
+        };
+
+        std.log.debug("remote msg: {s}", .{user});
+
+        // Since sending the message from the main connection
+        // makes it so that twitch doesn't echo it back, we're
+        // opening a one-off connection to send the message.
+        // This way we don't have to implement locally emote
+        // parsing.
+        var twitch_conn = Network.connect(self.alloc, self.config.nick, self.token) catch return;
+        defer twitch_conn.close();
+        twitch_conn.writer().print("PRIVMSG #{s} :/ban {s}\n", .{ self.config.nick, user }) catch return;
+    }
 }
 
 // NOTE: this function should only be called by

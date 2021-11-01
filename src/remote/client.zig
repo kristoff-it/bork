@@ -45,3 +45,38 @@ pub fn links(alloc: *std.mem.Allocator, config: BorkConfig, it: *std.process.Arg
         try out.writeAll(buf[0..n]);
     }
 }
+
+pub fn ban(alloc: *std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIterator) !void {
+    const user = try (it.next(alloc) orelse {
+        std.debug.print("Usage ./bork ban \"username\"\n", .{});
+        return;
+    });
+
+    const conn = try std.net.tcpConnectToHost(alloc, "127.0.0.1", config.remote_port);
+    defer conn.close();
+
+    try conn.writer().writeAll("BAN\n");
+    try conn.writer().writeAll(user);
+    try conn.writer().writeAll("\n");
+}
+
+pub fn unban(alloc: *std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIterator) !void {
+    const user = try it.next(alloc);
+
+    if (try it.next(alloc)) |_| {
+        std.debug.print(
+            \\Usage ./bork unban ["username"]
+            \\Omitting <username> will try to unban the last banned 
+            \\user in the current session. 
+            \\
+        , .{});
+        return;
+    }
+
+    const conn = try std.net.tcpConnectToHost(alloc, "127.0.0.1", config.remote_port);
+    defer conn.close();
+
+    try conn.writer().writeAll("UNBAN\n");
+    try conn.writer().writeAll(user);
+    try conn.writer().writeAll("\n");
+}
