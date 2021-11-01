@@ -1,10 +1,10 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const zbox = @import("zbox");
 const Channel = @import("utils/channel.zig").Channel;
 const Chat = @import("Chat.zig");
 const GlobalEventUnion = @import("main.zig").Event;
 const senseUrl = @import("./utils/url.zig").sense;
-
 const ziglyph = @import("ziglyph");
 
 // We expose directly the event type produced by zbox
@@ -92,16 +92,16 @@ pub fn init(alloc: *std.mem.Allocator, ch: *Channel(GlobalEventUnion), streamer_
         // TODO: debug why some resizings corrupt everything irreversibly;
         //       in the meantime users can press R to repaint everything.
 
-        // std.os.sigaction(std.os.SIGWINCH, &std.os.Sigaction{
-        //     .handler = .{ .handler = winchHandler },
-        //     .mask = switch (std.builtin.os.tag) {
-        //         .macos => 0,
-        //         .linux => std.os.empty_sigset,
-        //         .windows => @compileError(":3"),
-        //         else => @compileError("os not supported"),
-        //     },
-        //     .flags = 0,
-        // }, null);
+        std.os.sigaction(std.os.SIG.WINCH, &std.os.Sigaction{
+            .handler = .{ .handler = winchHandler },
+            .mask = switch (builtin.os.tag) {
+                .macos => 0,
+                .linux => std.os.empty_sigset,
+                .windows => @compileError(":3"),
+                else => @compileError("os not supported"),
+            },
+            .flags = 0,
+        }, null);
     }
 
     // Init main buffer
@@ -125,7 +125,7 @@ pub fn init(alloc: *std.mem.Allocator, ch: *Channel(GlobalEventUnion), streamer_
         .chatBuf = chatBuf,
         .output = output,
         .overlayBuf = overlayBuf,
-        .ticker = undefined, //async startTicking(ch),
+        .ticker = async startTicking(ch),
         .emote_cache = EmoteCache.init(alloc),
     };
 }
@@ -663,35 +663,46 @@ fn printWordWrap(
 }
 
 pub fn startTicking(ch: *Channel(GlobalEventUnion)) void {
-    const cooldown = 5;
-
-    var chaos_cooldown: isize = -1;
-    var last_size: @TypeOf(zbox.size()) = undefined;
     while (true) {
         std.time.sleep(100 * std.time.ns_per_ms);
         if (@atomicRmw(bool, &dirty, .Xchg, false, .SeqCst)) {
             // Flag was true, term is being resized
-            ch.put(GlobalEventUnion{ .display = .chaos });
-            if (chaos_cooldown > -1) {
-                std.log.debug("ko, restarting", .{});
-            }
-            chaos_cooldown = cooldown;
-            last_size = zbox.size();
-        } else if (chaos_cooldown > -1) {
-            var new_size = zbox.size();
-            if (std.meta.eql(new_size, last_size)) {
-                if (chaos_cooldown == 0) {
-                    ch.put(GlobalEventUnion{ .display = .calm });
-                }
-                chaos_cooldown -= 1;
-            } else {
-                last_size = new_size;
-                chaos_cooldown = cooldown;
-                std.log.debug("ko, restarting", .{});
-            }
+            std.log.debug("signaling dirty state!", .{});
+            ch.put(GlobalEventUnion{ .display = .dirty });
         }
     }
 }
+
+// pub fn startTicking(ch: *Channel(GlobalEventUnion)) void {
+//     const cooldown = 5;
+
+//     var chaos_cooldown: isize = -1;
+//     var last_size: @TypeOf(zbox.size()) = undefined;
+//     while (true) {
+//         std.time.sleep(100 * std.time.ns_per_ms);
+//         if (@atomicRmw(bool, &dirty, .Xchg, false, .SeqCst)) {
+//             // Flag was true, term is being resized
+//             ch.put(GlobalEventUnion{ .display = .chaos });
+//             if (chaos_cooldown > -1) {
+//                 std.log.debug("ko, restarting", .{});
+//             }
+//             chaos_cooldown = cooldown;
+//             last_size = zbox.size();
+//         } else if (chaos_cooldown > -1) {
+//             var new_size = zbox.size();
+//             if (std.meta.eql(new_size, last_size)) {
+//                 if (chaos_cooldown == 0) {
+//                     ch.put(GlobalEventUnion{ .display = .calm });
+//                 }
+//                 chaos_cooldown -= 1;
+//             } else {
+//                 last_size = new_size;
+//                 chaos_cooldown = cooldown;
+//                 std.log.debug("ko, restarting", .{});
+//             }
+//         }
+//     }
+// }
 
 pub fn notifyDisplayEvents(ch: *Channel(GlobalEventUnion), remote_enabled: bool) !void {
     defer std.log.debug("notfyDisplayEvents returning", .{});
