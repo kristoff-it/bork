@@ -160,6 +160,10 @@ fn bork_start(alloc: *std.mem.Allocator, config: BorkConfig, token: []const u8) 
                         // try display.sizeChanged();
                         // need_repaint = true;
                     },
+                    .dirty => {
+                        try display.sizeChanged();
+                        need_repaint = true;
+                    },
                     .disableCtrlCMessage => {
                         need_repaint = try display.toggleCtrlCMessage(false);
                     },

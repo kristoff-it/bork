@@ -22,6 +22,7 @@ pub const Event = union(enum) {
     tick,
     chaos,
     calm,
+    dirty,
     disableCtrlCMessage,
     escape,
     up,
