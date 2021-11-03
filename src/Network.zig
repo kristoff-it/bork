@@ -96,16 +96,23 @@ fn receiveMessages(self: *Self) void {
     // trapped reading a spammy socket forever
     std.event.Loop.instance.?.yield();
     while (true) {
-        var data = self.reader.readUntilDelimiterAlloc(self.allocator, '\n', 4096) catch |err| {
-            std.log.debug("receiveMessages errored out: {e}", .{err});
-            self.reconnect(null);
-            return;
+        const data = data: {
+            const d = self.reader.readUntilDelimiterAlloc(self.allocator, '\n', 4096) catch |err| {
+                std.log.debug("receiveMessages errored out: {e}", .{err});
+                self.reconnect(null);
+                return;
+            };
+
+            if (d.len >= 1 and d[d.len - 1] == '\r') {
+                break :data d[0 .. d.len - 1];
+            }
+
+            break :data d;
         };
+
         std.log.debug("receiveMessages succeded", .{});
 
-        if (data.len == 0) continue;
-
-        const p = parser.parseMessage(data[0 .. data.len - 1], self.allocator, self.tz) catch |err| {
+        const p = parser.parseMessage(data, self.allocator, self.tz) catch |err| {
             std.log.debug("parsing error: [{e}]", .{err});
             continue;
         };
