@@ -5,46 +5,38 @@ pkgs:
     source_url: "https://github.com/kristoff-it/bork"
 deps:
   zbox:
+    local: forks/zbox
     root: src/box.zig
-    src:
-      local: forks/zbox
   datetime:
-    root: src/datetime.zig
-    src:
-      git:
-        url: "https://github.com/frmdstryr/zig-datetime.git"
-        ref: master
+    git:
+      url: "https://github.com/frmdstryr/zig-datetime.git"
+      ref: master
+      root: src/datetime.zig
   clap:
-    root: clap.zig
-    src:
-      git:
-        url: "https://github.com/Hejsil/zig-clap.git"
-        ref: zig-master
+    git:
+      url: "https://github.com/Hejsil/zig-clap.git"
+      ref: zig-master
+      root: clap.zig
   iguanaTLS:
-    src:
-      git:
-        url: "https://github.com/nektro/iguanaTLS.git"
-        ref: master
+    git:
+      url: "https://github.com/nektro/iguanaTLS.git"
+      ref: master
   hzzp:
-    src:
-      git:
-        url: "https://github.com/truemedian/hzzp.git"
-        ref: master
+    git:
+      url: "https://github.com/truemedian/hzzp.git"
+      ref: master
   tzif:
-    root: tzif.zig
-    src:
-      git:
-        url: "https://github.com/leroycep/zig-tzif.git"
-        ref: master
+    git:
+      url: "https://github.com/leroycep/zig-tzif.git"
+      ref: master
+      root: tzif.zig
   ziglyph:
-    root: src/ziglyph.zig
-    src:
-      git:
-        url: "https://github.com/jecolon/ziglyph.git"
-        ref: main
+    git:
+      url: "https://github.com/jecolon/ziglyph.git"
+      ref: main
+      root: src/ziglyph.zig
   known-folders:
-    root: known-folders.zig
-    src:
-      git:
-        url: "https://github.com/ziglibs/known-folders.git"
-        ref: master
+    git:
+      url: "https://github.com/ziglibs/known-folders.git"
+      ref: master
+      root: known-folders.zig
