@@ -28,6 +28,9 @@ pub const known_folders_config = .{
 };
 
 pub const BorkConfig = struct {
+    const version = 1;
+    const path = std.fmt.comptimePrint(".bork/config_v{d}.json", .{version});
+
     nick: []const u8,
     top_emoji: []const u8 = "⚡",
     remote: bool = false,
@@ -234,6 +237,9 @@ fn bork_start(alloc: *std.mem.Allocator, config: BorkConfig, token: []const u8) 
     // TODO: implement real cleanup
 }
 
+var log_path: ?[]const u8 = null;
+var log_file: ?std.fs.File = null;
+
 pub fn log(
     comptime level: std.log.Level,
     comptime scope: @Type(.EnumLiteral),
@@ -245,12 +251,21 @@ pub fn log(
         const prefix = "[" ++ @tagName(level) ++ "] " ++ scope_prefix;
         const held = std.debug.getStderrMutex().acquire();
         defer held.release();
-        const name = if (options.local) "bork-local.log" else "bork.log";
-        const logfile = std.fs.cwd().createFile(name, .{ .truncate = false, .intended_io_mode = .blocking }) catch return;
-        defer logfile.close();
-        const writer = logfile.writer();
-        const end = logfile.getEndPos() catch return;
-        logfile.seekTo(end) catch return;
+
+        const l = log_file orelse blk: {
+            const file_path = log_path orelse if (options.local)
+                "bork-local.log"
+            else
+                return; // no logs in this case, too bad
+
+            const log_inner = std.fs.cwd().createFile(file_path, .{ .truncate = false, .intended_io_mode = .blocking }) catch return;
+            const end = log_inner.getEndPos() catch return;
+            log_inner.seekTo(end) catch return;
+            log_file = log_inner;
+            break :blk log_inner;
+        };
+
+        const writer = l.writer();
         writer.print(prefix ++ format ++ "\n", args) catch return;
     }
 }
@@ -282,16 +297,27 @@ const ConfigAndToken = struct {
 };
 
 fn get_config_and_token(alloc: *std.mem.Allocator, check_token: bool) !ConfigAndToken {
-    var base = (try folders.open(alloc, .home, .{})) orelse
-        (try folders.open(alloc, .executable_dir, .{})) orelse
+    var base_path = (try folders.getPath(alloc, .home)) orelse
+        (try folders.getPath(alloc, .executable_dir)) orelse
         @panic("couldn't find a way of creating a config file");
+
+    var base = try std.fs.openDirAbsolute(base_path, .{});
     defer base.close();
 
     // Ensure existence of .bork/
     try base.makePath(".bork");
 
+    // Prepare the log_file path for `log`.
+    {
+        const held = std.debug.getStderrMutex().acquire();
+        defer held.release();
+
+        const log_name = if (options.local) "bork-local.log" else "bork.log";
+        log_path = try std.fmt.allocPrint(alloc, "{s}/.bork/{s}", .{ base_path, log_name });
+    }
+
     var config: BorkConfig = config: {
-        const file = base.openFile(".bork/config.json", .{}) catch |err| switch (err) {
+        const file = base.openFile(BorkConfig.path, .{}) catch |err| switch (err) {
             else => return err,
             error.FileNotFound => break :config try create_config(alloc, base),
         };
@@ -445,7 +471,7 @@ fn create_config(alloc: *std.mem.Allocator, base: std.fs.Dir) !BorkConfig {
                     std.debug.print(
                         \\
                         \\
-                        \\ Remote control is disabled.
+                        \\ CLI control is disabled.
                         \\ You can enable it in the future by editing the 
                         \\ configuration file.
                         \\ 
@@ -459,7 +485,7 @@ fn create_config(alloc: *std.mem.Allocator, base: std.fs.Dir) !BorkConfig {
 
         std.debug.print(
             \\ 
-            \\ Remote control enabled!
+            \\ CLI control enabled!
             \\ Which port should Bork listen to?
             \\
             \\ Port? [{}]: 
@@ -504,7 +530,7 @@ fn create_config(alloc: *std.mem.Allocator, base: std.fs.Dir) !BorkConfig {
     }
 
     // create the config file
-    var file = try base.createFile(".bork/config.json", .{});
+    var file = try base.createFile(BorkConfig.path, .{});
 
     try std.json.stringify(result, .{}, file.writer());
     return result;
