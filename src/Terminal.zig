@@ -718,13 +718,14 @@ pub fn notifyDisplayEvents(ch: *Channel(GlobalEventUnion), remote_enabled: bool)
 pub fn deinit(self: *Self) void {
     std.log.debug("deinit terminal!", .{});
     zbox.cursorShow() catch {};
+    zbox.clear() catch {};
     self.output.deinit();
     zbox.deinit();
     std.log.debug("done cleaning term", .{});
 
-    // Why is this a deadlock?
-    await notifs catch {};
-    std.log.debug("done await", .{});
+    // Why is this causing a crash?
+    // await notifs catch {};
+    // std.log.debug("done await", .{});
 }
 
 pub fn panic() void {
