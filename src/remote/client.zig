@@ -2,13 +2,33 @@ const std = @import("std");
 const Event = @import("../remote.zig").Event;
 const BorkConfig = @import("../main.zig").BorkConfig;
 
+fn connect(alloc: *std.mem.Allocator, port: u16) std.net.Stream {
+    return std.net.tcpConnectToHost(alloc, "127.0.0.1", port) catch |err| switch (err) {
+        error.ConnectionRefused => {
+            std.debug.print(
+                \\Connection refused!
+                \\Is Bork running?
+                \\
+            , .{});
+            std.os.exit(1);
+        },
+        else => {
+            std.debug.print(
+                \\Unexpected error: {}
+                \\
+            , .{err});
+            std.os.exit(1);
+        },
+    };
+}
+
 pub fn send(alloc: *std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIterator) !void {
     const message = try (it.next(alloc) orelse {
         std.debug.print("Usage ./bork send \"my message Kappa\"\n", .{});
         return;
     });
 
-    const conn = try std.net.tcpConnectToHost(alloc, "127.0.0.1", config.remote_port);
+    const conn = connect(alloc, config.remote_port);
     defer conn.close();
 
     try conn.writer().writeAll("SEND\n");
@@ -20,7 +40,7 @@ pub fn quit(alloc: *std.mem.Allocator, config: BorkConfig, it: *std.process.ArgI
     // TODO: validation
     _ = it;
 
-    const conn = try std.net.tcpConnectToHost(alloc, "127.0.0.1", config.remote_port);
+    const conn = connect(alloc, config.remote_port);
     defer conn.close();
 
     try conn.writer().writeAll("QUIT\n");
@@ -30,7 +50,7 @@ pub fn links(alloc: *std.mem.Allocator, config: BorkConfig, it: *std.process.Arg
     // TODO: validation
     _ = it;
 
-    const conn = try std.net.tcpConnectToHost(alloc, "127.0.0.1", config.remote_port);
+    const conn = connect(alloc, config.remote_port);
     defer conn.close();
 
     try conn.writer().writeAll("LINKS\n");
@@ -52,7 +72,7 @@ pub fn ban(alloc: *std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIt
         return;
     });
 
-    const conn = try std.net.tcpConnectToHost(alloc, "127.0.0.1", config.remote_port);
+    const conn = connect(alloc, config.remote_port);
     defer conn.close();
 
     try conn.writer().writeAll("BAN\n");
@@ -73,7 +93,7 @@ pub fn unban(alloc: *std.mem.Allocator, config: BorkConfig, it: *std.process.Arg
         return;
     }
 
-    const conn = try std.net.tcpConnectToHost(alloc, "127.0.0.1", config.remote_port);
+    const conn = connect(alloc, config.remote_port);
     defer conn.close();
 
     try conn.writer().writeAll("UNBAN\n");
