@@ -45,6 +45,7 @@ const Subcommand = enum {
     links,
     send,
     ban,
+    afk,
     quit,
 };
 
@@ -80,6 +81,7 @@ pub fn main() !void {
         .send => try remote.client.send(alloc, config, &it),
         .quit => try remote.client.quit(alloc, config, &it),
         .links => try remote.client.links(alloc, config, &it),
+        .afk => try remote.client.afk(alloc, config, &it),
         .ban => try remote.client.ban(alloc, config, &it),
     }
 }
@@ -144,6 +146,10 @@ fn bork_start(alloc: *std.mem.Allocator, config: BorkConfig, token: []const u8) 
                     },
                     .links => |conn| {
                         remote.Server.replyLinks(&chat, conn);
+                    },
+                    .afk => |afk| {
+                        try display.setAfkMessage(afk.target_time, afk.reason);
+                        need_repaint = true;
                     },
                 }
             },
@@ -227,6 +233,7 @@ fn bork_start(alloc: *std.mem.Allocator, config: BorkConfig, token: []const u8) 
             },
         }
 
+        need_repaint = need_repaint or display.needAnimationFrame();
         if (need_repaint and !chaos) {
             try display.renderChat(&chat);
         }
@@ -278,13 +285,16 @@ fn print_help() void {
     std.debug.print(
         \\ Bork is a TUI chat client for Twitch.
         \\
-        \\ Available commands: start, quit, send, links.
+        \\ Available commands: start, quit, send, links, ban, unban, afk.
         \\
         \\ Examples:
         \\   ./bork start
         \\   ./bork quit
         \\   ./bork send "welcome to my stream Kappa"
         \\   ./bork links
+        \\   ./bork ban badbotuser
+        \\   ./bork unban innocentuser
+        \\   ./bork afk 25m "dinner"
         \\
     , .{});
 }

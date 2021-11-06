@@ -1,6 +1,7 @@
 const std = @import("std");
 const Event = @import("../remote.zig").Event;
 const BorkConfig = @import("../main.zig").BorkConfig;
+const parseTime = @import("./utils.zig").parseTime;
 
 fn connect(alloc: *std.mem.Allocator, port: u16) std.net.Stream {
     return std.net.tcpConnectToHost(alloc, "127.0.0.1", port) catch |err| switch (err) {
@@ -99,4 +100,59 @@ pub fn unban(alloc: *std.mem.Allocator, config: BorkConfig, it: *std.process.Arg
     try conn.writer().writeAll("UNBAN\n");
     try conn.writer().writeAll(user);
     try conn.writer().writeAll("\n");
+}
+
+pub fn afk(alloc: *std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIterator) !void {
+    const time = try (it.next(alloc) orelse {
+        std.debug.print(
+            \\Usage ./bork afk time ["reason"]
+            \\
+        , .{});
+        return;
+    });
+
+    const reason = if (it.next(alloc)) |arg| try arg else null;
+    if (reason) |r| {
+        for (r) |c| switch (c) {
+            else => {},
+            '\n', '\r', '\t' => {
+                std.debug.print(
+                    \\Usage ./bork afk time ["reason"]
+                    \\Reason cannot contain newlines 
+                    \\(uness you want to PR the feature yourself)
+                    \\
+                , .{});
+                return;
+            },
+        };
+    }
+
+    const parsed_time = parseTime(time);
+
+    if (parsed_time) |_| {
+        if (it.next(alloc)) |_| {
+            std.debug.print(
+                \\Usage ./bork afk time ["reason"]
+                \\
+            , .{});
+            return;
+        }
+
+        const conn = connect(alloc, config.remote_port);
+        defer conn.close();
+
+        try conn.writer().writeAll("AFK\n");
+        try conn.writer().writeAll(time);
+        try conn.writer().writeAll("\n");
+        if (reason) |r| try conn.writer().writeAll(r);
+        try conn.writer().writeAll("\n");
+    } else |_| {
+        std.debug.print(
+            \\Usage ./bork afk time ["reason"]
+            \\`time` can be expressed in human readable form. 
+            \\E.g.: 5m, 1h, 1h15m, 60s
+            \\
+        , .{});
+        return;
+    }
 }
