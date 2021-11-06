@@ -19,6 +19,7 @@ pub const TerminalMessage = struct {
 
 pub const InteractiveElement = union(enum) {
     none,
+    afk,
     subscriber_badge: *TerminalMessage,
     username: *TerminalMessage,
     chat_message: *TerminalMessage,
@@ -43,6 +44,85 @@ ticker: @Frame(startTicking),
 active_interaction: InteractiveElement = .none,
 emote_cache: EmoteCache,
 ctrlc_pressed: bool = false,
+afk_message: ?struct {
+    reason: []const u8,
+    target_time: i64,
+    last_updated: i64,
+    buffer: zbox.Buffer,
+
+    pub fn deinit(afk: *@This(), alloc: *std.mem.Allocator) void {
+        alloc.free(afk.reason);
+        afk.buffer.deinit();
+    }
+
+    pub fn needsToAnimate(afk: @This()) bool {
+        return afk.last_updated != std.time.timestamp();
+    }
+
+    pub fn render(afk: *@This(), alloc: *std.mem.Allocator, output_width: usize) !void {
+        const size_changed = output_width != afk.buffer.width;
+        const needs_update = size_changed or afk.needsToAnimate();
+
+        if (size_changed) {
+            std.log.debug("must realloc afk message!", .{});
+            afk.buffer.deinit();
+
+            const start_height: usize = if (afk.reason.len == 0) 4 else 5;
+            afk.buffer = try zbox.Buffer.init(
+                alloc,
+                start_height,
+                output_width,
+            );
+
+            afk.buffer.fill(.{ .interactive_element = .afk });
+
+            Box.draw(.single, &afk.buffer, 0, 0, afk.buffer.width - 1, start_height);
+        }
+
+        if (needs_update) {
+            const now = std.time.timestamp();
+            const remaining = std.math.max(0, afk.target_time - now);
+            const human_readable_remaining = try renderCountdown(remaining, alloc);
+
+            std.log.debug("must rerender msg!", .{});
+
+            var cur = afk.buffer.cursorAt(1, 1);
+            cur.interactive_element = .afk;
+
+            const top_text = "--- AFK ---";
+            const top_column = @divTrunc(afk.buffer.width - top_text.len, 2);
+            cur.row_num = 1;
+            cur.col_num = top_column;
+            try cur.writer().writeAll(top_text);
+
+            const time_column = @divTrunc(afk.buffer.width - (human_readable_remaining.len + 8), 2);
+            cur.row_num = 2;
+            cur.col_num = time_column;
+            try cur.writer().print("--- {s} ---", .{
+                human_readable_remaining,
+            });
+
+            if (afk.reason.len > 0) {
+                const bottom_text = if (afk.reason.len <= afk.buffer.width - 2) afk.reason else afk.reason[0 .. afk.buffer.width - 2];
+                const bottom_column = std.math.max(1, @divTrunc(afk.buffer.width - 2 - bottom_text.len, 2));
+                cur.row_num = 3;
+                cur.col_num = bottom_column;
+                try cur.writer().writeAll(bottom_text);
+            }
+
+            afk.last_updated = now;
+        }
+    }
+
+    fn renderCountdown(icd: i64, alloc: *std.mem.Allocator) ![]const u8 {
+        const cd = @intCast(usize, icd);
+        const h = @divTrunc(cd, 60 * 60);
+        const m = @divTrunc(@mod(cd, 60 * 60), 60);
+        const s = @mod(cd, 60);
+
+        return std.fmt.allocPrint(alloc, "{:0>2}h{:0>2}m{:0>2}s", .{ h, m, s });
+    }
+} = null,
 
 // Static config
 // The message is padded on each line
@@ -1114,8 +1194,20 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
         }
     }
 
+    // Paint the AFK message (if any)
+    {
+        if (self.afk_message) |*afk| {
+            try afk.render(self.allocator, self.chatBuf.width);
+        }
+    }
+
     self.output.blit(self.chatBuf, 1, 1);
     self.output.blit(self.overlayBuf, 1, 1);
+    if (self.afk_message) |afk| self.output.blit(
+        afk.buffer,
+        @divTrunc(@intCast(isize, self.output.height) - @intCast(isize, afk.buffer.height), 2),
+        1,
+    );
     try zbox.push(self.output);
     std.log.debug("render completed!", .{});
 }
@@ -1161,7 +1253,7 @@ pub fn handleClick(self: *Self, row: usize, col: usize) !bool {
     if (!std.meta.eql(old_action, self.active_interaction)) {
         // Perform element-specific cleanup for the old element
         switch (old_action) {
-            .none, .button, .subscriber_badge, .event_message => {},
+            .none, .button, .subscriber_badge, .event_message, .afk => {},
             .chat_message => |tm| {
                 tm.is_selected = false;
             },
@@ -1187,6 +1279,10 @@ pub fn handleClick(self: *Self, row: usize, col: usize) !bool {
         // Perform element-specific setup for the new element
         switch (self.active_interaction) {
             .none, .button, .subscriber_badge => {},
+            .afk => {
+                if (self.afk_message) |*afk| afk.deinit(self.allocator);
+                self.afk_message = null;
+            },
             .chat_message => |tm| {
                 // If the message came in highlighted we must clear
                 // it and also clear the active interaction.
@@ -1360,3 +1456,19 @@ const Box = struct {
         buf.cellRef(row + height - 1, col + width).* = .{ .char = char_set[3] };
     }
 };
+
+// Called by the main event loop every update to ask us if
+// we need to repaint. Useful for driving animations.
+pub fn needAnimationFrame(self: *Self) bool {
+    return if (self.afk_message) |afk| afk.needsToAnimate() else false;
+}
+
+pub fn setAfkMessage(self: *Self, target_time: i64, reason: []const u8) !void {
+    std.log.debug("afk: {d}, {s}", .{ target_time, reason });
+    self.afk_message = .{
+        .reason = reason,
+        .target_time = target_time,
+        .last_updated = 0,
+        .buffer = try zbox.Buffer.init(self.allocator, 0, 0),
+    };
+}

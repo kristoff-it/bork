@@ -5,11 +5,16 @@ const GlobalEventUnion = @import("../main.zig").Event;
 const Chat = @import("../Chat.zig");
 const BorkConfig = @import("../main.zig").BorkConfig;
 const Network = @import("../Network.zig");
+const parseTime = @import("./utils.zig").parseTime;
 
 pub const Event = union(enum) {
     quit,
     links: std.net.StreamServer.Connection,
     send: []const u8,
+    afk: struct {
+        target_time: i64,
+        reason: []const u8,
+    },
 };
 
 address: std.net.Address,
@@ -72,20 +77,24 @@ fn listen(self: *@This()) void {
 }
 
 fn handle(self: *@This(), conn: std.net.StreamServer.Connection) void {
+    self.erroring_handle(conn) catch {};
+}
+
+fn erroring_handle(self: *@This(), conn: std.net.StreamServer.Connection) !void {
     var buf: [100]u8 = undefined;
 
     const cmd = conn.stream.reader().readUntilDelimiter(&buf, '\n') catch |err| {
         std.log.debug("remote could read: {}", .{err});
         return;
     };
-
-    std.log.debug("remote cmd: {s}", .{cmd});
+    defer std.log.debug("remote cmd: {s}", .{cmd});
 
     if (std.mem.eql(u8, cmd, "SEND")) {
         const msg = conn.stream.reader().readUntilDelimiterAlloc(self.alloc, '\n', 4096) catch |err| {
             std.log.debug("remote could read: {}", .{err});
             return;
         };
+        defer self.alloc.free(msg);
 
         std.log.debug("remote msg: {s}", .{msg});
 
@@ -113,6 +122,8 @@ fn handle(self: *@This(), conn: std.net.StreamServer.Connection) void {
             return;
         };
 
+        defer self.alloc.free(user);
+
         std.log.debug("remote msg: {s}", .{user});
 
         // Since sending the message from the main connection
@@ -130,6 +141,7 @@ fn handle(self: *@This(), conn: std.net.StreamServer.Connection) void {
             std.log.debug("remote could read: {}", .{err});
             return;
         };
+        defer self.alloc.free(user);
 
         std.log.debug("remote msg: {s}", .{user});
 
@@ -141,6 +153,45 @@ fn handle(self: *@This(), conn: std.net.StreamServer.Connection) void {
         var twitch_conn = Network.connect(self.alloc, self.config.nick, self.token) catch return;
         defer twitch_conn.close();
         twitch_conn.writer().print("PRIVMSG #{s} :/ban {s}\n", .{ self.config.nick, user }) catch return;
+    }
+
+    if (std.mem.eql(u8, cmd, "AFK")) {
+        const reader = conn.stream.reader();
+        const time_string = reader.readUntilDelimiterAlloc(self.alloc, '\n', 4096) catch |err| {
+            std.log.debug("remote could read: {}", .{err});
+            return;
+        };
+        defer self.alloc.free(time_string);
+
+        const parsed_time = parseTime(time_string) catch {
+            std.log.debug("remote failed to parse time", .{});
+            return;
+        };
+
+        std.log.debug("parsed_time in seconds: {d}", .{parsed_time});
+
+        const target_time = std.time.timestamp() + parsed_time;
+
+        const reason = reader.readUntilDelimiterAlloc(self.alloc, '\n', 4096) catch |err| {
+            std.log.debug("remote could read: {}", .{err});
+            return;
+        };
+
+        errdefer self.alloc.free(reason);
+
+        for (reason) |c| switch (c) {
+            else => {},
+            '\n', '\r', '\t' => return error.BadReason,
+        };
+
+        self.ch.put(GlobalEventUnion{
+            .remote = .{
+                .afk = .{
+                    .target_time = target_time,
+                    .reason = reason,
+                },
+            },
+        });
     }
 }
 
