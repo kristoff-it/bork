@@ -83,7 +83,9 @@ pub fn deinit(self: *Self) void {
     }
 
     // Now we can kill the connection and nobody will try to reconnect
-    std.os.shutdown(self.socket.handle, .both) catch unreachable;
+    std.os.shutdown(self.socket.handle, .both) catch |err| {
+        std.log.debug("shutdown failed, err: {}", .{err});
+    };
     await @ptrCast(anyframe->void, messages_frame_bytes);
     self.socket.close();
 }
