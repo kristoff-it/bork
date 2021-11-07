@@ -73,13 +73,13 @@ pub fn main() !void {
         defer alloc.free(exe_name);
 
         const subc_string = try (it.next(alloc) orelse {
-            print_help();
+            printHelp();
             return;
         });
 
         break :subcommand std.meta.stringToEnum(Subcommand, subc_string) orelse {
             std.debug.print("Invalid subcommand.\n\n", .{});
-            print_help();
+            printHelp();
             return;
         };
     };
@@ -295,7 +295,7 @@ pub fn panic(msg: []const u8, trace: ?*std.builtin.StackTrace) noreturn {
     std.builtin.default_panic(msg, trace);
 }
 
-fn print_help() void {
+fn printHelp() void {
     std.debug.print(
         \\ Bork is a TUI chat client for Twitch.
         \\
