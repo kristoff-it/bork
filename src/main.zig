@@ -28,11 +28,25 @@ pub const known_folders_config = .{
 pub const BorkConfig = struct {
     const version = 1;
     const path = std.fmt.comptimePrint(".bork/config_v{d}.json", .{version});
+    const AfkPosition = enum {
+        top,
+        hover,
+        bottom,
+
+        pub fn jsonStringify(
+            self: AfkPosition,
+            _: std.json.StringifyOptions,
+            w: std.fs.File.Writer,
+        ) !void {
+            try w.writeAll(@tagName(self));
+        }
+    };
 
     nick: []const u8,
     top_emoji: []const u8 = "⚡",
     remote: bool = false,
     remote_port: u16 = default_port,
+    afk_position: AfkPosition = .bottom,
 
     // TODO what's the right size for port numbers?
     const default_port: u16 = 6226;
@@ -120,7 +134,7 @@ fn bork_start(alloc: *std.mem.Allocator, config: BorkConfig, token: []const u8) 
     }
     defer if (config.remote) remote_server.deinit();
 
-    var display = try Terminal.init(alloc, &ch, config.nick, config.remote);
+    var display = try Terminal.init(alloc, &ch, config);
     defer display.deinit();
 
     var network: Network = undefined;

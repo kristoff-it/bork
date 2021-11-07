@@ -3,8 +3,10 @@ const builtin = @import("builtin");
 const zbox = @import("zbox");
 const Channel = @import("utils/channel.zig").Channel;
 const Chat = @import("Chat.zig");
-const GlobalEventUnion = @import("main.zig").Event;
+const main = @import("main.zig");
 const senseUrl = @import("./utils/url.zig").sense;
+const GlobalEventUnion = main.Event;
+const BorkConfig = main.BorkConfig;
 const ziglyph = @import("ziglyph");
 
 // We expose directly the event type produced by zbox
@@ -30,22 +32,8 @@ pub const InteractiveElement = union(enum) {
     },
 };
 
-// This global is used by the WINCH handler.
-var mainLoopChannel: ?*Channel(GlobalEventUnion) = null;
-const EmoteCache = std.AutoHashMap(u32, void);
-
-// State
-streamer_name: []const u8,
-remote_enabled: bool,
-allocator: *std.mem.Allocator,
-ch: *Channel(GlobalEventUnion),
-output: zbox.Buffer,
-chatBuf: zbox.Buffer,
-overlayBuf: zbox.Buffer,
-active_interaction: InteractiveElement = .none,
-emote_cache: EmoteCache,
-ctrlc_pressed: bool = false,
-afk_message: ?struct {
+const AfkMessage = struct {
+    const height: usize = 5;
     reason: []const u8,
     target_time: i64,
     last_updated: i64,
@@ -68,16 +56,15 @@ afk_message: ?struct {
             std.log.debug("must realloc afk message!", .{});
             afk.buffer.deinit();
 
-            const start_height: usize = if (afk.reason.len == 0) 4 else 5;
             afk.buffer = try zbox.Buffer.init(
                 alloc,
-                start_height,
+                height,
                 output_width,
             );
 
             afk.buffer.fill(.{ .interactive_element = .afk });
 
-            Box.draw(.single, &afk.buffer, 0, 0, afk.buffer.width - 1, start_height);
+            Box.draw(.single, &afk.buffer, 0, 0, afk.buffer.width - 1, height);
         }
 
         if (needs_update) {
@@ -103,13 +90,11 @@ afk_message: ?struct {
                 human_readable_remaining,
             });
 
-            if (afk.reason.len > 0) {
-                const bottom_text = if (afk.reason.len <= afk.buffer.width - 2) afk.reason else afk.reason[0 .. afk.buffer.width - 2];
-                const bottom_column = std.math.max(1, @divTrunc(afk.buffer.width - 2 - bottom_text.len, 2));
-                cur.row_num = 3;
-                cur.col_num = bottom_column;
-                try cur.writer().writeAll(bottom_text);
-            }
+            const bottom_text = if (afk.reason.len <= afk.buffer.width - 2) afk.reason else afk.reason[0 .. afk.buffer.width - 2];
+            const bottom_column = std.math.max(1, @divTrunc(afk.buffer.width - 2 - bottom_text.len, 2));
+            cur.row_num = 3;
+            cur.col_num = bottom_column;
+            try cur.writer().writeAll(bottom_text);
 
             afk.last_updated = now;
         }
@@ -123,7 +108,23 @@ afk_message: ?struct {
 
         return std.fmt.allocPrint(alloc, "{:0>2}h{:0>2}m{:0>2}s", .{ h, m, s });
     }
-} = null,
+};
+
+// This global is used by the WINCH handler.
+var mainLoopChannel: ?*Channel(GlobalEventUnion) = null;
+const EmoteCache = std.AutoHashMap(u32, void);
+
+// State
+config: BorkConfig,
+allocator: *std.mem.Allocator,
+ch: *Channel(GlobalEventUnion),
+output: zbox.Buffer,
+chatBuf: zbox.Buffer,
+overlayBuf: zbox.Buffer,
+active_interaction: InteractiveElement = .none,
+emote_cache: EmoteCache,
+ctrlc_pressed: bool = false,
+afk_message: ?AfkMessage = null,
 
 // Static config
 // The message is padded on each line
@@ -136,7 +137,7 @@ const Self = @This();
 var done_init = false;
 var terminal_inited = false;
 var notifs: @Frame(notifyDisplayEvents) = undefined;
-pub fn init(alloc: *std.mem.Allocator, ch: *Channel(GlobalEventUnion), streamer_name: []const u8, remote_enabled: bool) !Self {
+pub fn init(alloc: *std.mem.Allocator, ch: *Channel(GlobalEventUnion), config: BorkConfig) !Self {
     {
         if (done_init) @panic("Terminal should only be initialized once, like a singleton.");
         done_init = true;
@@ -197,14 +198,13 @@ pub fn init(alloc: *std.mem.Allocator, ch: *Channel(GlobalEventUnion), streamer_
     var overlayBuf = try zbox.Buffer.init(alloc, size.height - 2, size.width - 2);
     errdefer overlayBuf.deinit();
 
-    notifs = async notifyDisplayEvents(ch, remote_enabled);
+    notifs = async notifyDisplayEvents(ch, config.remote);
 
     mainLoopChannel = ch;
     return Self{
-        .streamer_name = streamer_name,
+        .config = config,
         .allocator = alloc,
         .ch = ch,
-        .remote_enabled = remote_enabled,
         .chatBuf = chatBuf,
         .output = output,
         .overlayBuf = overlayBuf,
@@ -811,8 +811,9 @@ pub fn sizeChanged(self: *Self) !void {
     const size = try zbox.size();
     if (size.width != self.output.width or size.height != self.output.height) {
         try self.output.resize(size.height, size.width);
-        try self.chatBuf.resize(size.height - 2, size.width - 2);
-        try self.overlayBuf.resize(size.height - 2, size.width - 2);
+        const chatBufSize: usize = size.height - 2 - if (self.config.afk_position != .hover and self.afk_message != null) AfkMessage.height else 0;
+        try self.chatBuf.resize(chatBufSize, size.width - 2);
+        try self.overlayBuf.resize(chatBufSize, size.width - 2);
         self.output.clear();
         try zbox.term.clear();
         try zbox.term.flush();
@@ -827,18 +828,29 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
         try zbox.term.send("\x1b_Ga=d\x1b\\");
     }
 
+    // Paint the AFK message (if any)
+    {
+        if (self.afk_message) |*afk| {
+            try afk.render(self.allocator, self.chatBuf.width);
+        }
+    }
+
     // Add top bar
     {
         const emoji_column = @divTrunc(self.output.width, 2) - 1; // TODO: test this math lmao
+        const top_bar_row = if (self.config.afk_position == .top and self.afk_message != null)
+            AfkMessage.height
+        else
+            0;
 
         var i: usize = 1;
         while (i < self.output.width - 1) : (i += 1) {
-            self.output.cellRef(0, i).* = .{
+            self.output.cellRef(top_bar_row, i).* = .{
                 .char = ' ',
                 .attribs = .{ .bg_blue = true },
             };
         }
-        var cur = self.output.cursorAt(0, emoji_column - 4);
+        var cur = self.output.cursorAt(top_bar_row, emoji_column - 4);
         cur.attribs = .{
             .fg_black = true,
             .bg_blue = true,
@@ -846,7 +858,7 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
         // try cur.writer().writeAll("Zig");
         // cur.col_num = emoji_column + 2;
         // try cur.writer().writeAll("b0rk");
-        self.output.cellRef(0, emoji_column).* = .{
+        self.output.cellRef(top_bar_row, emoji_column).* = .{
             .char = '⚡',
             .attribs = .{
                 .fg_yellow = true,
@@ -859,7 +871,9 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
     {
         // NOTE: chat history is rendered bottom-up, starting from the newest
         //       message visible at the bottom, going up to the oldest.
+
         self.chatBuf.clear();
+
         self.overlayBuf.fill(.{
             .is_transparent = true,
         });
@@ -1053,7 +1067,7 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                             // Badges
                             const badges_width: usize = if (c.is_mod) 4 else 3;
                             if (c.sub_months > 0 and
-                                !std.mem.eql(u8, self.streamer_name, m.login_name))
+                                !std.mem.eql(u8, self.config.nick, m.login_name))
                             {
                                 var sub_cur = self.chatBuf.cursorAt(
                                     cur.row_num,
@@ -1124,18 +1138,23 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
     {
         const width = self.output.width - 1;
 
+        const bottom_bar_row = self.output.height - 1 - if (self.config.afk_position == .bottom and self.afk_message != null)
+            AfkMessage.height
+        else
+            0;
+
         // The temporary CTRLC message has higher priority
         // than all other messages.
         if (self.ctrlc_pressed) {
             const msg = "run `./bork quit`";
             if (width > msg.len) {
                 var column = @divTrunc(width, 2) + (width % 2) - @divTrunc(msg.len, 2) - (msg.len % 2); // TODO: test this math lmao
-                try self.output.cursorAt(self.output.height - 1, column).writer().writeAll(msg);
+                try self.output.cursorAt(bottom_bar_row, column).writer().writeAll(msg);
             }
 
             var i: usize = 1;
             while (i < width) : (i += 1) {
-                self.output.cellRef(self.output.height - 1, i).attribs = .{
+                self.output.cellRef(bottom_bar_row, i).attribs = .{
                     .bg_white = true,
                     .fg_red = true,
                 };
@@ -1144,12 +1163,12 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
             const msg = "DISCONNECTED";
             if (width > msg.len) {
                 var column = @divTrunc(width, 2) + (width % 2) - @divTrunc(msg.len, 2) - (msg.len % 2); // TODO: test this math lmao
-                try self.output.cursorAt(self.output.height - 1, column).writer().writeAll(msg);
+                try self.output.cursorAt(bottom_bar_row, column).writer().writeAll(msg);
             }
 
             var i: usize = 1;
             while (i < width) : (i += 1) {
-                self.output.cellRef(self.output.height - 1, i).attribs = .{
+                self.output.cellRef(bottom_bar_row, i).attribs = .{
                     .bg_red = true,
                     .fg_black = true,
                 };
@@ -1157,7 +1176,7 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
         } else if (chat.last_message == chat.bottom_message) {
             var i: usize = 1;
             while (i < width) : (i += 1) {
-                self.output.cellRef(self.output.height - 1, i).* = .{
+                self.output.cellRef(bottom_bar_row, i).* = .{
                     .char = ' ',
                     .attribs = .{ .bg_blue = true },
                 };
@@ -1167,12 +1186,12 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
             var column: usize = 0;
             if (width > msg.len) {
                 column = @divTrunc(width, 2) + (width % 2) - @divTrunc(msg.len, 2) - (msg.len % 2); // TODO: test this math lmao
-                try self.output.cursorAt(self.output.height - 1, column).writer().writeAll(msg);
+                try self.output.cursorAt(bottom_bar_row, column).writer().writeAll(msg);
             }
 
             var i: usize = 1;
             while (i < width) : (i += 1) {
-                var cell = self.output.cellRef(self.output.height - 1, i);
+                var cell = self.output.cellRef(bottom_bar_row, i);
                 cell.attribs = .{
                     .bg_yellow = true,
                     .fg_black = true,
@@ -1186,20 +1205,17 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
         }
     }
 
-    // Paint the AFK message (if any)
-    {
-        if (self.afk_message) |*afk| {
-            try afk.render(self.allocator, self.chatBuf.width);
-        }
-    }
+    const chat_buf_row: usize = 1 + if (self.config.afk_position == .top and self.afk_message != null) AfkMessage.height else 0;
+    const afk_message_row: usize = switch (self.config.afk_position) {
+        .top => 0,
+        .hover => @divTrunc(@intCast(usize, self.output.height) - @intCast(usize, AfkMessage.height), 2),
+        .bottom => self.output.height - AfkMessage.height,
+    };
 
-    self.output.blit(self.chatBuf, 1, 1);
-    self.output.blit(self.overlayBuf, 1, 1);
-    if (self.afk_message) |afk| self.output.blit(
-        afk.buffer,
-        @divTrunc(@intCast(isize, self.output.height) - @intCast(isize, afk.buffer.height), 2),
-        1,
-    );
+    self.output.blit(self.chatBuf, @intCast(isize, chat_buf_row), 1);
+    self.output.blit(self.overlayBuf, @intCast(isize, chat_buf_row), 1);
+    if (self.afk_message) |afk| self.output.blit(afk.buffer, @intCast(isize, afk_message_row), 1);
+
     try zbox.push(self.output);
     std.log.debug("render completed!", .{});
 }
@@ -1272,8 +1288,18 @@ pub fn handleClick(self: *Self, row: usize, col: usize) !bool {
         switch (self.active_interaction) {
             .none, .button, .subscriber_badge => {},
             .afk => {
-                if (self.afk_message) |*afk| afk.deinit(self.allocator);
-                self.afk_message = null;
+                if (self.afk_message) |*afk| {
+                    afk.deinit(self.allocator);
+                    self.afk_message = null;
+
+                    // Restore the original chatBufSize when closing
+                    // a non-hovering afk box.
+                    if (self.config.afk_position != .hover) {
+                        const chatBufSize: usize = self.output.height - 2;
+                        try self.chatBuf.resize(chatBufSize, self.output.width - 2);
+                        try self.overlayBuf.resize(chatBufSize, self.output.width - 2);
+                    }
+                }
             },
             .chat_message => |tm| {
                 // If the message came in highlighted we must clear
@@ -1457,6 +1483,17 @@ pub fn needAnimationFrame(self: *Self) bool {
 
 pub fn setAfkMessage(self: *Self, target_time: i64, reason: []const u8) !void {
     std.log.debug("afk: {d}, {s}", .{ target_time, reason });
+    if (self.afk_message) |*old| {
+        old.deinit(self.allocator);
+    } else {
+        // Shrink chatBuf if the position is not hovering
+        // (since there was no afk message showing before)
+        if (self.config.afk_position != .hover) {
+            const chatBufSize: usize = self.output.height - 2 - AfkMessage.height;
+            try self.chatBuf.resize(chatBufSize, self.output.width - 2);
+            try self.overlayBuf.resize(chatBufSize, self.output.width - 2);
+        }
+    }
     self.afk_message = .{
         .reason = reason,
         .target_time = target_time,
