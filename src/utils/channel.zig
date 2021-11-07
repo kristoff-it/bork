@@ -69,6 +69,7 @@ pub fn Channel(comptime T: type) type {
                 return;
             }
 
+            held.release();
             return error.FullChannel;
         }
 
