@@ -71,7 +71,7 @@ const AfkMessage = struct {
             const now = std.time.timestamp();
             const remaining = std.math.max(0, afk.target_time - now);
             const human_readable_remaining = try renderCountdown(remaining, alloc);
-
+            defer alloc.free(human_readable_remaining);
             std.log.debug("must rerender msg!", .{});
 
             var cur = afk.buffer.cursorAt(1, 1);
@@ -90,8 +90,18 @@ const AfkMessage = struct {
                 human_readable_remaining,
             });
 
-            const bottom_text = if (afk.reason.len <= afk.buffer.width - 2) afk.reason else afk.reason[0 .. afk.buffer.width - 2];
-            const bottom_column = std.math.max(1, @divTrunc(afk.buffer.width - 2 - bottom_text.len, 2));
+            const bottom_text = switch (afk.reason.len) {
+                0 => "⏰",
+                else => if (afk.reason.len <= afk.buffer.width - 2)
+                    afk.reason
+                else
+                    afk.reason[0 .. afk.buffer.width - 2],
+            };
+
+            const bottom_column = switch (afk.reason.len) {
+                0 => @divTrunc(afk.buffer.width - 2 - 1, 2),
+                else => std.math.max(1, @divTrunc(afk.buffer.width - 2 - bottom_text.len, 2)),
+            };
             cur.row_num = 3;
             cur.col_num = bottom_column;
             try cur.writer().writeAll(bottom_text);
