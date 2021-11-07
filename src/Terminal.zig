@@ -30,6 +30,8 @@ pub const InteractiveElement = union(enum) {
     },
 };
 
+// This global is used by the WINCH handler.
+var mainLoopChannel: ?*Channel(GlobalEventUnion) = null;
 const EmoteCache = std.AutoHashMap(u32, void);
 
 // State
@@ -40,7 +42,6 @@ ch: *Channel(GlobalEventUnion),
 output: zbox.Buffer,
 chatBuf: zbox.Buffer,
 overlayBuf: zbox.Buffer,
-ticker: @Frame(startTicking),
 active_interaction: InteractiveElement = .none,
 emote_cache: EmoteCache,
 ctrlc_pressed: bool = false,
@@ -197,6 +198,8 @@ pub fn init(alloc: *std.mem.Allocator, ch: *Channel(GlobalEventUnion), streamer_
     errdefer overlayBuf.deinit();
 
     notifs = async notifyDisplayEvents(ch, remote_enabled);
+
+    mainLoopChannel = ch;
     return Self{
         .streamer_name = streamer_name,
         .allocator = alloc,
@@ -205,7 +208,6 @@ pub fn init(alloc: *std.mem.Allocator, ch: *Channel(GlobalEventUnion), streamer_
         .chatBuf = chatBuf,
         .output = output,
         .overlayBuf = overlayBuf,
-        .ticker = async startTicking(ch),
         .emote_cache = EmoteCache.init(alloc),
     };
 }
@@ -230,12 +232,13 @@ fn disableCtrlCMessage(self: *Self) void {
     self.ch.put(GlobalEventUnion{ .display = .disableCtrlCMessage });
 }
 
-// Flag touched by whichChandler and startTicking
-var dirty: bool = false;
-fn winchHandler(
-    _: c_int, // signum
-) callconv(.C) void {
-    _ = @atomicRmw(bool, &dirty, .Xchg, true, .SeqCst);
+// handles window resize
+fn winchHandler(_: c_int) callconv(.C) void {
+    if (mainLoopChannel) |ch| {
+        ch.tryPut(GlobalEventUnion{ .display = .dirty }) catch {
+            // We toss away the notification if the channel is full.
+        };
+    }
 }
 
 // This function allocates a TerminalMessage and returns a pointer
@@ -738,17 +741,6 @@ fn printWordWrap(
         // If we're not at the end of the line, add a space
         if (cursor.context.col_num < width) {
             try cursor.writeAll(" ");
-        }
-    }
-}
-
-pub fn startTicking(ch: *Channel(GlobalEventUnion)) void {
-    while (true) {
-        std.time.sleep(100 * std.time.ns_per_ms);
-        if (@atomicRmw(bool, &dirty, .Xchg, false, .SeqCst)) {
-            // Flag was true, term is being resized
-            std.log.debug("signaling dirty state!", .{});
-            ch.put(GlobalEventUnion{ .display = .dirty });
         }
     }
 }

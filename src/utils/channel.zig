@@ -49,6 +49,29 @@ pub fn Channel(comptime T: type) type {
             _ = wait(&self.putters, held, item);
         }
 
+        // Tries to put but, if full, it returns an error
+        // instead of suspending.
+        pub fn tryPut(self: *Self, item: T) !void {
+            const held = self.lock.acquire();
+
+            if (pop(&self.getters)) |waiter| {
+                held.release();
+                waiter.item = item;
+                loop_instance.onNextTick(&waiter.task);
+                return;
+            }
+
+            if (self.tail -% self.head < self.buffer.len) {
+                if (@sizeOf(T) > 0)
+                    self.buffer[self.tail % self.buffer.len] = item;
+                self.tail +%= 1;
+                held.release();
+                return;
+            }
+
+            return error.FullChannel;
+        }
+
         pub fn get(self: *Self) T {
             var held: Held = undefined;
 
