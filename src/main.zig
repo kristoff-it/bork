@@ -268,8 +268,9 @@ pub fn log(
     nosuspend {
         const scope_prefix = "(" ++ @tagName(scope) ++ "): ";
         const prefix = "[" ++ @tagName(level) ++ "] " ++ scope_prefix;
-        const held = std.debug.getStderrMutex().acquire();
-        defer held.release();
+        const mutex = std.debug.getStderrMutex();
+        mutex.lock();
+        defer mutex.unlock();
 
         const l = log_file orelse blk: {
             const file_path = log_path orelse if (options.local)
@@ -331,8 +332,9 @@ fn get_config_and_token(alloc: *std.mem.Allocator, check_token: bool) !ConfigAnd
 
     // Prepare the log_file path for `log`.
     {
-        const held = std.debug.getStderrMutex().acquire();
-        defer held.release();
+        const mutex = std.debug.getStderrMutex();
+        mutex.lock();
+        defer mutex.unlock();
 
         const log_name = if (options.local) "bork-local.log" else "bork.log";
         log_path = try std.fmt.allocPrint(alloc, "{s}/.bork/{s}", .{ base_path, log_name });

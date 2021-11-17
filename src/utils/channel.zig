@@ -1,7 +1,5 @@
 const std = @import("std");
 
-const Held = @TypeOf(@as(std.Thread.Mutex, undefined).impl).Held;
-
 pub fn Channel(comptime T: type) type {
     return struct {
         lock: std.Thread.Mutex = .{},
@@ -29,10 +27,10 @@ pub fn Channel(comptime T: type) type {
         }
 
         pub fn put(self: *Self, item: T) void {
-            const held = self.lock.acquire();
+            self.lock.lock();
 
             if (pop(&self.getters)) |waiter| {
-                held.release();
+                self.lock.unlock();
                 waiter.item = item;
                 loop_instance.onNextTick(&waiter.task);
                 return;
@@ -42,20 +40,20 @@ pub fn Channel(comptime T: type) type {
                 if (@sizeOf(T) > 0)
                     self.buffer[self.tail % self.buffer.len] = item;
                 self.tail +%= 1;
-                held.release();
+                self.lock.unlock();
                 return;
             }
 
-            _ = wait(&self.putters, held, item);
+            _ = wait(&self.putters, &self.lock, item);
         }
 
         // Tries to put but, if full, it returns an error
         // instead of suspending.
         pub fn tryPut(self: *Self, item: T) !void {
-            const held = self.lock.acquire();
+            self.lock.lock();
+            defer self.lock.unlock();
 
             if (pop(&self.getters)) |waiter| {
-                held.release();
                 waiter.item = item;
                 loop_instance.onNextTick(&waiter.task);
                 return;
@@ -65,47 +63,41 @@ pub fn Channel(comptime T: type) type {
                 if (@sizeOf(T) > 0)
                     self.buffer[self.tail % self.buffer.len] = item;
                 self.tail +%= 1;
-                held.release();
                 return;
             }
 
-            held.release();
             return error.FullChannel;
         }
 
         pub fn get(self: *Self) T {
-            var held: Held = undefined;
-
-            if (self.tryGet(&held)) |item|
+            if (self.tryGet()) |item|
                 return item;
 
-            return wait(&self.getters, held, undefined);
+            return wait(&self.getters, &self.lock, undefined);
         }
 
         pub fn getOrNull(self: *Self) ?T {
-            var held: Held = undefined;
-
-            if (self.tryGet(&held)) |item|
+            if (self.tryGet()) |item|
                 return item;
 
-            held.release();
+            self.lock.unlock();
             return null;
         }
 
-        fn tryGet(self: *Self, held: *Held) ?T {
-            held.* = self.lock.acquire();
+        fn tryGet(self: *Self) ?T {
+            self.lock.lock();
 
             if (self.tail -% self.head > 0) {
                 var item: T = undefined;
                 if (@sizeOf(T) > 0)
                     item = self.buffer[self.head % self.buffer.len];
                 self.head +%= 1;
-                held.release();
+                self.lock.unlock();
                 return item;
             }
 
             if (pop(&self.putters)) |waiter| {
-                held.release();
+                self.lock.unlock();
                 const item = waiter.item;
                 loop_instance.onNextTick(&waiter.task);
                 return item;
@@ -114,14 +106,14 @@ pub fn Channel(comptime T: type) type {
             return null;
         }
 
-        fn wait(queue: *?*Waiter, held: Held, item: T) T {
+        fn wait(queue: *?*Waiter, held: *std.Thread.Mutex, item: T) T {
             var waiter: Waiter = undefined;
             push(queue, &waiter);
             waiter.item = item;
 
             suspend {
                 waiter.task = Task{ .data = @frame() };
-                held.release();
+                held.unlock();
             }
 
             return waiter.item;
