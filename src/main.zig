@@ -38,7 +38,9 @@ pub const BorkConfig = struct {
             _: std.json.StringifyOptions,
             w: std.fs.File.Writer,
         ) !void {
-            try w.writeAll(@tagName(self));
+            try w.print(
+                \\"{s}"
+            , .{@tagName(self)});
         }
     };
 
