@@ -12,6 +12,7 @@ pub const Event = union(enum) {
     links: std.net.StreamServer.Connection,
     send: []const u8,
     afk: struct {
+        title: []const u8,
         target_time: i64,
         reason: []const u8,
     },
@@ -184,11 +185,24 @@ fn erroring_handle(self: *@This(), conn: std.net.StreamServer.Connection) !void 
             '\n', '\r', '\t' => return error.BadReason,
         };
 
+        const title = reader.readUntilDelimiterAlloc(self.alloc, '\n', 4096) catch |err| {
+            std.log.debug("remote could read: {}", .{err});
+            return;
+        };
+
+        errdefer self.alloc.free(title);
+
+        for (title) |c| switch (c) {
+            else => {},
+            '\n', '\r', '\t' => return error.BadReason,
+        };
+
         self.ch.put(GlobalEventUnion{
             .remote = .{
                 .afk = .{
                     .target_time = target_time,
                     .reason = reason,
+                    .title = title,
                 },
             },
         });
