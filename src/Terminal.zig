@@ -34,13 +34,16 @@ pub const InteractiveElement = union(enum) {
 
 const AfkMessage = struct {
     const height: usize = 5;
-    reason: []const u8,
+
+    title: []const u8,
     target_time: i64,
+    reason: []const u8,
     last_updated: i64,
     buffer: zbox.Buffer,
 
     pub fn deinit(afk: *@This(), alloc: *std.mem.Allocator) void {
         alloc.free(afk.reason);
+        alloc.free(afk.title);
         afk.buffer.deinit();
     }
 
@@ -72,18 +75,25 @@ const AfkMessage = struct {
             const remaining = std.math.max(0, afk.target_time - now);
             const human_readable_remaining = try renderCountdown(remaining, alloc);
             defer alloc.free(human_readable_remaining);
+
             std.log.debug("must rerender msg!", .{});
 
             var cur = afk.buffer.cursorAt(1, 1);
             cur.interactive_element = .afk;
 
-            const top_text = "--- AFK ---";
-            const top_column = @divTrunc(afk.buffer.width - top_text.len, 2);
+            const top_text = switch (afk.title.len) {
+                0 => "AFK",
+                else => if (afk.title.len <= afk.buffer.width - 2)
+                    afk.title
+                else
+                    afk.title[0 .. afk.buffer.width - 2],
+            };
+            const top_column = try std.math.divCeil(usize, afk.buffer.width - top_text.len, 2);
             cur.row_num = 1;
             cur.col_num = top_column;
             try cur.writer().writeAll(top_text);
 
-            const time_column = @divTrunc(afk.buffer.width - (human_readable_remaining.len + 8), 2);
+            const time_column = try std.math.divCeil(usize, afk.buffer.width - (human_readable_remaining.len + 8), 2);
             cur.row_num = 2;
             cur.col_num = time_column;
             try cur.writer().print("--- {s} ---", .{
@@ -99,8 +109,8 @@ const AfkMessage = struct {
             };
 
             const bottom_column = switch (afk.reason.len) {
-                0 => @divTrunc(afk.buffer.width - 2 - 1, 2),
-                else => std.math.max(1, @divTrunc(afk.buffer.width - 2 - bottom_text.len, 2)),
+                0 => try std.math.divCeil(usize, afk.buffer.width - 2 - 1, 2),
+                else => std.math.max(1, try std.math.divCeil(usize, afk.buffer.width - bottom_text.len, 2)),
             };
             cur.row_num = 3;
             cur.col_num = bottom_column;
@@ -1491,7 +1501,7 @@ pub fn needAnimationFrame(self: *Self) bool {
     return if (self.afk_message) |afk| afk.needsToAnimate() else false;
 }
 
-pub fn setAfkMessage(self: *Self, target_time: i64, reason: []const u8) !void {
+pub fn setAfkMessage(self: *Self, target_time: i64, reason: []const u8, title: []const u8) !void {
     std.log.debug("afk: {d}, {s}", .{ target_time, reason });
     if (self.afk_message) |*old| {
         old.deinit(self.allocator);
@@ -1505,6 +1515,7 @@ pub fn setAfkMessage(self: *Self, target_time: i64, reason: []const u8) !void {
         }
     }
     self.afk_message = .{
+        .title = title,
         .reason = reason,
         .target_time = target_time,
         .last_updated = 0,

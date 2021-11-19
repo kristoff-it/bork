@@ -57,6 +57,8 @@ pub const BorkConfig = struct {
 var log_level: std.log.Level = .warn;
 
 const Subcommand = enum {
+    @"--help",
+    @"-h",
     start,
     links,
     send,
@@ -69,15 +71,14 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     var alloc = &gpa.allocator;
 
-    var it = std.process.ArgIterator.init();
-    const subcommand = subcommand: {
-        var exe_name = try (it.next(alloc) orelse @panic("no executable name as first argument!?")); // burn exe name
-        defer alloc.free(exe_name);
+    var it = try clap.args.OsIterator.init(alloc);
+    defer it.deinit();
 
-        const subc_string = try (it.next(alloc) orelse {
+    const subcommand = subcommand: {
+        const subc_string = (try it.next()) orelse {
             printHelp();
             return;
-        });
+        };
 
         break :subcommand std.meta.stringToEnum(Subcommand, subc_string) orelse {
             std.debug.print("Invalid subcommand.\n\n", .{});
@@ -99,6 +100,7 @@ pub fn main() !void {
         .links => try remote.client.links(alloc, config, &it),
         .afk => try remote.client.afk(alloc, config, &it),
         .ban => try remote.client.ban(alloc, config, &it),
+        .@"--help", .@"-h" => printHelp(),
     }
 }
 
@@ -164,7 +166,7 @@ fn bork_start(alloc: *std.mem.Allocator, config: BorkConfig, token: []const u8) 
                         remote.Server.replyLinks(&chat, conn);
                     },
                     .afk => |afk| {
-                        try display.setAfkMessage(afk.target_time, afk.reason);
+                        try display.setAfkMessage(afk.target_time, afk.reason, afk.title);
                         need_repaint = true;
                     },
                 }
@@ -300,18 +302,20 @@ pub fn panic(msg: []const u8, trace: ?*std.builtin.StackTrace) noreturn {
 
 fn printHelp() void {
     std.debug.print(
-        \\ Bork is a TUI chat client for Twitch.
+        \\Bork is a TUI chat client for Twitch.
         \\
-        \\ Available commands: start, quit, send, links, ban, unban, afk.
+        \\Available commands: start, quit, send, links, ban, unban, afk.
         \\
-        \\ Examples:
-        \\   ./bork start
-        \\   ./bork quit
-        \\   ./bork send "welcome to my stream Kappa"
-        \\   ./bork links
-        \\   ./bork ban badbotuser
-        \\   ./bork unban innocentuser
-        \\   ./bork afk 25m "dinner"
+        \\Examples:
+        \\  ./bork start
+        \\  ./bork quit
+        \\  ./bork send "welcome to my stream Kappa"
+        \\  ./bork links
+        \\  ./bork ban "baduser"
+        \\  ./bork unban "innocentuser"
+        \\  ./bork afk 25m "dinner"
+        \\
+        \\Use `bork <command> --help` to get subcommand-specific information.
         \\
     , .{});
 }
