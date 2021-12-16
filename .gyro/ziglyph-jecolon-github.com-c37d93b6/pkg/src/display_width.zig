@@ -72,7 +72,7 @@ pub fn codePointWidth(cp: u21, am_width: AmbiguousWidth) i3 {
 
 /// strWidth returns how many cells (or columns) wide `str` should be when rendered in a
 /// fixed-width font.
-pub fn strWidth(allocator: *mem.Allocator, str: []const u8, am_width: AmbiguousWidth) !usize {
+pub fn strWidth(allocator: mem.Allocator, str: []const u8, am_width: AmbiguousWidth) !usize {
     var total: isize = 0;
 
     // ASCII bytes are all width == 1.

@@ -29,7 +29,7 @@ const Command = union(enum) {
 name: []const u8,
 oauth: []const u8,
 tz: datetime.Timezone,
-allocator: *std.mem.Allocator,
+allocator: std.mem.Allocator,
 ch: *Channel(GlobalEventUnion),
 emote_cache: EmoteCache,
 socket: std.net.Stream,
@@ -47,7 +47,7 @@ var messages_result: void = undefined;
 
 pub fn init(
     self: *Self,
-    alloc: *std.mem.Allocator,
+    alloc: std.mem.Allocator,
     ch: *Channel(GlobalEventUnion),
     name: []const u8,
     oauth: []const u8,
@@ -335,7 +335,7 @@ fn _reconnect(self: *Self, writer_held: ?std.event.Lock.Held) void {
     }
 }
 
-pub fn connect(alloc: *std.mem.Allocator, name: []const u8, oauth: []const u8) !std.net.Stream {
+pub fn connect(alloc: std.mem.Allocator, name: []const u8, oauth: []const u8) !std.net.Stream {
     var socket = if (build_opts.local)
         try std.net.tcpConnectToHost(alloc, "localhost", 6667)
     else

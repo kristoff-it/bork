@@ -41,7 +41,7 @@ const AfkMessage = struct {
     last_updated: i64,
     buffer: zbox.Buffer,
 
-    pub fn deinit(afk: *@This(), alloc: *std.mem.Allocator) void {
+    pub fn deinit(afk: *@This(), alloc: std.mem.Allocator) void {
         alloc.free(afk.reason);
         alloc.free(afk.title);
         afk.buffer.deinit();
@@ -51,7 +51,7 @@ const AfkMessage = struct {
         return afk.last_updated != std.time.timestamp();
     }
 
-    pub fn render(afk: *@This(), alloc: *std.mem.Allocator, output_width: usize) !void {
+    pub fn render(afk: *@This(), alloc: std.mem.Allocator, output_width: usize) !void {
         const size_changed = output_width != afk.buffer.width;
         const needs_update = size_changed or afk.needsToAnimate();
 
@@ -120,7 +120,7 @@ const AfkMessage = struct {
         }
     }
 
-    fn renderCountdown(icd: i64, alloc: *std.mem.Allocator) ![]const u8 {
+    fn renderCountdown(icd: i64, alloc: std.mem.Allocator) ![]const u8 {
         const cd = @intCast(usize, icd);
         const h = @divTrunc(cd, 60 * 60);
         const m = @divTrunc(@mod(cd, 60 * 60), 60);
@@ -136,7 +136,7 @@ const EmoteCache = std.AutoHashMap(u32, void);
 
 // State
 config: BorkConfig,
-allocator: *std.mem.Allocator,
+allocator: std.mem.Allocator,
 ch: *Channel(GlobalEventUnion),
 output: zbox.Buffer,
 chatBuf: zbox.Buffer,
@@ -157,7 +157,7 @@ const Self = @This();
 var done_init = false;
 var terminal_inited = false;
 var notifs: @Frame(notifyDisplayEvents) = undefined;
-pub fn init(alloc: *std.mem.Allocator, ch: *Channel(GlobalEventUnion), config: BorkConfig) !Self {
+pub fn init(alloc: std.mem.Allocator, ch: *Channel(GlobalEventUnion), config: BorkConfig) !Self {
     {
         if (done_init) @panic("Terminal should only be initialized once, like a singleton.");
         done_init = true;
@@ -639,7 +639,7 @@ fn renderMessage(self: *Self, msg: *TerminalMessage) !void {
 }
 
 fn printWordWrap(
-    allocator: *std.mem.Allocator,
+    allocator: std.mem.Allocator,
     text: []const u8,
     emotes: []const Chat.Message.Emote,
     buffer: *zbox.Buffer,

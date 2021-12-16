@@ -4,7 +4,7 @@ const Event = @import("../remote.zig").Event;
 const BorkConfig = @import("../main.zig").BorkConfig;
 const parseTime = @import("./utils.zig").parseTime;
 
-fn connect(alloc: *std.mem.Allocator, port: u16) std.net.Stream {
+fn connect(alloc: std.mem.Allocator, port: u16) std.net.Stream {
     return std.net.tcpConnectToHost(alloc, "127.0.0.1", port) catch |err| switch (err) {
         error.ConnectionRefused => {
             std.debug.print(
@@ -24,7 +24,7 @@ fn connect(alloc: *std.mem.Allocator, port: u16) std.net.Stream {
     };
 }
 
-pub fn send(alloc: *std.mem.Allocator, config: BorkConfig, it: *clap.args.OsIterator) !void {
+pub fn send(alloc: std.mem.Allocator, config: BorkConfig, it: *clap.args.OsIterator) !void {
     const message = (try it.next()) orelse {
         std.debug.print("Usage ./bork send \"my message Kappa\"\n", .{});
         return;
@@ -38,7 +38,7 @@ pub fn send(alloc: *std.mem.Allocator, config: BorkConfig, it: *clap.args.OsIter
     try conn.writer().writeAll("\n");
 }
 
-pub fn quit(alloc: *std.mem.Allocator, config: BorkConfig, it: *clap.args.OsIterator) !void {
+pub fn quit(alloc: std.mem.Allocator, config: BorkConfig, it: *clap.args.OsIterator) !void {
     _ = it;
     const conn = connect(alloc, config.remote_port);
     defer conn.close();
@@ -46,7 +46,7 @@ pub fn quit(alloc: *std.mem.Allocator, config: BorkConfig, it: *clap.args.OsIter
     try conn.writer().writeAll("QUIT\n");
 }
 
-pub fn links(alloc: *std.mem.Allocator, config: BorkConfig, it: *clap.args.OsIterator) !void {
+pub fn links(alloc: std.mem.Allocator, config: BorkConfig, it: *clap.args.OsIterator) !void {
     // TODO: validation
     _ = it;
 
@@ -66,7 +66,7 @@ pub fn links(alloc: *std.mem.Allocator, config: BorkConfig, it: *clap.args.OsIte
     }
 }
 
-pub fn ban(alloc: *std.mem.Allocator, config: BorkConfig, it: *clap.args.OsIterator) !void {
+pub fn ban(alloc: std.mem.Allocator, config: BorkConfig, it: *clap.args.OsIterator) !void {
     const user = (try it.next()) orelse {
         std.debug.print("Usage ./bork ban \"username\"\n", .{});
         return;
@@ -80,7 +80,7 @@ pub fn ban(alloc: *std.mem.Allocator, config: BorkConfig, it: *clap.args.OsItera
     try conn.writer().writeAll("\n");
 }
 
-pub fn unban(alloc: *std.mem.Allocator, config: BorkConfig, it: *clap.args.OsIterator) !void {
+pub fn unban(alloc: std.mem.Allocator, config: BorkConfig, it: *clap.args.OsIterator) !void {
     const user = try it.next(alloc);
 
     if (try it.next(alloc)) |_| {
@@ -101,7 +101,7 @@ pub fn unban(alloc: *std.mem.Allocator, config: BorkConfig, it: *clap.args.OsIte
     try conn.writer().writeAll("\n");
 }
 
-pub fn afk(alloc: *std.mem.Allocator, config: BorkConfig, it: *clap.args.OsIterator) !void {
+pub fn afk(alloc: std.mem.Allocator, config: BorkConfig, it: *clap.args.OsIterator) !void {
     const summary =
         \\Creates an AFK message with a countdown.
         \\Click on the message to dismiss it.

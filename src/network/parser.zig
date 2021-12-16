@@ -8,7 +8,7 @@ const ParseResult = union(enum) {
     message: Chat.Message,
 };
 
-pub fn parseMessage(data: []u8, alloc: *std.mem.Allocator, tz: datetime.Timezone) !ParseResult {
+pub fn parseMessage(data: []u8, alloc: std.mem.Allocator, tz: datetime.Timezone) !ParseResult {
     std.log.debug("data:\n{s}\n", .{data});
     if (data.len == 0) return error.NoData;
 
@@ -405,7 +405,7 @@ fn parseSubTier(data: []const u8) !Chat.Message.SubTier {
     };
 }
 
-fn parseEmotes(data: []const u8, allocator: *std.mem.Allocator) ![]Chat.Message.Emote {
+fn parseEmotes(data: []const u8, allocator: std.mem.Allocator) ![]Chat.Message.Emote {
     // Small hack: count the dashes to know how many emotes
     // are present in the text.
     const count = std.mem.count(u8, data, "-");

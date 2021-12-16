@@ -92,7 +92,7 @@ pub const suites = struct {
 
         pub fn raw_write(
             comptime buffer_size: usize,
-            rand: *std.rand.Random,
+            rand: std.rand.Random,
             key_data: anytype,
             writer: anytype,
             prefix: [3]u8,
@@ -263,7 +263,7 @@ pub const suites = struct {
 
         pub fn raw_write(
             comptime buffer_size: usize,
-            rand: *std.rand.Random,
+            rand: std.rand.Random,
             key_data: anytype,
             writer: anytype,
             prefix: [3]u8,

@@ -2,7 +2,7 @@ const std = @import("std");
 const display = @import("zbox");
 const url = @import("./utils/url.zig");
 
-allocator: *std.mem.Allocator,
+allocator: std.mem.Allocator,
 nick: []const u8,
 last_message: ?*Message = null,
 last_link_message: ?*Message = null,

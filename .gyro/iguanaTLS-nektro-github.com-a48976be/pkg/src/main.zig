@@ -588,7 +588,7 @@ const ServerCertificate = struct {
 
 const VerifierCaptureState = struct {
     list: std.ArrayListUnmanaged(ServerCertificate),
-    allocator: *Allocator,
+    allocator: Allocator,
     // Used in `add_server_cert` to avoid an extra allocation
     fbs: *std.io.FixedBufferStream([]const u8),
 };
@@ -757,10 +757,10 @@ pub fn default_cert_verifier(
     return error.CertificateVerificationFailed;
 }
 
-pub fn extract_cert_public_key(allocator: *Allocator, reader: anytype, length: usize) !x509.PublicKey {
+pub fn extract_cert_public_key(allocator: Allocator, reader: anytype, length: usize) !x509.PublicKey {
     const CaptureState = struct {
         pub_key: x509.PublicKey,
-        allocator: *Allocator,
+        allocator: Allocator,
     };
     var capture_state = CaptureState{
         .pub_key = undefined,
@@ -796,7 +796,6 @@ pub fn extract_cert_public_key(allocator: *Allocator, reader: anytype, length: u
             fn f(state: *CaptureState, tag: u8, _length: usize, subreader: anytype) !void {
                 _ = tag;
                 _ = _length;
-
                 state.pub_key = x509.parse_public_key(state.allocator, subreader) catch |err| switch (err) {
                     error.MalformedDER => return error.ServerMalformedResponse,
                     else => |e| return e,
@@ -827,7 +826,7 @@ pub const curves = struct {
         const pub_key_len = 32;
         const Keys = std.crypto.dh.X25519.KeyPair;
 
-        inline fn make_key_pair(rand: *std.rand.Random) Keys {
+        inline fn make_key_pair(rand: std.rand.Random) Keys {
             while (true) {
                 var seed: [32]u8 = undefined;
                 rand.bytes(&seed);
@@ -854,7 +853,7 @@ pub const curves = struct {
         const pub_key_len = 97;
         const Keys = crypto.ecc.KeyPair(crypto.ecc.SECP384R1);
 
-        inline fn make_key_pair(rand: *std.rand.Random) Keys {
+        inline fn make_key_pair(rand: std.rand.Random) Keys {
             var seed: [48]u8 = undefined;
             rand.bytes(&seed);
             return crypto.ecc.make_key_pair(crypto.ecc.SECP384R1, seed);
@@ -880,7 +879,7 @@ pub const curves = struct {
         const pub_key_len = 65;
         const Keys = crypto.ecc.KeyPair(crypto.ecc.SECP256R1);
 
-        inline fn make_key_pair(rand: *std.rand.Random) Keys {
+        inline fn make_key_pair(rand: std.rand.Random) Keys {
             var seed: [32]u8 = undefined;
             rand.bytes(&seed);
             return crypto.ecc.make_key_pair(crypto.ecc.SECP256R1, seed);
@@ -940,7 +939,7 @@ pub const curves = struct {
         });
     }
 
-    inline fn make_key_pair(comptime list: anytype, curve_id: u16, rand: *std.rand.Random) KeyPair(list) {
+    inline fn make_key_pair(comptime list: anytype, curve_id: u16, rand: std.rand.Random) KeyPair(list) {
         inline for (list) |curve| {
             if (curve.tag == curve_id) {
                 return @unionInit(KeyPair(list), curve.name, curve.make_key_pair(rand));
@@ -1026,7 +1025,7 @@ pub fn client_connect(
 
     var client_random: [32]u8 = undefined;
     const rand = if (!@hasField(Options, "rand"))
-        std.crypto.random
+        std.crypto.random.*
     else
         options.rand;
 
@@ -1755,7 +1754,7 @@ pub fn Client(
         server_seq: u64 = 1,
         key_data: ciphers.KeyData(_ciphersuites),
         read_state: ReadState = .none,
-        rand: *std.rand.Random,
+        rand: std.rand.Random,
 
         parent_reader: _Reader,
         parent_writer: _Writer,
@@ -1970,7 +1969,7 @@ test "HTTPS request on wikipedia main page" {
     var rand = blk: {
         var seed: [std.rand.DefaultCsprng.secret_seed_length]u8 = undefined;
         try std.os.getrandom(&seed);
-        break :blk &std.rand.DefaultCsprng.init(seed).random;
+        break :blk std.rand.DefaultCsprng.init(seed).random();
     };
 
     var client = try client_connect(.{

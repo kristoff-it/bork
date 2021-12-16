@@ -11,7 +11,7 @@ const SignatureAlgorithm = x509.Certificate.SignatureAlgorithm;
 const asn1 = @import("asn1.zig");
 
 fn rsa_perform(
-    allocator: *Allocator,
+    allocator: Allocator,
     modulus: std.math.big.int.Const,
     exponent: std.math.big.int.Const,
     base: []const u8,
@@ -90,7 +90,7 @@ pub fn algorithm_prefix(signature_algorithm: SignatureAlgorithm) ?[]const u8 {
 }
 
 pub fn sign(
-    allocator: *Allocator,
+    allocator: Allocator,
     signature_algorithm: SignatureAlgorithm,
     hash: []const u8,
     private_key: x509.PrivateKey,
@@ -132,7 +132,7 @@ pub fn sign(
 }
 
 pub fn verify_signature(
-    allocator: *Allocator,
+    allocator: Allocator,
     signature_algorithm: SignatureAlgorithm,
     signature: asn1.BitString,
     hash: []const u8,
@@ -173,7 +173,7 @@ pub fn verify_signature(
 }
 
 pub fn certificate_verify_signature(
-    allocator: *Allocator,
+    allocator: Allocator,
     signature_algorithm: x509.Certificate.SignatureAlgorithm,
     signature: asn1.BitString,
     bytes: []const u8,
