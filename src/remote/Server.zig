@@ -22,14 +22,14 @@ address: std.net.Address,
 listener: std.net.StreamServer,
 config: BorkConfig,
 token: []const u8,
-alloc: *std.mem.Allocator,
+alloc: std.mem.Allocator,
 ch: *Channel(GlobalEventUnion),
 
 pub fn init(
     self: *@This(),
     config: BorkConfig,
     token: []const u8,
-    alloc: *std.mem.Allocator,
+    alloc: std.mem.Allocator,
     ch: *Channel(GlobalEventUnion),
 ) !void {
     self.config = config;

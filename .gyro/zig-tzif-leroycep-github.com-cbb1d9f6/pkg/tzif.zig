@@ -4,7 +4,7 @@ const testing = std.testing;
 const log = std.log.scoped(.tzif);
 
 pub const TimeZone = struct {
-    allocator: *std.mem.Allocator,
+    allocator: std.mem.Allocator,
     version: Version,
     transitionTimes: []i64,
     transitionTypes: []u8,
@@ -508,7 +508,7 @@ pub fn parsePosixTZ(string: []const u8) !PosixTZ {
     return result;
 }
 
-pub fn parse(allocator: *std.mem.Allocator, reader: anytype, seekableStream: anytype) !TimeZone {
+pub fn parse(allocator: std.mem.Allocator, reader: anytype, seekableStream: anytype) !TimeZone {
     const v1_header = try parseHeader(reader, seekableStream);
     try seekableStream.seekBy(v1_header.dataSize(.V1));
 
@@ -644,7 +644,7 @@ pub fn parse(allocator: *std.mem.Allocator, reader: anytype, seekableStream: any
     };
 }
 
-pub fn parseFile(allocator: *std.mem.Allocator, path: []const u8) !TimeZone {
+pub fn parseFile(allocator: std.mem.Allocator, path: []const u8) !TimeZone {
     const cwd = std.fs.cwd();
 
     const file = try cwd.openFile(path, .{});

@@ -211,7 +211,7 @@ pub fn cursorTo(row: usize, col: usize) ErrorSet.BufWrite!void {
 }
 
 /// set up terminal for graphical operation
-pub fn setup(alloc: *Allocator) ErrorSet.Setup!void {
+pub fn setup(alloc: Allocator) ErrorSet.Setup!void {
     errdefer termState = null;
     termState = .{};
     const self = state();

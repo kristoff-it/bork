@@ -2,7 +2,7 @@ const std = @import("std");
 const datetime = @import("datetime");
 const tzif = @import("tzif");
 
-pub fn senseUserTZ(allocator: *std.mem.Allocator) !datetime.Timezone {
+pub fn senseUserTZ(allocator: std.mem.Allocator) !datetime.Timezone {
     const localtime = try tzif.parseFile(allocator, "/etc/localtime");
     defer localtime.deinit();
 

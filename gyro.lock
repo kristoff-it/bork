@@ -1,7 +1,7 @@
-git https://github.com/Hejsil/zig-clap.git zig-master clap.zig 844c9370bcecf063daff697f296d6ae979190649
-git https://github.com/nektro/iguanaTLS.git master src/main.zig 954fd016964d44dfe8648985fd7c06f0067be6b0
 git https://github.com/truemedian/hzzp.git master src/main.zig 91ab8e741992e8db30b3ee1cd9e7cd5a072ca294
-git https://github.com/leroycep/zig-tzif.git master tzif.zig cbb1d9f6f4a06dac30da685d51f4f6f261f17bda
 git https://github.com/jecolon/ziglyph.git main src/ziglyph.zig c37d93b6c8e6a65aaf7f76157a8a95f9c9c43f61
 git https://github.com/frmdstryr/zig-datetime.git master src/datetime.zig 4782701cf1dbcf2d96dfcb2560f290cb74c54725
-git https://github.com/ziglibs/known-folders.git master known-folders.zig f299244d787a02dd49bc8b10b8c2722a13655c48
+git https://github.com/Hejsil/zig-clap.git zig-master clap.zig cf8a34d11f0520bdf2afc08eda88862597a88b23
+git https://github.com/leroycep/zig-tzif.git master tzif.zig cbb1d9f6f4a06dac30da685d51f4f6f261f17bda
+git https://github.com/nektro/iguanaTLS.git master src/main.zig a48976beb7135b472ce8aa2f276df3b8eb775440
+git https://github.com/ziglibs/known-folders.git master known-folders.zig 0c6c4849ddcdfb4f362573ea6e917e05e01dba47

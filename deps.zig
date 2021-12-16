@@ -28,14 +28,14 @@ pub const pkgs = struct {
     pub const clap = Pkg{
         .name = "clap",
         .path = FileSource{
-            .path = ".gyro/zig-clap-Hejsil-github.com-844c9370/pkg/clap.zig",
+            .path = ".gyro/zig-clap-Hejsil-github.com-cf8a34d1/pkg/clap.zig",
         },
     };
 
     pub const iguanaTLS = Pkg{
         .name = "iguanaTLS",
         .path = FileSource{
-            .path = ".gyro/iguanaTLS-nektro-github.com-954fd016/pkg/src/main.zig",
+            .path = ".gyro/iguanaTLS-nektro-github.com-a48976be/pkg/src/main.zig",
         },
     };
 
@@ -63,7 +63,7 @@ pub const pkgs = struct {
     pub const @"known-folders" = Pkg{
         .name = "known-folders",
         .path = FileSource{
-            .path = ".gyro/known-folders-ziglibs-github.com-f299244d/pkg/known-folders.zig",
+            .path = ".gyro/known-folders-ziglibs-github.com-0c6c4849/pkg/known-folders.zig",
         },
     };
 

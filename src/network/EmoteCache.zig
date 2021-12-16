@@ -1,7 +1,7 @@
 const builtin = @import("builtin");
 const std = @import("std");
 const os = std.os;
-const b64 = std.base64.standard_encoder;
+const b64 = std.base64.standard.Encoder;
 // const zfetch = @import("zfetch");
 const hzzp = @import("hzzp");
 const tls = @import("iguanaTLS");
@@ -12,7 +12,7 @@ const EmoteHashMap = std.StringHashMap(struct {
     idx: u32,
 });
 
-allocator: *std.mem.Allocator,
+allocator: std.mem.Allocator,
 idx_counter: u32 = 1,
 cache: EmoteHashMap,
 
@@ -21,7 +21,7 @@ const Self = @This();
 // const path_fmt = "https://localhost:443/emoticons/v1/{s}/3.0";
 const hostname = "static-cdn.jtvnw.net";
 
-pub fn init(allocator: *std.mem.Allocator) Self {
+pub fn init(allocator: std.mem.Allocator) Self {
     return Self{
         .allocator = allocator,
         .cache = EmoteHashMap.init(allocator),
@@ -54,7 +54,7 @@ pub fn fetch(self: *Self, emote_list: []Emote) !void {
                 var rand = defaultCsprng.random();
 
                 var tls_sock = try tls.client_connect(.{
-                    .rand = &rand,
+                    .rand = rand,
                     .temp_allocator = self.allocator,
                     .reader = sock.reader(),
                     .writer = sock.writer(),

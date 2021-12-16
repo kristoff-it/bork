@@ -34,7 +34,7 @@ pub var is_kitty = false;
 const InteractiveElement = @import("../../../src/Terminal.zig").InteractiveElement;
 
 /// must be called before any buffers are `push`ed to the terminal.
-pub fn init(allocator: *Allocator) ErrorSet.Term.Setup!void {
+pub fn init(allocator: Allocator) ErrorSet.Term.Setup!void {
     front = try Buffer.init(allocator, 24, 80);
     errdefer front.deinit();
 
@@ -163,7 +163,7 @@ pub const Buffer = struct {
     height: usize,
     width: usize,
 
-    allocator: *Allocator,
+    allocator: Allocator,
 
     pub const Writer = std.io.Writer(
         *WriteCursor,
@@ -262,7 +262,7 @@ pub const Buffer = struct {
         mem.set(Cell, self.data, .{});
     }
 
-    pub fn init(allocator: *Allocator, height: usize, width: usize) Allocator.Error!Buffer {
+    pub fn init(allocator: Allocator, height: usize, width: usize) Allocator.Error!Buffer {
         var self = Buffer{
             .data = try allocator.alloc(Cell, width * height),
             .width = width,

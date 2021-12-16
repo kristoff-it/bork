@@ -5,7 +5,7 @@ const build_opts = @import("build_options");
 
 const hostname = "id.twitch.tv";
 
-pub fn checkTokenValidity(allocator: *std.mem.Allocator, token: []const u8) !bool {
+pub fn checkTokenValidity(allocator: std.mem.Allocator, token: []const u8) !bool {
     if (build_opts.local) return true;
 
     const TLSStream = tls.Client(std.net.Stream.Reader, std.net.Stream.Writer, tls.ciphersuites.all, true);
@@ -26,7 +26,7 @@ pub fn checkTokenValidity(allocator: *std.mem.Allocator, token: []const u8) !boo
     var rand = defaultCsprng.random();
 
     var tls_sock = try tls.client_connect(.{
-        .rand = &rand,
+        .rand = rand,
         .temp_allocator = allocator,
         .reader = sock.reader(),
         .writer = sock.writer(),

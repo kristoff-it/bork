@@ -55,7 +55,7 @@ pub const Value = union(Tag) {
         number: u8,
     },
 
-    pub fn deinit(self: @This(), alloc: *Allocator) void {
+    pub fn deinit(self: @This(), alloc: Allocator) void {
         switch (self) {
             .int => |i| alloc.free(i.limbs),
             .bit_string => |bs| alloc.free(bs.data),
@@ -408,22 +408,22 @@ pub const der = struct {
         return enc;
     }
 
-    fn parse_int_internal(alloc: *Allocator, bytes_read: *usize, der_reader: anytype) !BigInt {
+    fn parse_int_internal(alloc: Allocator, bytes_read: *usize, der_reader: anytype) !BigInt {
         const length = try parse_length_internal(bytes_read, der_reader);
         return try parse_int_with_length_internal(alloc, bytes_read, length, der_reader);
     }
 
-    pub fn parse_int(alloc: *Allocator, der_reader: anytype) !BigInt {
+    pub fn parse_int(alloc: Allocator, der_reader: anytype) !BigInt {
         var bytes: usize = undefined;
         return try parse_int_internal(alloc, &bytes, der_reader);
     }
 
-    pub fn parse_int_with_length(alloc: *Allocator, length: usize, der_reader: anytype) !BigInt {
+    pub fn parse_int_with_length(alloc: Allocator, length: usize, der_reader: anytype) !BigInt {
         var read: usize = 0;
         return try parse_int_with_length_internal(alloc, &read, length, der_reader);
     }
 
-    fn parse_int_with_length_internal(alloc: *Allocator, bytes_read: *usize, length: usize, der_reader: anytype) !BigInt {
+    fn parse_int_with_length_internal(alloc: Allocator, bytes_read: *usize, length: usize, der_reader: anytype) !BigInt {
         const first_byte = try der_reader.readByte();
         if (first_byte == 0x0 and length > 1) {
             // Positive number with highest bit set to 1 in the rest.
@@ -486,7 +486,7 @@ pub const der = struct {
 
     fn parse_value_with_tag_byte(
         tag_byte: u8,
-        alloc: *Allocator,
+        alloc: Allocator,
         bytes_read: *usize,
         der_reader: anytype,
     ) DecodeError(@TypeOf(der_reader))!Value {
@@ -609,13 +609,13 @@ pub const der = struct {
         }
     }
 
-    fn parse_value_internal(alloc: *Allocator, bytes_read: *usize, der_reader: anytype) DecodeError(@TypeOf(der_reader))!Value {
+    fn parse_value_internal(alloc: Allocator, bytes_read: *usize, der_reader: anytype) DecodeError(@TypeOf(der_reader))!Value {
         const tag_byte = try der_reader.readByte();
         bytes_read.* += 1;
         return try parse_value_with_tag_byte(tag_byte, alloc, bytes_read, der_reader);
     }
 
-    pub fn parse_value(alloc: *Allocator, der_reader: anytype) DecodeError(@TypeOf(der_reader))!Value {
+    pub fn parse_value(alloc: Allocator, der_reader: anytype) DecodeError(@TypeOf(der_reader))!Value {
         var read: usize = 0;
         return try parse_value_internal(alloc, &read, der_reader);
     }
