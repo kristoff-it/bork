@@ -65,6 +65,7 @@ const Subcommand = enum {
     ban,
     afk,
     quit,
+    reconnect,
 };
 
 pub fn main() !void {
@@ -97,6 +98,7 @@ pub fn main() !void {
         .start => try bork_start(alloc, config, token),
         .send => try remote.client.send(alloc, config, &it),
         .quit => try remote.client.quit(alloc, config, &it),
+        .reconnect => try remote.client.reconnect(alloc, config, &it),
         .links => try remote.client.links(alloc, config, &it),
         .afk => try remote.client.afk(alloc, config, &it),
         .ban => try remote.client.ban(alloc, config, &it),
@@ -158,6 +160,9 @@ fn bork_start(alloc: std.mem.Allocator, config: BorkConfig, token: []const u8) !
             .remote => |re| {
                 switch (re) {
                     .quit => return,
+                    .reconnect => {
+                        network.askToReconnect();
+                    },
                     .send => |msg| {
                         std.log.debug("got send event in channel: {s}", .{msg});
                         network.sendCommand(.{ .message = msg });
@@ -309,6 +314,7 @@ fn printHelp() void {
         \\Examples:
         \\  ./bork start
         \\  ./bork quit
+        \\  ./bork reconnect 
         \\  ./bork send "welcome to my stream Kappa"
         \\  ./bork links
         \\  ./bork ban "baduser"

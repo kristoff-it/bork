@@ -9,6 +9,7 @@ const parseTime = @import("./utils.zig").parseTime;
 
 pub const Event = union(enum) {
     quit,
+    reconnect,
     links: std.net.StreamServer.Connection,
     send: []const u8,
     afk: struct {
@@ -111,6 +112,10 @@ fn erroring_handle(self: *@This(), conn: std.net.StreamServer.Connection) !void 
 
     if (std.mem.eql(u8, cmd, "QUIT")) {
         self.ch.put(GlobalEventUnion{ .remote = .quit });
+    }
+
+    if (std.mem.eql(u8, cmd, "RECONNECT")) {
+        self.ch.put(GlobalEventUnion{ .remote = .reconnect });
     }
 
     if (std.mem.eql(u8, cmd, "LINKS")) {

@@ -226,6 +226,11 @@ fn isReconnecting(self: *Self) bool {
     return @atomicLoad(bool, &self._atomic_reconnecting, .SeqCst);
 }
 
+// Public interface, used by the main control loop.
+pub fn askToReconnect(self: *Self) void {
+    self.reconnect(null);
+}
+
 // Tries to reconnect forever.
 // As an optimization, writers can pass ownership of the lock directly.
 fn reconnect(self: *Self, writer_held: ?std.event.Lock.Held) void {
