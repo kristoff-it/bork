@@ -46,6 +46,16 @@ pub fn quit(alloc: std.mem.Allocator, config: BorkConfig, it: *clap.args.OsItera
     try conn.writer().writeAll("QUIT\n");
 }
 
+pub fn reconnect(alloc: std.mem.Allocator, config: BorkConfig, it: *clap.args.OsIterator) !void {
+    // TODO: validation
+    _ = it;
+
+    const conn = connect(alloc, config.remote_port);
+    defer conn.close();
+
+    try conn.writer().writeAll("RECONNECT\n");
+}
+
 pub fn links(alloc: std.mem.Allocator, config: BorkConfig, it: *clap.args.OsIterator) !void {
     // TODO: validation
     _ = it;
