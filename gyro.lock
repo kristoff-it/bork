@@ -4,4 +4,4 @@ git https://github.com/frmdstryr/zig-datetime.git master src/datetime.zig 478270
 git https://github.com/Hejsil/zig-clap.git zig-master clap.zig cf8a34d11f0520bdf2afc08eda88862597a88b23
 git https://github.com/leroycep/zig-tzif.git master tzif.zig cbb1d9f6f4a06dac30da685d51f4f6f261f17bda
 git https://github.com/nektro/iguanaTLS.git master src/main.zig a48976beb7135b472ce8aa2f276df3b8eb775440
-git https://github.com/ziglibs/known-folders.git master known-folders.zig 0c6c4849ddcdfb4f362573ea6e917e05e01dba47
+git https://github.com/ziglibs/known-folders.git master known-folders.zig 9db1b99219c767d5e24994b1525273fe4031e464

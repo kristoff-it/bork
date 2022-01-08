@@ -63,7 +63,7 @@ pub const pkgs = struct {
     pub const @"known-folders" = Pkg{
         .name = "known-folders",
         .path = FileSource{
-            .path = ".gyro/known-folders-ziglibs-github.com-0c6c4849/pkg/known-folders.zig",
+            .path = ".gyro/known-folders-ziglibs-github.com-9db1b992/pkg/known-folders.zig",
         },
     };
 
