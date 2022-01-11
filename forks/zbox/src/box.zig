@@ -61,6 +61,8 @@ pub fn push(buffer: Buffer) (Allocator.Error || ErrorSet.Utf8Encode || ErrorSet.
     try front.resize(buffer.height, buffer.width);
     var row: usize = 0;
 
+    try term.sendSGR(.{});
+
     try term.beginSync();
     while (row < buffer.height) : (row += 1) {
         var col: usize = 0;
