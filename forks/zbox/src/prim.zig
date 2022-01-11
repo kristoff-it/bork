@@ -254,8 +254,8 @@ pub fn setup(alloc: Allocator) ErrorSet.Setup!void {
     termios.oflag &= ~@as(os.system.tcflag_t, os.system.OPOST);
     termios.cflag |= os.system.CS8;
 
-    termios.cc[VMIN] = 0; // read can timeout before any data is actually written; async timer
-    termios.cc[VTIME] = 1; // 1/10th of a second
+    termios.cc[std.os.system.V.MIN] = 0; // read can timeout before any data is actually written; async timer
+    termios.cc[std.os.system.V.TIME] = 1; // 1/10th of a second
 
     try os.tcsetattr(self.tty.in.context.handle, .FLUSH, termios);
     errdefer os.tcsetattr(self.tty.in.context.handle, .FLUSH, self.original_termios) catch {};
@@ -463,12 +463,6 @@ fn format(comptime template: []const u8, args: anytype) ErrorSet.BufWrite!void {
 fn formatSequence(comptime template: []const u8, args: anytype) ErrorSet.BufWrite!void {
     try format(csi ++ template, args);
 }
-
-// TODO: these are not portable across architectures
-// they should be getting pulled in from c headers or
-// make it into linux/bits per architecture.
-const VTIME = 5;
-const VMIN = 6;
 
 test "static anal" {
     std.meta.refAllDecls(@This());
