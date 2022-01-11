@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const zbox = @import("zbox");
+const options = @import("build_options");
 const Channel = @import("utils/channel.zig").Channel;
 const Chat = @import("Chat.zig");
 const main = @import("main.zig");
@@ -133,6 +134,18 @@ const AfkMessage = struct {
 // This global is used by the WINCH handler.
 var mainLoopChannel: ?*Channel(GlobalEventUnion) = null;
 const EmoteCache = std.AutoHashMap(u32, void);
+
+const short_version: []const u8 = blk: {
+    var v = std.mem.split(u8, options.version, "dev");
+    const short = v.next().?;
+    const dev = v.next() != null;
+
+    if (dev) {
+        break :blk std.ftmt.comptimePrint("{s}+", .{dev});
+    } else {
+        break :blk short;
+    }
+};
 
 // State
 config: BorkConfig,
@@ -870,21 +883,20 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                 .attribs = .{ .bg_blue = true },
             };
         }
-        var cur = self.output.cursorAt(top_bar_row, emoji_column - 4);
+        var cur = self.output.cursorAt(top_bar_row, emoji_column - 5);
         cur.attribs = .{
-            .fg_black = true,
+            .fg_white = true,
             .bg_blue = true,
         };
-        // try cur.writer().writeAll("Zig");
-        // cur.col_num = emoji_column + 2;
-        // try cur.writer().writeAll("b0rk");
-        self.output.cellRef(top_bar_row, emoji_column).* = .{
-            .char = '⚡',
-            .attribs = .{
-                .fg_yellow = true,
-                .bg_blue = true,
-            },
-        };
+        try cur.writer().print("bork ⚡ {s}", .{short_version});
+
+        // self.output.cellRef(top_bar_row, emoji_column).* = .{
+        //     .char = '⚡',
+        //     .attribs = .{
+        //         .fg_yellow = true,
+        //         .bg_blue = true,
+        //     },
+        // };
     }
 
     // Render the chat history

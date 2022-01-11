@@ -66,6 +66,7 @@ const Subcommand = enum {
     afk,
     quit,
     reconnect,
+    version,
 };
 
 pub fn main() !void {
@@ -102,6 +103,7 @@ pub fn main() !void {
         .links => try remote.client.links(alloc, config, &it),
         .afk => try remote.client.afk(alloc, config, &it),
         .ban => try remote.client.ban(alloc, config, &it),
+        .version => printVersion(),
         .@"--help", .@"-h" => printHelp(),
     }
 }
@@ -309,7 +311,7 @@ fn printHelp() void {
     std.debug.print(
         \\Bork is a TUI chat client for Twitch.
         \\
-        \\Available commands: start, quit, send, links, ban, unban, afk.
+        \\Available commands: start, quit, send, links, ban, unban, afk, version.
         \\
         \\Examples:
         \\  ./bork start
@@ -320,6 +322,7 @@ fn printHelp() void {
         \\  ./bork ban "baduser"
         \\  ./bork unban "innocentuser"
         \\  ./bork afk 25m "dinner"
+        \\  ./bork version
         \\
         \\Use `bork <command> --help` to get subcommand-specific information.
         \\
@@ -728,4 +731,8 @@ fn create_token(alloc: std.mem.Allocator, base: std.fs.Dir, action: TokenActon) 
 
     _ = try in.reader().readByte();
     return tok;
+}
+
+fn printVersion() void {
+    std.debug.print("{s}\n", .{options.version});
 }
