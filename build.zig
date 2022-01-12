@@ -3,7 +3,7 @@ const Builder = std.build.Builder;
 const Pkg = std.build.Pkg;
 const pkgs = @import("deps.zig").pkgs;
 
-const bork_version = std.builtin.Version{ .major = 0, .minor = 1, .patch = 0 };
+const bork_version = std.builtin.Version{ .major = 0, .minor = 1, .patch = 1 };
 
 pub fn build(b: *Builder) !void {
     // Standard target options alloirc the person running `zig build` to choose

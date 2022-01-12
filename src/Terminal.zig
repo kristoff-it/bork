@@ -136,15 +136,14 @@ var mainLoopChannel: ?*Channel(GlobalEventUnion) = null;
 const EmoteCache = std.AutoHashMap(u32, void);
 
 const short_version: []const u8 = blk: {
-    var v = std.mem.split(u8, options.version, "dev");
-    const short = v.next().?;
+    var v = std.mem.tokenize(u8, options.version, ".");
+    const major = v.next().?;
+    const minor = v.next().?;
+    const patch = v.next().?;
     const dev = v.next() != null;
+    const more = if (dev or patch[0] != '0') "+" else "";
 
-    if (dev) {
-        break :blk std.ftmt.comptimePrint("{s}+", .{dev});
-    } else {
-        break :blk short;
-    }
+    break :blk std.fmt.comptimePrint("v{s}.{s}{s}", .{ major, minor, more });
 };
 
 // State
