@@ -24,8 +24,8 @@ fn connect(alloc: std.mem.Allocator, port: u16) std.net.Stream {
     };
 }
 
-pub fn send(alloc: std.mem.Allocator, config: BorkConfig, it: *clap.args.OsIterator) !void {
-    const message = (try it.next()) orelse {
+pub fn send(alloc: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIterator) !void {
+    const message = it.next() orelse {
         std.debug.print("Usage ./bork send \"my message Kappa\"\n", .{});
         return;
     };
@@ -38,7 +38,7 @@ pub fn send(alloc: std.mem.Allocator, config: BorkConfig, it: *clap.args.OsItera
     try conn.writer().writeAll("\n");
 }
 
-pub fn quit(alloc: std.mem.Allocator, config: BorkConfig, it: *clap.args.OsIterator) !void {
+pub fn quit(alloc: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIterator) !void {
     _ = it;
     const conn = connect(alloc, config.remote_port);
     defer conn.close();
@@ -46,7 +46,7 @@ pub fn quit(alloc: std.mem.Allocator, config: BorkConfig, it: *clap.args.OsItera
     try conn.writer().writeAll("QUIT\n");
 }
 
-pub fn reconnect(alloc: std.mem.Allocator, config: BorkConfig, it: *clap.args.OsIterator) !void {
+pub fn reconnect(alloc: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIterator) !void {
     // TODO: validation
     _ = it;
 
@@ -56,7 +56,7 @@ pub fn reconnect(alloc: std.mem.Allocator, config: BorkConfig, it: *clap.args.Os
     try conn.writer().writeAll("RECONNECT\n");
 }
 
-pub fn links(alloc: std.mem.Allocator, config: BorkConfig, it: *clap.args.OsIterator) !void {
+pub fn links(alloc: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIterator) !void {
     // TODO: validation
     _ = it;
 
@@ -76,8 +76,8 @@ pub fn links(alloc: std.mem.Allocator, config: BorkConfig, it: *clap.args.OsIter
     }
 }
 
-pub fn ban(alloc: std.mem.Allocator, config: BorkConfig, it: *clap.args.OsIterator) !void {
-    const user = (try it.next()) orelse {
+pub fn ban(alloc: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIterator) !void {
+    const user = it.next() orelse {
         std.debug.print("Usage ./bork ban \"username\"\n", .{});
         return;
     };
@@ -90,14 +90,14 @@ pub fn ban(alloc: std.mem.Allocator, config: BorkConfig, it: *clap.args.OsIterat
     try conn.writer().writeAll("\n");
 }
 
-pub fn unban(alloc: std.mem.Allocator, config: BorkConfig, it: *clap.args.OsIterator) !void {
+pub fn unban(alloc: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIterator) !void {
     const user = try it.next(alloc);
 
     if (try it.next(alloc)) |_| {
         std.debug.print(
             \\Usage ./bork unban ["username"]
-            \\Omitting <username> will try to unban the last banned 
-            \\user in the current session. 
+            \\Omitting <username> will try to unban the last banned
+            \\user in the current session.
             \\
         , .{});
         return;
@@ -111,7 +111,7 @@ pub fn unban(alloc: std.mem.Allocator, config: BorkConfig, it: *clap.args.OsIter
     try conn.writer().writeAll("\n");
 }
 
-pub fn afk(alloc: std.mem.Allocator, config: BorkConfig, it: *clap.args.OsIterator) !void {
+pub fn afk(alloc: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIterator) !void {
     const summary =
         \\Creates an AFK message with a countdown.
         \\Click on the message to dismiss it.
@@ -122,15 +122,22 @@ pub fn afk(alloc: std.mem.Allocator, config: BorkConfig, it: *clap.args.OsIterat
         \\REASON: the reason for being afk, eg: 'dinner'
         \\
     ;
-    const params = comptime [_]clap.Param(clap.Help){
-        clap.parseParam("-h, --help             display this help message") catch unreachable,
-        clap.parseParam("-t, --title <TITLE>    changes the title shown, defaults to 'AFK'") catch unreachable,
-        clap.parseParam("<TIMER>                the countdown timer, eg: '1h25m' or '500s'") catch unreachable,
-        clap.parseParam("<REASON>               the reason for being afk, eg: 'dinner'") catch unreachable,
+    const params = comptime clap.parseParamsComptime(
+        \\-h, --help           display this help message
+        \\-t, --title <TITLE>  changes the title shown, defaults to 'AFK'
+        \\<TIMER>              the countdown timer, eg: '1h25m' or '500s'
+        \\<MSG>                the reason for being afk, eg: 'dinner'
+        \\
+    );
+
+    const parsers = .{
+        .TITLE = clap.parsers.string,
+        .MSG = clap.parsers.string,
+        .TIMER = clap.parsers.string,
     };
 
     var diag: clap.Diagnostic = undefined;
-    var args = clap.parseEx(clap.Help, &params, it, .{
+    var res = clap.parseEx(clap.Help, &params, parsers, it, .{
         .allocator = alloc,
         .diagnostic = &diag,
     }) catch |err| {
@@ -139,11 +146,11 @@ pub fn afk(alloc: std.mem.Allocator, config: BorkConfig, it: *clap.args.OsIterat
         return err;
     };
 
-    const positionals = args.positionals();
+    const positionals = res.positionals;
     const pos_ok = positionals.len > 0 and positionals.len < 3;
-    if (args.flag("-h") or args.flag("--help") or !pos_ok) {
+    if (res.args.help or !pos_ok) {
         std.debug.print("{s}\n", .{summary});
-        clap.help(std.io.getStdErr().writer(), &params) catch {};
+        clap.help(std.io.getStdErr().writer(), clap.Help, &params, .{}) catch {};
         std.debug.print("\n", .{});
         return;
     }
@@ -172,7 +179,7 @@ pub fn afk(alloc: std.mem.Allocator, config: BorkConfig, it: *clap.args.OsIterat
         };
     }
 
-    const title = args.option("--title");
+    const title = res.args.title;
     if (title) |t| {
         for (t) |c| switch (c) {
             else => {},

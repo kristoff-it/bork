@@ -224,14 +224,12 @@ pub fn setup(alloc: Allocator) ErrorSet.Setup!void {
     //TODO: check that we are actually dealing with a tty here
     // and either downgrade or error
     self.tty.in = (try fs.openFileAbsolute("/dev/tty", .{
-        .read = true,
-        .write = false,
+        .mode = .read_only,
         .intended_io_mode = .blocking,
     })).reader();
     errdefer self.tty.in.context.close();
     self.tty.out = (try fs.openFileAbsolute("/dev/tty", .{
-        .read = false,
-        .write = true,
+        .mode = .write_only,
         .intended_io_mode = .blocking,
     })).writer();
     errdefer self.tty.out.context.close();
