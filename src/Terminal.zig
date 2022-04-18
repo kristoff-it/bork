@@ -206,7 +206,7 @@ pub fn init(alloc: std.mem.Allocator, ch: *Channel(GlobalEventUnion), config: Bo
         // TODO: debug why some resizings corrupt everything irreversibly;
         //       in the meantime users can press R to repaint everything.
 
-        std.os.sigaction(std.os.SIG.WINCH, &std.os.Sigaction{
+        try std.os.sigaction(std.os.SIG.WINCH, &std.os.Sigaction{
             .handler = .{ .handler = winchHandler },
             .mask = switch (builtin.os.tag) {
                 .macos => 0,
@@ -612,7 +612,6 @@ fn renderMessage(self: *Self, msg: *TerminalMessage) !void {
             {
                 cursor.context.attribs = .{ .fg_cyan = true };
                 try printWordWrap(
-                    self.allocator,
                     "*",
                     &[0]Chat.Message.Emote{},
                     &msg.buffer,
@@ -621,7 +620,6 @@ fn renderMessage(self: *Self, msg: *TerminalMessage) !void {
 
                 cursor.context.attribs = .{ .feint = true };
                 try printWordWrap(
-                    self.allocator,
                     c.text[action_preamble.len .. c.text.len - 1],
                     c.emotes,
                     &msg.buffer,
@@ -630,7 +628,6 @@ fn renderMessage(self: *Self, msg: *TerminalMessage) !void {
 
                 cursor.context.attribs = .{ .fg_cyan = true };
                 try printWordWrap(
-                    self.allocator,
                     "*",
                     &[0]Chat.Message.Emote{},
                     &msg.buffer,
@@ -638,7 +635,6 @@ fn renderMessage(self: *Self, msg: *TerminalMessage) !void {
                 );
             } else {
                 try printWordWrap(
-                    self.allocator,
                     c.text,
                     c.emotes,
                     &msg.buffer,
@@ -651,7 +647,6 @@ fn renderMessage(self: *Self, msg: *TerminalMessage) !void {
 }
 
 fn printWordWrap(
-    allocator: std.mem.Allocator,
     text: []const u8,
     emotes: []const Chat.Message.Emote,
     buffer: *zbox.Buffer,
@@ -669,7 +664,6 @@ fn printWordWrap(
         codepoints += word_len;
 
         const word_width = @intCast(usize, try ziglyph.display_width.strWidth(
-            allocator,
             word,
             .half,
         ));
@@ -921,6 +915,15 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
             const padded_width = self.chatBuf.width - padding;
             var term_message = @fieldParentPtr(TerminalMessage, "chat_message", m);
 
+            const user_selected = switch (self.active_interaction) {
+                else => false,
+                .username => |tm| std.mem.eql(
+                    u8,
+                    tm.chat_message.login_name,
+                    term_message.chat_message.login_name,
+                ),
+            };
+
             // write it
             switch (m.kind) {
                 // else => {
@@ -1001,7 +1004,7 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                     );
 
                     // If the message is selected, time to invert everything!
-                    if (term_message.is_selected) {
+                    if (term_message.is_selected or user_selected) {
                         var rx: usize = row - std.math.min(msg_height, row);
                         while (rx < row) : (rx += 1) {
                             var cx: usize = padding - 1;
@@ -1057,15 +1060,11 @@ pub fn renderChat(self: *Self, chat: *Chat) !void {
                                 var nick_left = "«";
                                 var nick_right = "»";
                                 var highligh_nick = false;
-                                switch (self.active_interaction) {
-                                    else => {},
-                                    .username => |tm| {
-                                        if (tm == term_message) {
-                                            highligh_nick = true;
-                                            nick_right = "«";
-                                            nick_left = "»";
-                                        }
-                                    },
+
+                                if (user_selected) {
+                                    highligh_nick = true;
+                                    nick_right = "«";
+                                    nick_left = "»";
                                 }
 
                                 cur.attribs = .{
@@ -1276,13 +1275,17 @@ pub fn handleClick(self: *Self, row: usize, col: usize) !bool {
         cell.interactive_element;
 
     // Special rule when going from username to chat_message.
-    // This makes clicking on a message disable the username selection
+    // This makes clicking on a message disables the username selection
     // without immediately triggering the single-message selection.
     if (old_action == .username) {
         switch (self.active_interaction) {
             else => {},
             .chat_message => |tm| {
-                if (tm.is_selected) {
+                if (std.mem.eql(
+                    u8,
+                    tm.chat_message.login_name,
+                    old_action.username.chat_message.login_name,
+                )) {
                     self.active_interaction = .none;
                 }
             },
@@ -1292,32 +1295,21 @@ pub fn handleClick(self: *Self, row: usize, col: usize) !bool {
     if (!std.meta.eql(old_action, self.active_interaction)) {
         // Perform element-specific cleanup for the old element
         switch (old_action) {
-            .none, .button, .subscriber_badge, .event_message, .afk => {},
+            .none,
+            .button,
+            .subscriber_badge,
+            .event_message,
+            .afk,
+            .username,
+            => {},
             .chat_message => |tm| {
                 tm.is_selected = false;
-            },
-            .username => |tm| {
-                // Username elements can't point to .line messages
-                tm.is_selected = false;
-
-                const name = tm.chat_message.login_name;
-                var next = tm.chat_message.next;
-                while (next) |n| : (next = n.next) {
-                    switch (n.kind) {
-                        else => break,
-                        .chat => {
-                            if (!std.mem.eql(u8, n.login_name, name)) break;
-                            var term_message = @fieldParentPtr(TerminalMessage, "chat_message", n);
-                            term_message.is_selected = false;
-                        },
-                    }
-                }
             },
         }
 
         // Perform element-specific setup for the new element
         switch (self.active_interaction) {
-            .none, .button, .subscriber_badge => {},
+            .none, .button, .subscriber_badge, .username => {},
             .afk => {
                 if (self.afk_message) |*afk| {
                     afk.deinit(self.allocator);
@@ -1354,23 +1346,6 @@ pub fn handleClick(self: *Self, row: usize, col: usize) !bool {
                                 term_message.is_selected = false;
                             },
                         }
-                    }
-                }
-            },
-            .username => |tm| {
-                // Username elements can't point to .line messages
-                tm.is_selected = true;
-
-                const name = tm.chat_message.login_name;
-                var next = tm.chat_message.next;
-                while (next) |n| : (next = n.next) {
-                    switch (n.kind) {
-                        else => break,
-                        .chat => {
-                            if (!std.mem.eql(u8, n.login_name, name)) break;
-                            var term_message = @fieldParentPtr(TerminalMessage, "chat_message", n);
-                            term_message.is_selected = true;
-                        },
                     }
                 }
             },
