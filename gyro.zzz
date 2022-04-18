@@ -1,8 +1,8 @@
 pkgs:
   bork:
     version: 0.0.0
-    root: src/main.zig
     source_url: "https://github.com/kristoff-it/bork"
+    root: src/main.zig
 deps:
   zbox:
     local: forks/zbox
@@ -15,7 +15,7 @@ deps:
   clap:
     git:
       url: "https://github.com/Hejsil/zig-clap.git"
-      ref: zig-master
+      ref: master
       root: clap.zig
   iguanaTLS:
     git:

@@ -12,7 +12,7 @@ pub const pkgs = struct {
             Pkg{
                 .name = "ziglyph",
                 .path = FileSource{
-                    .path = ".gyro/ziglyph-jecolon-github.com-c37d93b6/pkg/src/ziglyph.zig",
+                    .path = ".gyro/ziglyph-jecolon-github.com-90ac933a/pkg/src/ziglyph.zig",
                 },
             },
         },
@@ -21,28 +21,28 @@ pub const pkgs = struct {
     pub const datetime = Pkg{
         .name = "datetime",
         .path = FileSource{
-            .path = ".gyro/zig-datetime-frmdstryr-github.com-4782701c/pkg/src/datetime.zig",
+            .path = ".gyro/zig-datetime-frmdstryr-github.com-9a49593d/pkg/src/datetime.zig",
         },
     };
 
     pub const clap = Pkg{
         .name = "clap",
         .path = FileSource{
-            .path = ".gyro/zig-clap-Hejsil-github.com-cf8a34d1/pkg/clap.zig",
+            .path = ".gyro/zig-clap-Hejsil-github.com-ac5f4654/pkg/clap.zig",
         },
     };
 
     pub const iguanaTLS = Pkg{
         .name = "iguanaTLS",
         .path = FileSource{
-            .path = ".gyro/iguanaTLS-nektro-github.com-a48976be/pkg/src/main.zig",
+            .path = ".gyro/iguanaTLS-nektro-github.com-9a05f036/pkg/src/main.zig",
         },
     };
 
     pub const hzzp = Pkg{
         .name = "hzzp",
         .path = FileSource{
-            .path = ".gyro/hzzp-truemedian-github.com-91ab8e74/pkg/src/main.zig",
+            .path = ".gyro/hzzp-truemedian-github.com-bf5aaf22/pkg/src/main.zig",
         },
     };
 
@@ -56,7 +56,7 @@ pub const pkgs = struct {
     pub const ziglyph = Pkg{
         .name = "ziglyph",
         .path = FileSource{
-            .path = ".gyro/ziglyph-jecolon-github.com-c37d93b6/pkg/src/ziglyph.zig",
+            .path = ".gyro/ziglyph-jecolon-github.com-90ac933a/pkg/src/ziglyph.zig",
         },
     };
 

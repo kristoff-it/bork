@@ -73,11 +73,13 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     var alloc = gpa.allocator();
 
-    var it = try clap.args.OsIterator.init(alloc);
+    var it = try std.process.ArgIterator.initWithAllocator(alloc);
     defer it.deinit();
 
+    _ = it.next();
+
     const subcommand = subcommand: {
-        const subc_string = (try it.next()) orelse {
+        const subc_string = it.next() orelse {
             printHelp();
             return;
         };
@@ -316,7 +318,7 @@ fn printHelp() void {
         \\Examples:
         \\  ./bork start
         \\  ./bork quit
-        \\  ./bork reconnect 
+        \\  ./bork reconnect
         \\  ./bork send "welcome to my stream Kappa"
         \\  ./bork links
         \\  ./bork ban "baduser"
@@ -461,15 +463,15 @@ fn create_config(alloc: std.mem.Allocator, base: std.fs.Dir, base_path: []const 
 
     if (is_new_user) {
         std.debug.print(
-            \\ 
+            \\
             \\ Hi, welcome to Bork!
             \\ Please input your Twich username.
             \\
-            \\ Your Twitch username: 
+            \\ Your Twitch username:
         , .{});
     } else {
         std.debug.print(
-            \\ 
+            \\
             \\ Hi, you seem to be a long time user of Bork!
             \\
             \\ Thank you for putting up with the jankyness as the project
@@ -488,19 +490,19 @@ fn create_config(alloc: std.mem.Allocator, base: std.fs.Dir, base_path: []const 
             \\   file and `bork.log` which has finally found a foreverhome.
             \\
             \\ Your bork config dir is located here:
-            \\ 
+            \\
             \\   {s}/.bork
             \\
-            \\ There are also more features that will be presented soon, 
-            \\ this was a special thank you note for the people that have 
-            \\ been using bork for long enough to have had to pass their 
-            \\ Twitch username as a command line argument every time they 
+            \\ There are also more features that will be presented soon,
+            \\ this was a special thank you note for the people that have
+            \\ been using bork for long enough to have had to pass their
+            \\ Twitch username as a command line argument every time they
             \\ stated Bork.
-            \\ 
-            \\ Now that we have a config file we can finally have you 
+            \\
+            \\ Now that we have a config file we can finally have you
             \\ input it once and for all :^)
             \\
-            \\ Your Twitch username: 
+            \\ Your Twitch username:
         , .{base_path});
     }
     const nickname: []const u8 = while (true) {
@@ -518,11 +520,11 @@ fn create_config(alloc: std.mem.Allocator, base: std.fs.Dir, base_path: []const 
         }
 
         std.debug.print(
-            \\ 
+            \\
             \\ The username provided doesn't seem valid.
             \\ Please try again.
-            \\ 
-            \\ Your Twitch username: 
+            \\
+            \\ Your Twitch username:
         , .{});
     } else unreachable; // TODO: remove in stage 2
 
@@ -545,18 +547,18 @@ fn create_config(alloc: std.mem.Allocator, base: std.fs.Dir, base_path: []const 
             }
 
             std.debug.print(
-                \\ 
+                \\
                 \\
                 \\ ===========================================================
                 \\
                 \\ Bork allows you to interact with it in two ways: clicking
                 \\ on messages, which will allow you to highlight them, and
-                \\ by invoking the Bork executable with various subcommands 
-                \\ that will interact with the main Bork instance. 
+                \\ by invoking the Bork executable with various subcommands
+                \\ that will interact with the main Bork instance.
                 \\
-                \\ This second mode will allow you to send messages to Twitch 
+                \\ This second mode will allow you to send messages to Twitch
                 \\ chat, display popups in Bork, set AFK status, etc.
-                \\ 
+                \\
                 \\ NOTE: some of these commands are still WIP :^)
                 \\
                 \\ Press any key to continue reading...
@@ -570,19 +572,19 @@ fn create_config(alloc: std.mem.Allocator, base: std.fs.Dir, base_path: []const 
                 \\         ======> ! IMPORTANT ! <======
                 \\ To protect you from accidentally closing Bork while
                 \\ streaming, with this feature enabled, Bork will not
-                \\ close when you press CTRL+C. 
+                \\ close when you press CTRL+C.
                 \\
-                \\ To close it, you will instead have to execute in a 
+                \\ To close it, you will instead have to execute in a
                 \\ separate shell:
                 \\
                 \\                 `bork quit`
-                \\ 
+                \\
                 \\ NOTE: yes, this command is already implemented :^)
                 \\
-                \\ To enable this second feature Bork will need to listen 
+                \\ To enable this second feature Bork will need to listen
                 \\ to a port on localhost.
-                \\ 
-                \\ Enable remote control? [Y/n] 
+                \\
+                \\ Enable remote control? [Y/n]
             , .{});
 
             const enable = try in_reader.readByte();
@@ -592,9 +594,9 @@ fn create_config(alloc: std.mem.Allocator, base: std.fs.Dir, base_path: []const 
                         \\
                         \\
                         \\ CLI control is disabled.
-                        \\ You can enable it in the future by editing the 
+                        \\ You can enable it in the future by editing the
                         \\ configuration file.
-                        \\ 
+                        \\
                         \\
                     , .{});
                     break :remote_port null;
@@ -604,11 +606,11 @@ fn create_config(alloc: std.mem.Allocator, base: std.fs.Dir, base_path: []const 
         }
 
         std.debug.print(
-            \\ 
+            \\
             \\ CLI control enabled!
             \\ Which port should Bork listen to?
             \\
-            \\ Port? [{}]: 
+            \\ Port? [{}]:
         , .{BorkConfig.default_port});
 
         while (true) {
@@ -622,8 +624,8 @@ fn create_config(alloc: std.mem.Allocator, base: std.fs.Dir, base_path: []const 
                     std.debug.print(
                         \\
                         \\ Invalid port value.
-                        \\ 
-                        \\ Port? [{}] 
+                        \\
+                        \\ Port? [{}]
                     , .{BorkConfig.default_port});
                     continue;
                 };
@@ -631,7 +633,7 @@ fn create_config(alloc: std.mem.Allocator, base: std.fs.Dir, base_path: []const 
                 std.debug.print(
                     \\
                     \\ Success!
-                    \\ 
+                    \\
                     \\
                 , .{});
                 break :remote_port BorkConfig.default_port;
@@ -670,31 +672,31 @@ fn create_token(alloc: std.mem.Allocator, base: std.fs.Dir, action: TokenActon) 
 
     switch (action) {
         .new => std.debug.print(
-            \\ 
+            \\
             \\ ======================================================
-            \\ 
-            \\ Bork needs a Twitch OAuth token to connect to Twitch. 
+            \\
+            \\ Bork needs a Twitch OAuth token to connect to Twitch.
             \\ Unfortunately, this procedure can't be fully automated
             \\ and you will have to repeat it when the token expires
             \\ (Bork will let you know when that happens).
-            \\ 
+            \\
             \\ Please open the following URL and paste in here the
             \\ oauth token you will be shown after logging in.
-            \\  
+            \\
             \\    https://twitchapps.com/tmi/
-            \\ 
-            \\ Token (input is hidden): 
+            \\
+            \\ Token (input is hidden):
         , .{}),
         .renew => std.debug.print(
-            \\ 
+            \\
             \\ The Twitch OAuth token expired, we must refresh it.
-            \\ 
+            \\
             \\ Please open the following URL and paste in here the
             \\ oauth token you will be shown after logging in.
-            \\  
+            \\
             \\    https://twitchapps.com/tmi/
-            \\ 
-            \\ Token (input is hidden): 
+            \\
+            \\ Token (input is hidden):
         , .{}),
     }
 
@@ -720,13 +722,13 @@ fn create_token(alloc: std.mem.Allocator, base: std.fs.Dir, action: TokenActon) 
     try token_file.writer().print("{s}\n", .{tok});
     try std.os.tcsetattr(in.handle, .FLUSH, original_termios);
     std.debug.print(
-        \\ 
-        \\ 
+        \\
+        \\
         \\ Success, great job!
         \\ Your token has been saved in your Bork config directory.
-        \\ 
+        \\
         \\ Press any key to continue.
-        \\ 
+        \\
     , .{});
 
     _ = try in.reader().readByte();
