@@ -1,7 +1,7 @@
 const Network = @This();
 
 const std = @import("std");
-const datetime = @import("datetime");
+const datetime = @import("datetime").datetime;
 const Channel = @import("utils/channel.zig").Channel;
 const GlobalEventUnion = @import("main.zig").Event;
 const Chat = @import("Chat.zig");
@@ -61,6 +61,7 @@ pub fn init(
         .socket = socket,
         .reader = socket.reader(),
         .writer = socket.writer(),
+        .thread = undefined,
     };
     self.thread = try std.Thread.spawn(.{}, receiveMessages, .{self});
 }
@@ -85,8 +86,8 @@ fn receiveMessages(self: *Network) void {
     while (true) {
         const data = data: {
             const d = self.reader.readUntilDelimiterAlloc(self.allocator, '\n', 4096) catch |err| {
-                std.log.debug("receiveMessages errored out: {e}", .{err});
-                self.reconnect(null);
+                std.log.debug("receiveMessages errored out: {}", .{err});
+                self.reconnect(false);
                 return;
             };
 
@@ -100,7 +101,7 @@ fn receiveMessages(self: *Network) void {
         std.log.debug("receiveMessages succeded", .{});
 
         const p = parser.parseMessage(data, self.allocator, self.tz) catch |err| {
-            std.log.debug("parsing error: [{e}]", .{err});
+            std.log.debug("parsing error: [{}]", .{err});
             continue;
         };
         switch (p) {
@@ -115,13 +116,13 @@ fn receiveMessages(self: *Network) void {
                     else => {},
                     .chat => |c| {
                         self.emote_cache.fetch(c.emotes) catch |err| {
-                            std.log.debug("fetching error: [{e}]", .{err});
+                            std.log.debug("fetching error: [{}]", .{err});
                             continue;
                         };
                     },
                     .resub => |c| {
                         self.emote_cache.fetch(c.resub_message_emotes) catch |err| {
-                            std.log.debug("fetching error: [{e}]", .{err});
+                            std.log.debug("fetching error: [{}]", .{err});
                             continue;
                         };
                     },
@@ -174,7 +175,9 @@ pub fn sendCommand(self: *Network, cmd: UserCommand) void {
 }
 
 fn send(self: *Network, cmd: Command) void {
-    var held = self.writer_lock.acquire();
+    self.writer_lock.lock();
+    defer self.writer_lock.unlock();
+
     const comm = switch (cmd) {
         .pong => blk: {
             std.log.debug("PONG!", .{});
@@ -192,10 +195,8 @@ fn send(self: *Network, cmd: Command) void {
 
     if (comm) |_| {} else |_| {
         // Try to start the reconnect procedure
-        self.reconnect(held);
+        self.reconnect(true);
     }
-
-    held.release();
 }
 
 fn isReconnecting(self: *Network) bool {
@@ -204,25 +205,27 @@ fn isReconnecting(self: *Network) bool {
 
 // Public interface, used by the main control loop.
 pub fn askToReconnect(self: *Network) void {
-    self.reconnect(null);
+    self.reconnect(false);
 }
 
 // Tries to reconnect forever.
 // As an optimization, writers can pass ownership of the lock directly.
-fn reconnect(self: *Network, writer_held: ?std.event.Lock.Held) void {
+fn reconnect(self: *Network, writer_held: bool) void {
     if (@atomicRmw(bool, &self._atomic_reconnecting, .Xchg, true, .SeqCst)) {
-        if (writer_held) |h| h.release();
+        if (writer_held) self.writer_lock.unlock();
         return;
     }
 
     // Start the reconnect procedure
     self._reconnect(writer_held);
+
+    if (!writer_held) self.writer_lock.unlock();
 }
 
 // This function is a perfect example of what runDetached does,
 // with the exception that we don't want to allocate dynamic
 // memory for it.
-fn _reconnect(self: *Network, writer_held: ?std.event.Lock.Held) void {
+fn _reconnect(self: *Network, writer_held: bool) void {
     var retries: usize = 0;
     const backoff = [_]usize{
         100, 400, 800, 2000, 5000, 10000, //ms
@@ -232,8 +235,7 @@ fn _reconnect(self: *Network, writer_held: ?std.event.Lock.Held) void {
     self.ch.put(GlobalEventUnion{ .network = .disconnected });
 
     // Ensure we have the writer lock
-    const held = writer_held orelse self.writer_lock.acquire();
-    _ = held;
+    if (!writer_held) self.writer_lock.lock();
 
     // Sync with the reader. It will at one point notice
     // that the connection is borked and return.

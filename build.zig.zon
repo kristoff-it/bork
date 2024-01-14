@@ -2,7 +2,6 @@
     .name = "bork",
     .version = "0.0.0",
     .dependencies = .{
-        .zbox = .{ .path = "forks/zbox" },
         .clap = .{
             .url = "git+https://github.com/Hejsil/zig-clap.git#9c23bcb5aebe0c2542b4de4472f60959974e2222",
             .hash = "12209e829da9d7d0bc089e4e0cbc07bb882f6192cd583277277da34df53cd05b8f2a",
@@ -22,6 +21,11 @@
         .@"known-folders" = .{
             .url = "git+https://github.com/ziglibs/known-folders.git#806ba01b872820004c7dec3117cb0db66b206af6",
             .hash = "122094b48dea08e241b48d0ec32e3df6965e814091e3cabaff942e62d053f3ff9b5f",
+        },
+
+        .datetime = .{
+            .url = "git+https://github.com/frmdstryr/zig-datetime.git#a9c75242dfc119a305c1381c2352d2fc16b2e0aa",
+            .hash = "122038b4b5df08d2af6daf81e5f18d4c244d807c9323224db826cc107ce3894f6fa9",            
         },
     },
     .paths = .{"."},

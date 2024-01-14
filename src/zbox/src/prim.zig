@@ -187,7 +187,7 @@ const TermSize = struct { height: usize, width: usize };
 pub fn size() anyerror!TermSize {
     var winsize = mem.zeroes(os.system.winsize);
 
-    const err = os.system.ioctl(state().tty.in.context.handle, TIOCGWINSZ, @ptrToInt(&winsize));
+    const err = os.system.ioctl(state().tty.in.context.handle, TIOCGWINSZ, @intFromPtr(&winsize));
     if (os.errno(err) == .SUCCESS)
         return TermSize{ .height = winsize.ws_row, .width = winsize.ws_col };
     return error.IoctlError;
