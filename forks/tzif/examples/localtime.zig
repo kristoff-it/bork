@@ -1,17 +1,20 @@
 const std = @import("std");
-const datetime = @import("datetime");
 const tzif = @import("tzif");
 
-pub fn senseUserTZ(allocator: std.mem.Allocator) !datetime.Timezone {
+pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
     const localtime = try tzif.parseFile(allocator, "/etc/localtime");
     defer localtime.deinit();
 
     const now_utc = std.time.timestamp();
     const now_converted = localtime.localTimeFromUTC(now_utc) orelse {
         std.log.err("Offset is not specified for current timezone", .{});
-        return error.TZ;
+        return;
     };
 
-    std.log.debug("current tz offset: {d}", .{@divTrunc(now_converted.offset, 60)});
-    return datetime.Timezone.create("Custom", @as(i16, @intCast(@divTrunc(now_converted.offset, 60))));
+    const out = std.io.getStdOut();
+    try out.writer().print("{}\n", .{now_converted.timestamp});
 }

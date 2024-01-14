@@ -1,3 +1,5 @@
+const Server = @This();
+
 const std = @import("std");
 const Channel = @import("../utils/channel.zig").Channel;
 const url = @import("../utils/url.zig");
@@ -26,8 +28,10 @@ token: []const u8,
 alloc: std.mem.Allocator,
 ch: *Channel(GlobalEventUnion),
 
+thread: std.Thread,
+
 pub fn init(
-    self: *@This(),
+    self: *Server,
     config: BorkConfig,
     token: []const u8,
     alloc: std.mem.Allocator,
@@ -46,43 +50,33 @@ pub fn init(
     });
 
     errdefer self.listener.deinit();
-
-    // Start listening in a detached coroutine
-    // TODO: since it's only one, this should just be
-    //       a normal async call, stage2-san save me pepeHands
     try self.listener.listen(self.address);
-    try std.event.Loop.instance.?.runDetached(alloc, listen, .{self});
+
+    self.thread = try std.Thread.spawn(.{}, start, .{self});
 }
 
-// TODO: concurrency
-pub fn deinit(self: *@This()) void {
-    std.log.debug("deiniting Remote Server", .{});
-    std.os.shutdown(self.listener.sockfd.?, .both) catch |err| {
-        std.log.debug("remote shutdown encountered an error: {}", .{err});
-    };
-    self.listener.deinit();
-    std.log.debug("deinit done", .{});
-}
+pub fn start(self: *Server) !void {
+    defer self.listener.deinit();
 
-fn listen(self: *@This()) void {
     while (true) {
         const conn = self.listener.accept() catch |err| {
             std.log.debug("remote encountered an error: {}", .{err});
             continue;
         };
 
-        // Handle the connection in a detached coroutine
-        std.event.Loop.instance.?.runDetached(self.alloc, handle, .{ self, conn }) catch |err| {
-            std.log.debug("remote could not handle a connection: {}", .{err});
-        };
+        try self.handle(conn);
     }
 }
 
-fn handle(self: *@This(), conn: std.net.StreamServer.Connection) void {
-    self.erroring_handle(conn) catch {};
+pub fn deinit(self: *Server) void {
+    std.log.debug("deiniting Remote Server", .{});
+    std.os.shutdown(self.listener.sockfd.?, .both) catch |err| {
+        std.log.debug("remote shutdown encountered an error: {}", .{err});
+    };
+    std.log.debug("deinit done", .{});
 }
 
-fn erroring_handle(self: *@This(), conn: std.net.StreamServer.Connection) !void {
+fn handle(self: *Server, conn: std.net.StreamServer.Connection) !void {
     var buf: [100]u8 = undefined;
 
     const cmd = conn.stream.reader().readUntilDelimiter(&buf, '\n') catch |err| {

@@ -1,7 +1,6 @@
 const std = @import("std");
 const options = @import("build_options");
 const datetime = @import("datetime");
-const clap = @import("clap");
 const zfetch = @import("zfetch");
 const folders = @import("known-folders");
 
@@ -70,50 +69,47 @@ const Subcommand = enum {
 };
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    var alloc = gpa.allocator();
+    var gpa_impl = std.heap.GeneralPurposeAllocator(.{}){};
+    const gpa = gpa_impl.allocator();
 
-    var it = try std.process.ArgIterator.initWithAllocator(alloc);
+    var arena_impl = std.heap.ArenaAllocator.init(gpa);
+    const arena = arena_impl.allocator();
+    _ = arena;
+
+    var it = try std.process.ArgIterator.initWithAllocator(gpa);
     defer it.deinit();
 
-    _ = it.next();
+    _ = it.skip(); // skip exe name
 
     const subcommand = subcommand: {
-        const subc_string = it.next() orelse {
-            printHelp();
-            return;
-        };
+        const subc_string = it.next() orelse printHelpFatal();
 
         break :subcommand std.meta.stringToEnum(Subcommand, subc_string) orelse {
-            std.debug.print("Invalid subcommand.\n\n", .{});
-            printHelp();
-            return;
+            std.debug.print("Invalid subcommand: {s}\n\n", .{subc_string});
+            printHelpFatal();
         };
     };
 
-    const cat = try get_config_and_token(alloc, subcommand == .start);
+    const cat = try getConfigAndToken(gpa, subcommand == .start);
     const config = cat.config;
     const token = cat.token;
     // const config = BorkConfig{ .nick = "blah" };
     // const token = "blah";
 
     switch (subcommand) {
-        .start => try bork_start(alloc, config, token),
-        .send => try remote.client.send(alloc, config, &it),
-        .quit => try remote.client.quit(alloc, config, &it),
-        .reconnect => try remote.client.reconnect(alloc, config, &it),
-        .links => try remote.client.links(alloc, config, &it),
-        .afk => try remote.client.afk(alloc, config, &it),
-        .ban => try remote.client.ban(alloc, config, &it),
+        .start => try borkStart(gpa, config, token),
+        .send => try remote.client.send(gpa, config, &it),
+        .quit => try remote.client.quit(gpa, config, &it),
+        .reconnect => try remote.client.reconnect(gpa, config, &it),
+        .links => try remote.client.links(gpa, config, &it),
+        .afk => try remote.client.afk(gpa, config, &it),
+        .ban => try remote.client.ban(gpa, config, &it),
         .version => printVersion(),
-        .@"--help", .@"-h" => printHelp(),
+        .@"--help", .@"-h" => printHelpFatal(),
     }
 }
 
-fn bork_start(alloc: std.mem.Allocator, config: BorkConfig, token: []const u8) !void {
-    // king's fault
-    defer if (config.remote) std.os.exit(0);
-
+fn borkStart(alloc: std.mem.Allocator, config: BorkConfig, token: []const u8) !void {
     var buf: [24]Event = undefined;
     var ch = Channel(Event).init(&buf);
 
@@ -142,9 +138,11 @@ fn bork_start(alloc: std.mem.Allocator, config: BorkConfig, token: []const u8) !
             std.os.exit(1);
         };
     }
+
     defer if (config.remote) remote_server.deinit();
 
-    var display = try Terminal.init(alloc, &ch, config);
+    var display: Terminal = undefined;
+    display.init(alloc, &ch, config);
     defer display.deinit();
 
     var network: Network = undefined;
@@ -278,38 +276,36 @@ pub fn log(
     comptime format: []const u8,
     args: anytype,
 ) void {
-    nosuspend {
-        const scope_prefix = "(" ++ @tagName(scope) ++ "): ";
-        const prefix = "[" ++ @tagName(level) ++ "] " ++ scope_prefix;
-        const mutex = std.debug.getStderrMutex();
-        mutex.lock();
-        defer mutex.unlock();
+    const scope_prefix = "(" ++ @tagName(scope) ++ "): ";
+    const prefix = "[" ++ @tagName(level) ++ "] " ++ scope_prefix;
+    const mutex = std.debug.getStderrMutex();
+    mutex.lock();
+    defer mutex.unlock();
 
-        const l = log_file orelse blk: {
-            const file_path = log_path orelse if (options.local)
-                "bork-local.log"
-            else
-                return; // no logs in this case, too bad
+    const l = log_file orelse blk: {
+        const file_path = log_path orelse if (options.local)
+            "bork-local.log"
+        else
+            return; // no logs in this case, too bad
 
-            const log_inner = std.fs.cwd().createFile(file_path, .{ .truncate = false, .intended_io_mode = .blocking }) catch return;
-            const end = log_inner.getEndPos() catch return;
-            log_inner.seekTo(end) catch return;
-            log_file = log_inner;
-            break :blk log_inner;
-        };
+        const log_inner = std.fs.cwd().createFile(file_path, .{ .truncate = false, .intended_io_mode = .blocking }) catch return;
+        const end = log_inner.getEndPos() catch return;
+        log_inner.seekTo(end) catch return;
+        log_file = log_inner;
+        break :blk log_inner;
+    };
 
-        const writer = l.writer();
-        writer.print(prefix ++ format ++ "\n", args) catch return;
-    }
+    const writer = l.writer();
+    writer.print(prefix ++ format ++ "\n", args) catch return;
 }
 
-pub fn panic(msg: []const u8, trace: ?*std.builtin.StackTrace) noreturn {
-    nosuspend Terminal.panic();
+pub fn panic(msg: []const u8, trace: ?*std.builtin.StackTrace, ret_addr: ?usize) noreturn {
+    Terminal.panic();
     log(.err, .default, "{s}", .{msg});
-    std.builtin.default_panic(msg, trace);
+    std.builtin.default_panic(msg, trace, ret_addr);
 }
 
-fn printHelp() void {
+fn printHelpFatal() noreturn {
     std.debug.print(
         \\Bork is a TUI chat client for Twitch.
         \\
@@ -329,6 +325,7 @@ fn printHelp() void {
         \\Use `bork <command> --help` to get subcommand-specific information.
         \\
     , .{});
+    std.process.exit(1);
 }
 
 const ConfigAndToken = struct {
@@ -336,8 +333,8 @@ const ConfigAndToken = struct {
     token: []const u8,
 };
 
-fn get_config_and_token(alloc: std.mem.Allocator, check_token: bool) !ConfigAndToken {
-    var base_path = (try folders.getPath(alloc, .home)) orelse
+fn getConfigAndToken(alloc: std.mem.Allocator, check_token: bool) !ConfigAndToken {
+    const base_path = (try folders.getPath(alloc, .home)) orelse
         (try folders.getPath(alloc, .executable_dir)) orelse
         @panic("couldn't find a way of creating a config file");
 

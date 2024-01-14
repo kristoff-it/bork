@@ -1,0 +1,28 @@
+.{
+    .name = "bork",
+    .version = "0.0.0",
+    .dependencies = .{
+        .zbox = .{ .path = "forks/zbox" },
+        .clap = .{
+            .url = "git+https://github.com/Hejsil/zig-clap.git#9c23bcb5aebe0c2542b4de4472f60959974e2222",
+            .hash = "12209e829da9d7d0bc089e4e0cbc07bb882f6192cd583277277da34df53cd05b8f2a",
+        },
+
+        .tzif = .{
+            // .url = "git+https://github.com/leroycep/zig-tzif.git#3de8a84a81fdd1185c991abf9e58289a3057d981",
+            // .hash = "122030c888060cc5048a720b609bb777fc3461a09e19e2647a198c3aa21cf1e3361c",
+            .path = "forks/tzif",
+        },
+
+        .ziglyph = .{
+            .url = "git+https://codeberg.org/dude_the_builder/ziglyph.git#0e17bd36a4e882b194a87c283bd78562ea215116",
+            .hash = "12208553f3f47e51494e187f4c0e6f6b3844e3993436cad4a0e8c4db4e99645967b5",
+        },
+
+        .@"known-folders" = .{
+            .url = "git+https://github.com/ziglibs/known-folders.git#806ba01b872820004c7dec3117cb0db66b206af6",
+            .hash = "122094b48dea08e241b48d0ec32e3df6965e814091e3cabaff942e62d053f3ff9b5f",
+        },
+    },
+    .paths = .{"."},
+}
