@@ -38,7 +38,7 @@ pub fn fetch(self: *Self, emote_list: []Emote) !void {
         if (!result.found_existing) {
             std.log.debug("need to download", .{});
             // Need to download the image
-            var img = img: {
+            const img = img: {
                 const TLSStream = tls.Client(std.net.Stream.Reader, std.net.Stream.Writer, tls.ciphersuites.all, true);
                 const HttpClient = hzzp.base.client.BaseClient(TLSStream.Reader, TLSStream.Writer);
 
@@ -51,7 +51,7 @@ pub fn fetch(self: *Self, emote_list: []Emote) !void {
                     break :blk &std.rand.DefaultCsprng.init(seed);
                 };
 
-                var rand = defaultCsprng.random();
+                const rand = defaultCsprng.random();
 
                 var tls_sock = try tls.client_connect(.{
                     .rand = rand,
@@ -133,7 +133,7 @@ pub fn fetch(self: *Self, emote_list: []Emote) !void {
             //     break :img try req.reader().readAllAlloc(self.allocator, 1024 * 100);
             // };
 
-            var encode_buf = try self.allocator.alloc(u8, std.base64.standard.Encoder.calcSize(img.len));
+            const encode_buf = try self.allocator.alloc(u8, std.base64.standard.Encoder.calcSize(img.len));
             result.value_ptr.* = .{
                 .data = b64.encode(encode_buf, img),
                 .idx = self.idx_counter,

@@ -1,3 +1,5 @@
+const Network = @This();
+
 const std = @import("std");
 const datetime = @import("datetime");
 const Channel = @import("utils/channel.zig").Channel;
@@ -35,18 +37,13 @@ emote_cache: EmoteCache,
 socket: std.net.Stream,
 reader: std.net.Stream.Reader,
 writer: std.net.Stream.Writer,
-writer_lock: std.event.Lock = .{},
+writer_lock: std.Thread.Mutex = .{},
 _atomic_reconnecting: bool = false,
 
-const Self = @This();
-
-var reconnect_frame: @Frame(_reconnect) = undefined;
-// var messages_frame: @Frame(receiveMessages) = undefined;
-var messages_frame_bytes: []align(16) u8 = undefined;
-var messages_result: void = undefined;
+thread: std.Thread,
 
 pub fn init(
-    self: *Self,
+    self: *Network,
     alloc: std.mem.Allocator,
     ch: *Channel(GlobalEventUnion),
     name: []const u8,
@@ -54,7 +51,7 @@ pub fn init(
     tz: datetime.Timezone,
 ) !void {
     var socket = try connect(alloc, name, oauth);
-    self.* = Self{
+    self.* = Network{
         .name = name,
         .oauth = oauth,
         .tz = tz,
@@ -65,18 +62,10 @@ pub fn init(
         .reader = socket.reader(),
         .writer = socket.writer(),
     };
-
-    // Allocate
-    messages_frame_bytes = try alloc.alignedAlloc(u8, 16, @sizeOf(@Frame(receiveMessages)));
-
-    // Start the reader
-    {
-        // messages_frame_bytes = async self.receiveMessages();
-        _ = @asyncCall(messages_frame_bytes, &messages_result, receiveMessages, .{self});
-    }
+    self.thread = try std.Thread.spawn(.{}, receiveMessages, .{self});
 }
 
-pub fn deinit(self: *Self) void {
+pub fn deinit(self: *Network) void {
     // Try to grab the reconnecting flag
     while (@atomicRmw(bool, &self._atomic_reconnecting, .Xchg, true, .SeqCst)) {
         std.time.sleep(10 * std.time.ns_per_ms);
@@ -86,17 +75,13 @@ pub fn deinit(self: *Self) void {
     std.os.shutdown(self.socket.handle, .both) catch |err| {
         std.log.debug("shutdown failed, err: {}", .{err});
     };
-    await @ptrCast(anyframe->void, messages_frame_bytes);
     self.socket.close();
 }
 
-fn receiveMessages(self: *Self) void {
+fn receiveMessages(self: *Network) void {
     defer std.log.debug("receiveMessages done", .{});
     std.log.debug("reader started", .{});
-    // yield immediately so callers can go on
-    // with their lives instead of risking being
-    // trapped reading a spammy socket forever
-    std.event.Loop.instance.?.yield();
+
     while (true) {
         const data = data: {
             const d = self.reader.readUntilDelimiterAlloc(self.allocator, '\n', 4096) catch |err| {
@@ -181,25 +166,16 @@ fn receiveMessages(self: *Self) void {
 }
 
 // Public interface for sending commands (messages, bans, ...)
-pub fn sendCommand(self: *Self, cmd: UserCommand) void {
+pub fn sendCommand(self: *Network, cmd: UserCommand) void {
     // if (self.isReconnecting()) {
     //     return error.Reconnecting;
     // }
     return self.send(Command{ .user = cmd });
 }
-//     // NOTE: it could still be possible for a command
-//     //       to remain stuck here while we are reconnecting,
-//     //       but in most cases we'll be able to correctly
-//     //       report that we can't carry out any command.
-//     //       if the twitch chat system had unique command ids,
-//     //       we could have opted to retry instead of failing
-//     //       immediately, but without unique ids you risk
-//     //       sending the same command twice.
-// }
 
-fn send(self: *Self, cmd: Command) void {
+fn send(self: *Network, cmd: Command) void {
     var held = self.writer_lock.acquire();
-    var comm = switch (cmd) {
+    const comm = switch (cmd) {
         .pong => blk: {
             std.log.debug("PONG!", .{});
             break :blk self.writer.print("PONG :tmi.twitch.tv\n", .{});
@@ -222,33 +198,33 @@ fn send(self: *Self, cmd: Command) void {
     held.release();
 }
 
-fn isReconnecting(self: *Self) bool {
+fn isReconnecting(self: *Network) bool {
     return @atomicLoad(bool, &self._atomic_reconnecting, .SeqCst);
 }
 
 // Public interface, used by the main control loop.
-pub fn askToReconnect(self: *Self) void {
+pub fn askToReconnect(self: *Network) void {
     self.reconnect(null);
 }
 
 // Tries to reconnect forever.
 // As an optimization, writers can pass ownership of the lock directly.
-fn reconnect(self: *Self, writer_held: ?std.event.Lock.Held) void {
+fn reconnect(self: *Network, writer_held: ?std.event.Lock.Held) void {
     if (@atomicRmw(bool, &self._atomic_reconnecting, .Xchg, true, .SeqCst)) {
         if (writer_held) |h| h.release();
         return;
     }
 
     // Start the reconnect procedure
-    reconnect_frame = async self._reconnect(writer_held);
+    self._reconnect(writer_held);
 }
 
 // This function is a perfect example of what runDetached does,
 // with the exception that we don't want to allocate dynamic
 // memory for it.
-fn _reconnect(self: *Self, writer_held: ?std.event.Lock.Held) void {
+fn _reconnect(self: *Network, writer_held: ?std.event.Lock.Held) void {
     var retries: usize = 0;
-    var backoff = [_]usize{
+    const backoff = [_]usize{
         100, 400, 800, 2000, 5000, 10000, //ms
     };
 
@@ -256,14 +232,14 @@ fn _reconnect(self: *Self, writer_held: ?std.event.Lock.Held) void {
     self.ch.put(GlobalEventUnion{ .network = .disconnected });
 
     // Ensure we have the writer lock
-    var held = writer_held orelse self.writer_lock.acquire();
+    const held = writer_held orelse self.writer_lock.acquire();
+    _ = held;
 
     // Sync with the reader. It will at one point notice
     // that the connection is borked and return.
     {
         std.os.shutdown(self.socket.handle, .both) catch unreachable;
         // await messages_frame;
-        await @ptrCast(anyframe->void, messages_frame_bytes);
         self.socket.close();
     }
 
@@ -296,7 +272,7 @@ fn _reconnect(self: *Self, writer_held: ?std.event.Lock.Held) void {
         //     }
         // };
         while (true) {
-            var s = connect(self.allocator, self.name, self.oauth) catch {
+            const s = connect(self.allocator, self.name, self.oauth) catch {
                 // TODO: panic on non-transient errors.
                 std.time.sleep(backoff[retries] * std.time.ns_per_ms);
                 if (retries < backoff.len - 1) {
@@ -311,33 +287,33 @@ fn _reconnect(self: *Self, writer_held: ?std.event.Lock.Held) void {
     self.reader = self.socket.reader();
     self.writer = self.socket.writer();
 
-    // Suspend at the end to avoid a race condition
-    // where the check to resume a potential awaiter
-    // (nobody should be awaiting us) might end up
-    // reading the frame while a second reconnect
-    // attempt is running on the same frame, causing UB.
-    suspend {
-        // Reset the reconnecting flag
-        std.debug.assert(@atomicRmw(
-            bool,
-            &self._atomic_reconnecting,
-            .Xchg,
-            false,
-            .SeqCst,
-        ));
+    // // Suspend at the end to avoid a race condition
+    // // where the check to resume a potential awaiter
+    // // (nobody should be awaiting us) might end up
+    // // reading the frame while a second reconnect
+    // // attempt is running on the same frame, causing UB.
+    // suspend {
+    //     // Reset the reconnecting flag
+    //     std.debug.assert(@atomicRmw(
+    //         bool,
+    //         &self._atomic_reconnecting,
+    //         .Xchg,
+    //         false,
+    //         .SeqCst,
+    //     ));
 
-        // Unblock commands
-        held.release();
+    //     // Unblock commands
+    //     held.release();
 
-        // Notify the system all is good again
-        self.ch.put(GlobalEventUnion{ .network = .reconnected });
+    //     // Notify the system all is good again
+    //     self.ch.put(GlobalEventUnion{ .network = .reconnected });
 
-        // Restart the reader
-        {
-            // messages_frame = async self.receiveMessages();
-            _ = @asyncCall(messages_frame_bytes, &messages_result, receiveMessages, .{self});
-        }
-    }
+    //     // Restart the reader
+    //     {
+    //         // messages_frame = async self.receiveMessages();
+    //         _ = @asyncCall(messages_frame_bytes, &messages_result, receiveMessages, .{self});
+    //     }
+    // }
 }
 
 pub fn connect(alloc: std.mem.Allocator, name: []const u8, oauth: []const u8) !std.net.Stream {

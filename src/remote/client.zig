@@ -1,4 +1,5 @@
 const std = @import("std");
+const ArgIterator = std.process.ArgIterator;
 const clap = @import("clap");
 const Event = @import("../remote.zig").Event;
 const BorkConfig = @import("../main.zig").BorkConfig;
@@ -93,7 +94,7 @@ pub fn ban(alloc: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIte
 pub fn unban(alloc: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIterator) !void {
     const user = try it.next(alloc);
 
-    if (try it.next(alloc)) |_| {
+    if (it.next(alloc)) |_| {
         std.debug.print(
             \\Usage ./bork unban ["username"]
             \\Omitting <username> will try to unban the last banned

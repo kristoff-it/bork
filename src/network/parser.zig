@@ -75,7 +75,7 @@ pub fn parseMessage(data: []u8, alloc: std.mem.Allocator, tz: datetime.Timezone)
 
     // Prepare fields common to multiple msg types
     var time: [5]u8 = undefined;
-    var now = datetime.Datetime.now().shiftTimezone(&tz);
+    const now = datetime.Datetime.now().shiftTimezone(&tz);
     _ = std.fmt.bufPrint(&time, "{d:0>2}:{d:0>2}", .{
         now.time.hour,
         now.time.minute,
@@ -502,7 +502,7 @@ fn parseMetaSubsetLinear(meta: []const u8, keys: anytype) ![keys.len][]const u8 
     var it = std.mem.tokenize(u8, meta, ";");
 
     // linear scan
-    var first_miss: usize = outer: for (keys) |k, i| {
+    const first_miss: usize = outer: for (keys, 0..) |k, i| {
         while (it.next()) |kv| {
             var kv_it = std.mem.tokenize(u8, kv, "=");
             const meta_k = kv_it.next().?; // First call will always succeed
@@ -525,7 +525,7 @@ fn parseMetaSubsetLinear(meta: []const u8, keys: anytype) ![keys.len][]const u8 
     std.log.debug("Linear scan of metadata failed! Let the maintainers know that Gondor calls for aid!", .{});
 
     // bad scan
-    outer: for (keys[first_miss..]) |k, i| {
+    outer: for (keys[first_miss..], 0..) |k, i| {
         it = std.mem.tokenize(u8, meta, ";"); // we now reset every loop
         while (it.next()) |kv| {
             var kv_it = std.mem.tokenize(u8, kv, "=");

@@ -1,20 +1,10 @@
 const std = @import("std");
-const Builder = std.build.Builder;
-const Pkg = std.build.Pkg;
-const pkgs = @import("deps.zig").pkgs;
 
-const bork_version = std.builtin.Version{ .major = 0, .minor = 1, .patch = 1 };
+const bork_version = std.SemanticVersion{ .major = 0, .minor = 1, .patch = 1 };
 
-pub fn build(b: *Builder) !void {
-    // Standard target options alloirc the person running `zig build` to choose
-    // what target to build for. Here we do not override the defaults, which
-    // means any target is allowed, and the default is native. Other options
-    // for restricting supported target set are available.
+pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
-
-    // Standard release options allow the person running `zig build` to select
-    // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
-    const mode = b.standardReleaseOptions();
+    const optimize = b.standardOptimizeOption(.{});
 
     const local = b.option(bool, "local", "not using real data and testing locally") orelse false;
     const options = b.addOptions();
@@ -30,8 +20,8 @@ pub fn build(b: *Builder) !void {
         );
 
         var code: u8 = undefined;
-        const git_describe_untrimmed = b.execAllowFail(&[_][]const u8{
-            "git", "-C", b.build_root, "describe", "--match", "*.*.*", "--tags",
+        const git_describe_untrimmed = b.runAllowFail(&[_][]const u8{
+            "git", "-C", b.build_root.path.?, "describe", "--match", "*.*.*", "--tags",
         }, &code, .Ignore) catch {
             break :v version_string;
         };
@@ -56,7 +46,7 @@ pub fn build(b: *Builder) !void {
                 const commit_height = it.next() orelse unreachable;
                 const commit_id = it.next() orelse unreachable;
 
-                const ancestor_ver = try std.builtin.Version.parse(tagged_ancestor);
+                const ancestor_ver = try std.SemanticVersion.parse(tagged_ancestor);
                 if (bork_version.order(ancestor_ver) != .gt) {
                     std.debug.print(
                         "version '{}' must be greater than tagged ancestor '{}'\n",
@@ -80,46 +70,22 @@ pub fn build(b: *Builder) !void {
             },
         }
     };
+
     options.addOption([:0]const u8, "version", try b.allocator.dupeZ(u8, version));
 
-    const release_step = b.step("release", "Builds a bunch of versions of bork");
-    const releases = [_]std.zig.CrossTarget{
-        .{ .cpu_arch = .x86_64, .os_tag = .linux },
-        .{ .cpu_arch = .x86_64, .os_tag = .macos },
-        .{ .cpu_arch = .aarch64, .os_tag = .linux },
-        .{ .cpu_arch = .aarch64, .os_tag = .macos },
-    };
+    const exe = b.addExecutable(.{
+        .name = "bork",
+        .root_source_file = .{ .path = "src/main.zig" },
+        .target = target,
+        .optimize = optimize,
+    });
 
-    inline for (releases) |ct| {
-        const exe = b.addExecutable("bork", "src/main.zig");
-        pkgs.addAllTo(exe);
-        exe.setOutputDir("./releases/" ++ @tagName(ct.os_tag.?) ++ "-" ++ @tagName(ct.cpu_arch.?));
-        exe.setTarget(ct);
-        exe.setBuildMode(.ReleaseSafe);
-        exe.addOptions("build_options", options);
-        exe.install();
-        release_step.dependOn(&exe.install_step.?.step);
-    }
+    const zbox = b.dependency("zbox", .{});
+    const known_folders = b.dependency("known-folders", .{});
 
-    {
-        const exe = b.addExecutable("bork", "src/main.zig");
-        pkgs.addAllTo(exe);
+    exe.root_module.addImport("zbox", zbox.module("zbox"));
+    exe.root_module.addImport("known-folders", known_folders.module("known-folders"));
 
-        exe.addOptions("build_options", options);
-        exe.setTarget(target);
-        exe.setBuildMode(mode);
-        exe.install();
-
-        b.default_step.dependencies.shrinkRetainingCapacity(0);
-        b.default_step.dependOn(&exe.install_step.?.step);
-
-        const run_cmd = exe.run();
-        run_cmd.step.dependOn(&exe.install_step.?.step);
-        if (b.args) |args| {
-            run_cmd.addArgs(args);
-        }
-
-        const run_step = b.step("run", "Run the app");
-        run_step.dependOn(&run_cmd.step);
-    }
+    exe.root_module.addOptions("build_options", options);
+    b.installArtifact(exe);
 }

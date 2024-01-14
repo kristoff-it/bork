@@ -23,7 +23,7 @@ pub fn checkTokenValidity(allocator: std.mem.Allocator, token: []const u8) !bool
         break :blk std.rand.DefaultCsprng.init(seed);
     };
 
-    var rand = defaultCsprng.random();
+    const rand = defaultCsprng.random();
 
     var tls_sock = try tls.client_connect(.{
         .rand = rand,
