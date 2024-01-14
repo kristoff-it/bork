@@ -1,5 +1,5 @@
 const std = @import("std");
-const datetime = @import("datetime");
+const datetime = @import("datetime").datetime;
 const Chat = @import("../Chat.zig");
 
 const ParseResult = union(enum) {
@@ -442,7 +442,7 @@ fn parseEmotes(data: []const u8, allocator: std.mem.Allocator) ![]Chat.Message.E
     }
 
     // Sort the array by start position
-    std.sort.sort(Chat.Message.Emote, emotes, {}, Chat.Message.Emote.lessThan);
+    std.mem.sort(Chat.Message.Emote, emotes, {}, Chat.Message.Emote.lessThan);
     for (emotes) |em| std.log.debug("{}", .{em});
 
     return emotes;

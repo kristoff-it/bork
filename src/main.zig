@@ -21,6 +21,7 @@ pub const Event = union(enum) {
 
 // for my xdg fans out there
 pub const known_folders_config = .{
+    .xdg_force_default = true,
     .xdg_on_mac = true,
 };
 
@@ -34,10 +35,9 @@ pub const BorkConfig = struct {
 
         pub fn jsonStringify(
             self: AfkPosition,
-            _: std.json.StringifyOptions,
-            w: std.fs.File.Writer,
+            js: anytype,
         ) !void {
-            try w.print(
+            try js.print(
                 \\"{s}"
             , .{@tagName(self)});
         }
@@ -142,7 +142,7 @@ fn borkStart(alloc: std.mem.Allocator, config: BorkConfig, token: []const u8) !v
     defer if (config.remote) remote_server.deinit();
 
     var display: Terminal = undefined;
-    display.init(alloc, &ch, config);
+    try display.init(alloc, &ch, config);
     defer display.deinit();
 
     var network: Network = undefined;
@@ -365,14 +365,9 @@ fn getConfigAndToken(alloc: std.mem.Allocator, check_token: bool) !ConfigAndToke
         defer file.close();
 
         const config_json = try file.reader().readAllAlloc(alloc, 4096);
-        var stream = std.json.TokenStream.init(config_json);
-
-        const res = try std.json.parse(
-            BorkConfig,
-            &stream,
-            .{ .allocator = alloc },
-        );
-
+        const res = try std.json.parseFromSliceLeaky(BorkConfig, alloc, config_json, .{
+            .allocate = .alloc_always,
+        });
         alloc.free(config_json);
 
         break :config res;

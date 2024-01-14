@@ -138,7 +138,7 @@ pub fn afk(alloc: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIte
     };
 
     var diag: clap.Diagnostic = undefined;
-    var res = clap.parseEx(clap.Help, &params, parsers, it, .{
+    const res = clap.parseEx(clap.Help, &params, parsers, it, .{
         .allocator = alloc,
         .diagnostic = &diag,
     }) catch |err| {
@@ -149,7 +149,7 @@ pub fn afk(alloc: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIte
 
     const positionals = res.positionals;
     const pos_ok = positionals.len > 0 and positionals.len < 3;
-    if (res.args.help or !pos_ok) {
+    if (res.args.help != 0 or !pos_ok) {
         std.debug.print("{s}\n", .{summary});
         clap.help(std.io.getStdErr().writer(), clap.Help, &params, .{}) catch {};
         std.debug.print("\n", .{});
@@ -194,7 +194,7 @@ pub fn afk(alloc: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIte
         };
     }
 
-    std.debug.print("timer: {s}, reason: {s}, title: {s}\n", .{ time, reason, title });
+    std.debug.print("timer: {s}, reason: {?s}, title: {?s}\n", .{ time, reason, title });
 
     const conn = connect(alloc, config.remote_port);
     defer conn.close();

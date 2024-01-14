@@ -31,7 +31,7 @@ usingnamespace @import("util.zig");
 
 // Pizzatime!
 pub var is_kitty = false;
-const InteractiveElement = @import("../../../src/Terminal.zig").InteractiveElement;
+const InteractiveElement = @import("../../Terminal.zig").InteractiveElement;
 
 /// must be called before any buffers are `push`ed to the terminal.
 pub fn init(allocator: Allocator) ErrorSet.Term.Setup!void {
@@ -200,7 +200,7 @@ pub const Buffer = struct {
             var cp_iter = (try std.unicode.Utf8View.init(bytes)).iterator();
             var bytes_written: usize = 0;
             while (cp_iter.nextCodepoint()) |cp| {
-                const char_w = @intCast(usize, ziglyph.display_width.codePointWidth(cp, .half));
+                const char_w: usize = @intCast(ziglyph.display_width.codePointWidth(cp, .half));
 
                 if (self.col_num + char_w > self.buffer.width) {
                     if (!self.wrap) @panic("tried to print past the row end");
@@ -261,7 +261,7 @@ pub const Buffer = struct {
     }
 
     pub fn clear(self: *Buffer) void {
-        mem.set(Cell, self.data, .{});
+        @memset(self.data, .{});
     }
 
     pub fn init(allocator: Allocator, height: usize, width: usize) Allocator.Error!Buffer {
@@ -331,7 +331,7 @@ pub const Buffer = struct {
 
     /// fill a buffer with the given cell
     pub fn fill(self: *Buffer, a_cell: Cell) void {
-        mem.set(Cell, self.data, a_cell);
+        @memset(self.data, a_cell);
     }
 
     /// grows or shrinks a cell buffer ensuring alignment by line and column
@@ -357,12 +357,12 @@ pub const Buffer = struct {
         if (width > old.width or
             height > old.height) self.clear();
 
-        const min_height = math.min(old.height, height);
-        const min_width = math.min(old.width, width);
+        const min_height = @min(old.height, height);
+        const min_width = @min(old.width, width);
 
         var n: usize = 0;
         while (n < min_height) : (n += 1) {
-            mem.copy(Cell, self.row(n), old.row(n)[0..min_width]);
+            @memcpy(self.row(n), old.row(n)[0..min_width]);
         }
         self.allocator.free(old.data);
     }
@@ -395,8 +395,8 @@ pub const Buffer = struct {
                 }
 
                 self.cellRef(
-                    @intCast(usize, self_row_idx),
-                    @intCast(usize, self_col_idx),
+                    @as(usize, @intCast(self_row_idx)),
+                    @as(usize, @intCast(self_col_idx)),
                 ).* = other.cell(other_row_idx, other_col_idx);
             }
         }
@@ -488,7 +488,7 @@ test "buffer.cursorAt()" {
 test "Buffer.blit()" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    var alloc = &arena.allocator;
+    const alloc = &arena.allocator;
     var buffer1 = try Buffer.init(alloc, 10, 10);
     var buffer2 = try Buffer.init(alloc, 5, 5);
     buffer2.fill(.{ .char = '#' });

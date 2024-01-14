@@ -672,7 +672,7 @@ pub fn parseHeader(reader: anytype, seekableStream: anytype) !TZifHeader {
     }
 
     // Check verison
-    const version = reader.readEnum(Version, .Little) catch |err| switch (err) {
+    const version = reader.readEnum(Version, .little) catch |err| switch (err) {
         error.InvalidValue => return error.UnsupportedVersion,
         else => |e| return e,
     };
@@ -685,12 +685,12 @@ pub fn parseHeader(reader: anytype, seekableStream: anytype) !TZifHeader {
 
     return TZifHeader{
         .version = version,
-        .isutcnt = try reader.readInt(u32, .Big),
-        .isstdcnt = try reader.readInt(u32, .Big),
-        .leapcnt = try reader.readInt(u32, .Big),
-        .timecnt = try reader.readInt(u32, .Big),
-        .typecnt = try reader.readInt(u32, .Big),
-        .charcnt = try reader.readInt(u32, .Big),
+        .isutcnt = try reader.readInt(u32, .big),
+        .isstdcnt = try reader.readInt(u32, .big),
+        .leapcnt = try reader.readInt(u32, .big),
+        .timecnt = try reader.readInt(u32, .big),
+        .typecnt = try reader.readInt(u32, .big),
+        .charcnt = try reader.readInt(u32, .big),
     };
 }
 
@@ -896,7 +896,7 @@ pub fn parse(allocator: std.mem.Allocator, reader: anytype, seekableStream: anyt
         var prev: i64 = -(2 << 59); // Earliest time supported, this is earlier than the big bang
         var i: usize = 0;
         while (i < transition_times.len) : (i += 1) {
-            transition_times[i] = try reader.readInt(i64, .Big);
+            transition_times[i] = try reader.readInt(i64, .big);
             if (transition_times[i] <= prev) {
                 return error.InvalidFormat;
             }
@@ -920,7 +920,7 @@ pub fn parse(allocator: std.mem.Allocator, reader: anytype, seekableStream: anyt
     {
         var i: usize = 0;
         while (i < local_time_types.len) : (i += 1) {
-            local_time_types[i].ut_offset = try reader.readInt(i32, .Big);
+            local_time_types[i].ut_offset = try reader.readInt(i32, .big);
             local_time_types[i].is_daylight_saving_time = switch (try reader.readByte()) {
                 0 => false,
                 1 => true,
@@ -945,14 +945,14 @@ pub fn parse(allocator: std.mem.Allocator, reader: anytype, seekableStream: anyt
     {
         var i: usize = 0;
         while (i < leap_seconds.len) : (i += 1) {
-            leap_seconds[i].occur = try reader.readInt(i64, .Big);
+            leap_seconds[i].occur = try reader.readInt(i64, .big);
             if (i == 0 and leap_seconds[i].occur < 0) {
                 return error.InvalidFormat;
             } else if (i != 0 and leap_seconds[i].occur - leap_seconds[i - 1].occur < 2419199) {
                 return error.InvalidFormat; // There must be at least 28 days worth of seconds between leap seconds
             }
 
-            leap_seconds[i].corr = try reader.readInt(i32, .Big);
+            leap_seconds[i].corr = try reader.readInt(i32, .big);
             if (i == 0 and (leap_seconds[0].corr != 1 and leap_seconds[0].corr != -1)) {
                 log.warn("First leap second correction is not 1 or -1: {}", .{leap_seconds[0]});
                 return error.InvalidFormat;

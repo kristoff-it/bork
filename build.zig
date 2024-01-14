@@ -80,12 +80,25 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
 
-    const zbox = b.dependency("zbox", .{});
     const known_folders = b.dependency("known-folders", .{});
+    const datetime = b.dependency("datetime", .{});
+    const ziglyph = b.dependency("ziglyph", .{});
+    const tzif = b.dependency("tzif", .{});
+    const clap = b.dependency("clap", .{});
 
-    exe.root_module.addImport("zbox", zbox.module("zbox"));
     exe.root_module.addImport("known-folders", known_folders.module("known-folders"));
+    exe.root_module.addImport("datetime", datetime.module("zig-datetime"));
+    exe.root_module.addImport("ziglyph", ziglyph.module("ziglyph"));
+    exe.root_module.addImport("tzif", tzif.module("tzif"));
+    exe.root_module.addImport("clap", clap.module("clap"));
 
     exe.root_module.addOptions("build_options", options);
     b.installArtifact(exe);
+
+    const run_step = b.step("run", "Run bork");
+    const run = b.addRunArtifact(exe);
+
+    if (b.args) |args| run.addArgs(args);
+
+    run_step.dependOn(&run.step);
 }

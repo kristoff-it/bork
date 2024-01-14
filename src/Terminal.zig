@@ -2,7 +2,7 @@ const Terminal = @This();
 
 const std = @import("std");
 const builtin = @import("builtin");
-const zbox = @import("zbox");
+const zbox = @import("zbox/src/box.zig");
 const options = @import("build_options");
 const Channel = @import("utils/channel.zig").Channel;
 const Chat = @import("Chat.zig");
@@ -75,7 +75,7 @@ const AfkMessage = struct {
 
         if (needs_update) {
             const now = std.time.timestamp();
-            const remaining = std.math.max(0, afk.target_time - now);
+            const remaining = @max(0, afk.target_time - now);
             const human_readable_remaining = try renderCountdown(remaining, alloc);
             defer alloc.free(human_readable_remaining);
 
@@ -113,7 +113,7 @@ const AfkMessage = struct {
 
             const bottom_column = switch (afk.reason.len) {
                 0 => try std.math.divCeil(usize, afk.buffer.width - 2 - 1, 2),
-                else => std.math.max(1, try std.math.divCeil(usize, afk.buffer.width - bottom_text.len, 2)),
+                else => @max(1, try std.math.divCeil(usize, afk.buffer.width - bottom_text.len, 2)),
             };
             cur.row_num = 3;
             cur.col_num = bottom_column;
@@ -150,7 +150,7 @@ const short_version: []const u8 = blk: {
 
 // State
 config: BorkConfig,
-allocator: std.mem.Allocator,
+gpa: std.mem.Allocator,
 ch: *Channel(GlobalEventUnion),
 output: zbox.Buffer,
 chatBuf: zbox.Buffer,
@@ -171,7 +171,7 @@ var emulator: enum { kitty, other } = undefined;
 
 var done_init = false;
 var terminal_inited = false;
-pub fn init(self: *Terminal, alloc: std.mem.Allocator, ch: *Channel(GlobalEventUnion), config: BorkConfig) !void {
+pub fn init(self: *Terminal, gpa: std.mem.Allocator, ch: *Channel(GlobalEventUnion), config: BorkConfig) !void {
     {
         if (done_init) @panic("Terminal should only be initialized once, like a singleton.");
         done_init = true;
@@ -194,7 +194,7 @@ pub fn init(self: *Terminal, alloc: std.mem.Allocator, ch: *Channel(GlobalEventU
     }
 
     // Initialize zbox
-    try zbox.init(alloc);
+    try zbox.init(gpa);
     _ = @atomicRmw(bool, &terminal_inited, .Xchg, true, .SeqCst);
     errdefer zbox.deinit();
     errdefer _ = @atomicRmw(bool, &terminal_inited, .Xchg, false, .SeqCst);
@@ -222,40 +222,37 @@ pub fn init(self: *Terminal, alloc: std.mem.Allocator, ch: *Channel(GlobalEventU
 
     // Init main buffer
     const size = try zbox.size();
-    var output = try zbox.Buffer.init(alloc, size.height, size.width);
+    var output = try zbox.Buffer.init(gpa, size.height, size.width);
     errdefer output.deinit();
 
     // Setup the buffer for chat history
-    var chatBuf = try zbox.Buffer.init(alloc, size.height - 2, size.width - 2);
+    var chatBuf = try zbox.Buffer.init(gpa, size.height - 2, size.width - 2);
     errdefer chatBuf.deinit();
 
-    var overlayBuf = try zbox.Buffer.init(alloc, size.height - 2, size.width - 2);
+    var overlayBuf = try zbox.Buffer.init(gpa, size.height - 2, size.width - 2);
     errdefer overlayBuf.deinit();
 
     mainLoopChannel = ch;
 
     self.* = .{
         .config = config,
-        .allocator = alloc,
+        .gpa = gpa,
         .ch = ch,
         .chatBuf = chatBuf,
         .output = output,
         .overlayBuf = overlayBuf,
-        .emote_cache = EmoteCache.init(alloc),
+        .emote_cache = EmoteCache.init(gpa),
+        .thread = undefined,
     };
 
-    self.thread = try std.Thread.spawn(.{}, notifyDisplayEvents, .{ self, ch, config.remote });
+    self.thread = try std.Thread.spawn(.{}, notifyDisplayEvents, .{ ch, config.remote });
 }
 
 pub fn toggleCtrlCMessage(self: *Terminal, new: bool) !bool {
     if (self.ctrlc_pressed == new) return false;
 
     if (new) {
-        try std.event.Loop.instance.?.runDetached(
-            self.allocator,
-            disableCtrlCMessage,
-            .{self},
-        );
+        _ = try std.Thread.spawn(.{}, disableCtrlCMessage, .{self});
     }
 
     self.ctrlc_pressed = new;
@@ -281,7 +278,7 @@ fn winchHandler(_: c_int) callconv(.C) void {
 // we'll use @fieldParentPointer() to "navigate up" to the full
 // scruture from the linked list that Chat keeps.
 pub fn prepareMessage(self: *Terminal, chatMsg: Chat.Message) !*Chat.Message {
-    var term_msg = try self.allocator.create(TerminalMessage);
+    var term_msg = try self.gpa.create(TerminalMessage);
 
     term_msg.* = switch (chatMsg.kind) {
         .raid,
@@ -293,7 +290,7 @@ pub fn prepareMessage(self: *Terminal, chatMsg: Chat.Message) !*Chat.Message {
             .chat_message = chatMsg,
             .is_selected = true,
             .buffer = try zbox.Buffer.init(
-                self.allocator,
+                self.gpa,
                 2,
                 self.chatBuf.width,
             ),
@@ -302,7 +299,7 @@ pub fn prepareMessage(self: *Terminal, chatMsg: Chat.Message) !*Chat.Message {
             .chat_message = chatMsg,
             .is_selected = m.is_highlighted,
             .buffer = try zbox.Buffer.init(
-                self.allocator,
+                self.gpa,
                 1,
                 self.chatBuf.width - padding,
             ),
@@ -310,7 +307,7 @@ pub fn prepareMessage(self: *Terminal, chatMsg: Chat.Message) !*Chat.Message {
         .line => .{
             .chat_message = chatMsg,
             .buffer = try zbox.Buffer.init(
-                self.allocator,
+                self.gpa,
                 1,
                 self.chatBuf.width - padding,
             ),
@@ -330,7 +327,8 @@ fn setCellToEmote(cell: *zbox.Cell, emote_idx: u32) void {
 
 // NOTE: callers must clear the buffer when necessary (when size changes)
 fn renderMessage(self: *Terminal, msg: *TerminalMessage) !void {
-    var cursor = msg.buffer.wrappedCursorAt(0, 0).writer();
+    var crs = msg.buffer.wrappedCursorAt(0, 0);
+    const cursor = crs.writer();
     cursor.context.attribs = .{
         .normal = true,
     };
@@ -581,7 +579,7 @@ fn renderMessage(self: *Terminal, msg: *TerminalMessage) !void {
 
                                 // send remaining chunks
                                 while (cur < img.len) : (cur += 4096) {
-                                    const end = std.math.min(cur + 4096, img.len);
+                                    const end = @min(cur + 4096, img.len);
                                     const m = if (end == img.len) "0" else "1";
 
                                     // <ESC>_Gs=100,v=30,m=1;<encoded pixel data first chunk><ESC>\
@@ -615,6 +613,7 @@ fn renderMessage(self: *Terminal, msg: *TerminalMessage) !void {
             {
                 cursor.context.attribs = .{ .fg_cyan = true };
                 try printWordWrap(
+                    self.gpa,
                     "*",
                     &[0]Chat.Message.Emote{},
                     &msg.buffer,
@@ -623,6 +622,7 @@ fn renderMessage(self: *Terminal, msg: *TerminalMessage) !void {
 
                 cursor.context.attribs = .{ .feint = true };
                 try printWordWrap(
+                    self.gpa,
                     c.text[action_preamble.len .. c.text.len - 1],
                     c.emotes,
                     &msg.buffer,
@@ -631,6 +631,7 @@ fn renderMessage(self: *Terminal, msg: *TerminalMessage) !void {
 
                 cursor.context.attribs = .{ .fg_cyan = true };
                 try printWordWrap(
+                    self.gpa,
                     "*",
                     &[0]Chat.Message.Emote{},
                     &msg.buffer,
@@ -638,6 +639,7 @@ fn renderMessage(self: *Terminal, msg: *TerminalMessage) !void {
                 );
             } else {
                 try printWordWrap(
+                    self.gpa,
                     c.text,
                     c.emotes,
                     &msg.buffer,
@@ -650,11 +652,13 @@ fn renderMessage(self: *Terminal, msg: *TerminalMessage) !void {
 }
 
 fn printWordWrap(
+    gpa: std.mem.Allocator,
     text: []const u8,
     emotes: []const Chat.Message.Emote,
     buffer: *zbox.Buffer,
     cursor: zbox.Buffer.Writer,
 ) !void {
+    _ = gpa;
     const width = buffer.width;
     var height = buffer.height; // TODO: do we really need to track this?
 
@@ -667,7 +671,6 @@ fn printWordWrap(
         codepoints += word_len;
 
         const word_width: usize = @intCast(try ziglyph.display_width.strWidth(
-            allocator,
             word,
             .half,
         ));
@@ -808,7 +811,6 @@ fn printWordWrap(
 
 pub fn notifyDisplayEvents(ch: *Channel(GlobalEventUnion), remote_enabled: bool) !void {
     defer std.log.debug("notfyDisplayEvents returning", .{});
-    std.event.Loop.instance.?.yield();
     while (true) {
         if (try zbox.nextEvent()) |event| {
             ch.put(GlobalEventUnion{ .display = event });
@@ -857,7 +859,7 @@ pub fn renderChat(self: *Terminal, chat: *Chat) !void {
     // Paint the AFK message (if any)
     {
         if (self.afk_message) |*afk| {
-            try afk.render(self.allocator, self.chatBuf.width);
+            try afk.render(self.gpa, self.chatBuf.width);
         }
     }
 
@@ -940,7 +942,7 @@ pub fn renderChat(self: *Terminal, chat: *Chat) !void {
                         std.log.debug("must rerender msg!", .{});
 
                         term_message.buffer.deinit();
-                        term_message.buffer = try zbox.Buffer.init(self.allocator, 2, self.chatBuf.width);
+                        term_message.buffer = try zbox.Buffer.init(self.gpa, 2, self.chatBuf.width);
                         try self.renderMessage(term_message);
                     }
 
@@ -953,7 +955,7 @@ pub fn renderChat(self: *Terminal, chat: *Chat) !void {
 
                     // If the message is selected, time to invert everything!
                     if (term_message.is_selected) {
-                        var rx: usize = row - std.math.min(msg_height, row);
+                        var rx: usize = row - @min(msg_height, row);
                         while (rx < row) : (rx += 1) {
                             var cx: usize = 0;
                             while (cx < self.chatBuf.width) : (cx += 1) {
@@ -962,7 +964,7 @@ pub fn renderChat(self: *Terminal, chat: *Chat) !void {
                         }
                     }
 
-                    row -= std.math.min(msg_height, row);
+                    row -= @min(msg_height, row);
                 },
                 .line => {
 
@@ -972,7 +974,9 @@ pub fn renderChat(self: *Terminal, chat: *Chat) !void {
                     // NOTE: since line takes only one row and we break when row == 0,
                     //       we don't have to check for space.
                     var col: usize = 1;
-                    var cursor = self.chatBuf.cursorAt(row, col).writer();
+                    var cur = self.chatBuf.cursorAt(row, col);
+                    const cursor = cur.writer();
+
                     while (col < self.chatBuf.width - 1) : (col += 1) {
                         try cursor.print("-", .{});
                     }
@@ -980,7 +984,8 @@ pub fn renderChat(self: *Terminal, chat: *Chat) !void {
                     const msg = "[RECONNECTED]";
                     if (self.chatBuf.width > msg.len) {
                         const column = @divTrunc(self.chatBuf.width, 2) + (self.chatBuf.width % 2) - @divTrunc(msg.len, 2) - (msg.len % 2); // TODO: test this math lmao
-                        try self.chatBuf.cursorAt(row, column).writer().writeAll(msg);
+                        var cur1 = self.chatBuf.cursorAt(row, column);
+                        try cur1.writer().writeAll(msg);
                     }
                 },
                 .chat => |c| {
@@ -989,7 +994,7 @@ pub fn renderChat(self: *Terminal, chat: *Chat) !void {
                         std.log.debug("must rerender msg!", .{});
 
                         term_message.buffer.deinit();
-                        term_message.buffer = try zbox.Buffer.init(self.allocator, 1, padded_width);
+                        term_message.buffer = try zbox.Buffer.init(self.gpa, 1, padded_width);
                         try self.renderMessage(term_message);
                     }
 
@@ -1005,7 +1010,7 @@ pub fn renderChat(self: *Terminal, chat: *Chat) !void {
 
                     // If the message is selected, time to invert everything!
                     if (term_message.is_selected or user_selected) {
-                        var rx: usize = row - std.math.min(msg_height, row);
+                        var rx: usize = row - @min(msg_height, row);
                         while (rx < row) : (rx += 1) {
                             var cx: usize = padding - 1;
                             while (cx < self.chatBuf.width) : (cx += 1) {
@@ -1014,7 +1019,7 @@ pub fn renderChat(self: *Terminal, chat: *Chat) !void {
                         }
                     }
 
-                    row -= std.math.min(msg_height, row);
+                    row -= @min(msg_height, row);
 
                     // Do we have space for the nickname?
                     blk: {
@@ -1040,7 +1045,7 @@ pub fn renderChat(self: *Terminal, chat: *Chat) !void {
                                 }
                             }
                             row -= 1;
-                            const nick = c.display_name[0..std.math.min(self.chatBuf.width - 5, c.display_name.len)];
+                            const nick = c.display_name[0..@min(self.chatBuf.width - 5, c.display_name.len)];
                             var cur = self.chatBuf.cursorAt(row, 0);
                             cur.attribs = .{
                                 .bold = true,
@@ -1179,7 +1184,8 @@ pub fn renderChat(self: *Terminal, chat: *Chat) !void {
             const msg = "run `./bork quit`";
             if (width > msg.len) {
                 const column = @divTrunc(width, 2) + (width % 2) - @divTrunc(msg.len, 2) - (msg.len % 2); // TODO: test this math lmao
-                try self.output.cursorAt(bottom_bar_row, column).writer().writeAll(msg);
+                var cur = self.output.cursorAt(bottom_bar_row, column);
+                try cur.writer().writeAll(msg);
             }
 
             var i: usize = 1;
@@ -1193,7 +1199,8 @@ pub fn renderChat(self: *Terminal, chat: *Chat) !void {
             const msg = "DISCONNECTED";
             if (width > msg.len) {
                 const column = @divTrunc(width, 2) + (width % 2) - @divTrunc(msg.len, 2) - (msg.len % 2); // TODO: test this math lmao
-                try self.output.cursorAt(bottom_bar_row, column).writer().writeAll(msg);
+                var cur = self.output.cursorAt(bottom_bar_row, column);
+                try cur.writer().writeAll(msg);
             }
 
             var i: usize = 1;
@@ -1216,7 +1223,8 @@ pub fn renderChat(self: *Terminal, chat: *Chat) !void {
             var column: usize = 0;
             if (width > msg.len) {
                 column = @divTrunc(width, 2) + (width % 2) - @divTrunc(msg.len, 2) - (msg.len % 2); // TODO: test this math lmao
-                try self.output.cursorAt(bottom_bar_row, column).writer().writeAll(msg);
+                var cur = self.output.cursorAt(bottom_bar_row, column);
+                try cur.writer().writeAll(msg);
             }
 
             var i: usize = 1;
@@ -1254,8 +1262,8 @@ pub fn handleClick(self: *Terminal, row: usize, col: usize) !bool {
     // Find the element that was clicked,
     // do the corresponding action.
     const cell = zbox.front.cellRef(
-        std.math.min(row, zbox.front.height - 1),
-        std.math.min(col, zbox.front.width - 1),
+        @min(row, zbox.front.height - 1),
+        @min(col, zbox.front.width - 1),
     );
     std.log.debug("cell clicked: {s}", .{@tagName(cell.interactive_element)});
 
@@ -1312,7 +1320,7 @@ pub fn handleClick(self: *Terminal, row: usize, col: usize) !bool {
             .none, .button, .subscriber_badge, .username => {},
             .afk => {
                 if (self.afk_message) |*afk| {
-                    afk.deinit(self.allocator);
+                    afk.deinit(self.gpa);
                     self.afk_message = null;
 
                     // Restore the original chatBufSize when closing
@@ -1490,7 +1498,7 @@ pub fn needAnimationFrame(self: *Terminal) bool {
 pub fn setAfkMessage(self: *Terminal, target_time: i64, reason: []const u8, title: []const u8) !void {
     std.log.debug("afk: {d}, {s}", .{ target_time, reason });
     if (self.afk_message) |*old| {
-        old.deinit(self.allocator);
+        old.deinit(self.gpa);
     } else {
         // Shrink chatBuf if the position is not hovering
         // (since there was no afk message showing before)
@@ -1505,6 +1513,6 @@ pub fn setAfkMessage(self: *Terminal, target_time: i64, reason: []const u8, titl
         .reason = reason,
         .target_time = target_time,
         .last_updated = 0,
-        .buffer = try zbox.Buffer.init(self.allocator, 0, 0),
+        .buffer = try zbox.Buffer.init(self.gpa, 0, 0),
     };
 }
