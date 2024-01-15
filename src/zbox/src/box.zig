@@ -362,7 +362,7 @@ pub const Buffer = struct {
 
         var n: usize = 0;
         while (n < min_height) : (n += 1) {
-            @memcpy(self.row(n), old.row(n)[0..min_width]);
+            @memcpy(self.row(n)[0..min_width], old.row(n)[0..min_width]);
         }
         self.allocator.free(old.data);
     }

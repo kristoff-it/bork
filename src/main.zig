@@ -11,8 +11,6 @@ const Network = @import("Network.zig");
 const Terminal = @import("Terminal.zig");
 const Chat = @import("Chat.zig");
 
-pub const io_mode = .evented;
-
 pub const Event = union(enum) {
     display: Terminal.Event,
     network: Network.Event,
@@ -52,8 +50,6 @@ pub const BorkConfig = struct {
     // TODO what's the right size for port numbers?
     const default_port: u16 = 6226;
 };
-
-var log_level: std.log.Level = .warn;
 
 const Subcommand = enum {
     @"--help",
@@ -270,38 +266,41 @@ fn borkStart(alloc: std.mem.Allocator, config: BorkConfig, token: []const u8) !v
 var log_path: ?[]const u8 = null;
 var log_file: ?std.fs.File = null;
 
-pub fn log(
-    comptime level: std.log.Level,
-    comptime scope: @Type(.EnumLiteral),
-    comptime format: []const u8,
-    args: anytype,
-) void {
-    const scope_prefix = "(" ++ @tagName(scope) ++ "): ";
-    const prefix = "[" ++ @tagName(level) ++ "] " ++ scope_prefix;
-    const mutex = std.debug.getStderrMutex();
-    mutex.lock();
-    defer mutex.unlock();
+pub const std_options = struct {
+    var log_level: std.log.Level = .warn;
+    pub fn logFn(
+        comptime level: std.log.Level,
+        comptime scope: @Type(.EnumLiteral),
+        comptime format: []const u8,
+        args: anytype,
+    ) void {
+        const scope_prefix = "(" ++ @tagName(scope) ++ "): ";
+        const prefix = "[" ++ @tagName(level) ++ "] " ++ scope_prefix;
+        const mutex = std.debug.getStderrMutex();
+        mutex.lock();
+        defer mutex.unlock();
 
-    const l = log_file orelse blk: {
-        const file_path = log_path orelse if (options.local)
-            "bork-local.log"
-        else
-            return; // no logs in this case, too bad
+        const l = log_file orelse blk: {
+            const file_path = log_path orelse if (options.local)
+                "bork-local.log"
+            else
+                return; // no logs in this case, too bad
 
-        const log_inner = std.fs.cwd().createFile(file_path, .{ .truncate = false, .intended_io_mode = .blocking }) catch return;
-        const end = log_inner.getEndPos() catch return;
-        log_inner.seekTo(end) catch return;
-        log_file = log_inner;
-        break :blk log_inner;
-    };
+            const log_inner = std.fs.cwd().createFile(file_path, .{ .truncate = false, .intended_io_mode = .blocking }) catch return;
+            const end = log_inner.getEndPos() catch return;
+            log_inner.seekTo(end) catch return;
+            log_file = log_inner;
+            break :blk log_inner;
+        };
 
-    const writer = l.writer();
-    writer.print(prefix ++ format ++ "\n", args) catch return;
-}
+        const writer = l.writer();
+        writer.print(prefix ++ format ++ "\n", args) catch return;
+    }
+};
 
 pub fn panic(msg: []const u8, trace: ?*std.builtin.StackTrace, ret_addr: ?usize) noreturn {
     Terminal.panic();
-    log(.err, .default, "{s}", .{msg});
+    std.log.err("{s}", .{msg});
     std.builtin.default_panic(msg, trace, ret_addr);
 }
 

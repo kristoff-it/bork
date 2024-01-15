@@ -183,7 +183,7 @@ pub fn init(self: *Terminal, gpa: std.mem.Allocator, ch: *Channel(GlobalEventUni
         // We're interested in sensing:
         // - Kitty
         const name = std.os.getenv("TERM") orelse std.os.getenv("TERM_PROGRAM") orelse "";
-        if (std.mem.eql(u8, name, "xterm-kitty")) {
+        if (std.mem.eql(u8, name, "xterm-kitty") or std.mem.eql(u8, name, "xterm-ghostty")) {
             emulator = .kitty;
             zbox.is_kitty = true;
         } else {
