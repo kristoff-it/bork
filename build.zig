@@ -1,14 +1,11 @@
 const std = @import("std");
 
-const bork_version = std.SemanticVersion{ .major = 0, .minor = 1, .patch = 1 };
+const bork_version = std.SemanticVersion{ .major = 0, .minor = 2, .patch = 0 };
 
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const local = b.option(bool, "local", "not using real data and testing locally") orelse false;
-    const options = b.addOptions();
-    options.addOption(bool, "local", local);
     const version = v: {
         const version_string = b.fmt(
             "{d}.{d}.{d}",
@@ -71,6 +68,9 @@ pub fn build(b: *std.Build) !void {
         }
     };
 
+    const local = b.option(bool, "local", "not using real data and testing locally") orelse false;
+    const options = b.addOptions();
+    options.addOption(bool, "local", local);
     options.addOption([:0]const u8, "version", try b.allocator.dupeZ(u8, version));
 
     const exe = b.addExecutable(.{
@@ -101,4 +101,34 @@ pub fn build(b: *std.Build) !void {
     if (b.args) |args| run.addArgs(args);
 
     run_step.dependOn(&run.step);
+
+    // Release
+
+    const release_step = b.step("release", "Create releases for bork");
+    const targets: []const std.Target.Query = &.{
+        .{ .cpu_arch = .aarch64, .os_tag = .macos },
+        .{ .cpu_arch = .aarch64, .os_tag = .linux },
+        .{ .cpu_arch = .x86_64, .os_tag = .macos },
+        .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .musl },
+        // .{ .cpu_arch = .x86_64, .os_tag = .windows },
+    };
+
+    for (targets) |t| {
+        const release_exe = b.addExecutable(.{
+            .name = "bork",
+            .root_source_file = .{ .path = "src/main.zig" },
+            .target = b.resolveTargetQuery(t),
+            .optimize = .ReleaseSafe,
+        });
+
+        const target_output = b.addInstallArtifact(release_exe, .{
+            .dest_dir = .{
+                .override = .{
+                    .custom = try t.zigTriple(b.allocator),
+                },
+            },
+        });
+
+        release_step.dependOn(&target_output.step);
+    }
 }
