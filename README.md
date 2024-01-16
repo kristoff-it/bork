@@ -18,17 +18,37 @@ It's also common for livecoders to use terminal applications to show chat on scr
 Bork is designed to replace irssi for this usecase by providing all the functionality that isn't present in a general-purpose IRC client.
 
 ## Requirements
-To see Twitch emotes in the terminal, you will need [Kitty](https://github.com/kovidgoyal/kitty), or any terminal emulator that supports the Kitty graphics protocol.
+To see Twitch emotes in the terminal, you will need [Kitty](https://github.com/kovidgoyal/kitty), Ghostty, or any terminal emulator that supports the Kitty graphics protocol.
 Bork will otherwise fallback to showing the emote name (eg "Kappa").
 
-Support for more graphics protocols will be considered in the future.  
+Bork also temporarily has a dependency on `curl`. Bork will try to invoke it to check the validity of your Twitch OAuth token. This requirement will go away in the future.
+
+## Obtaining bork
+Get a copy of bork from [the Releases section of GitHub](https://github.com/kristoff-it/bork/releases) or build it yourself (see below).
 
 ## Usage
-todo
+Run `bork start` to run the main bork instance. On first run you will be greeded by a config wizard.
+
+Run `bork` (without subcommand) for the main help menu.
+
+Supported subcommands:
+
+- `start` runs the main bork instance
+- `quit` quits the main bork instance
+- `afk` shows an afk window in bork with a countdown
+- `reconnect` makes bork to reconnect
+- `send` sends a message
+- `links` obtains a list of links sent to chat
+- `ban` bans a user (also deletes all their messages)
+- `unban` unbans a user
+- `version` prints the version
 
 ## Build
-todo 
+Requires a **very** recent version of Zig, as bork development tracks Zig master.
 
+Run `zig build` to obtain a debug build of bork.
+
+Run `zig build -Doptimize=ReleaseFast` to obtain a ReleaseFast build of bork.
 
 ## Demo
 https://youtu.be/Px8rVB3ZpKA
