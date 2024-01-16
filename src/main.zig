@@ -102,7 +102,7 @@ fn borkStart(alloc: std.mem.Allocator, config: BorkConfig, token: []const u8) !v
     var ch = Channel(Event).init(&buf);
 
     var remote_server: remote.Server = undefined;
-    remote_server.init(alloc, &ch) catch |err| {
+    remote_server.init(alloc, config, token, &ch) catch |err| {
         switch (err) {
             // error.AddressInUse => {
             //     std.debug.print(
@@ -314,11 +314,10 @@ fn getConfigAndToken(gpa: std.mem.Allocator, check_token: bool) !ConfigAndToken 
         try folders.open(gpa, .executable_dir, .{}) orelse
         std.fs.cwd();
 
-    // Ensure existence of .bork/
-    try config_base.makePath(".bork");
+    try config_base.makePath("bork");
 
     const config: BorkConfig = config: {
-        const file = config_base.openFile(".bork/config.json", .{}) catch |err| switch (err) {
+        const file = config_base.openFile("bork/config.json", .{}) catch |err| switch (err) {
             else => return err,
             error.FileNotFound => break :config try createConfig(gpa, config_base),
         };
@@ -335,7 +334,7 @@ fn getConfigAndToken(gpa: std.mem.Allocator, check_token: bool) !ConfigAndToken 
     };
 
     const token: []const u8 = token: {
-        const file = config_base.openFile(".bork/token.secret", .{}) catch |err| switch (err) {
+        const file = config_base.openFile("bork/token.secret", .{}) catch |err| switch (err) {
             else => return err,
             error.FileNotFound => {
                 break :token try createToken(gpa, config_base, .new);
@@ -477,7 +476,7 @@ fn createConfig(
     };
 
     // create the config file
-    var file = try config_base.createFile(".bork/config.json", .{});
+    var file = try config_base.createFile("bork/config.json", .{});
     try std.json.stringify(result, .{}, file.writer());
     return result;
 }
@@ -544,7 +543,7 @@ fn createToken(
         std.os.exit(1);
     }
 
-    var token_file = try config_base.createFile(".bork/token.secret", .{});
+    var token_file = try config_base.createFile("bork/token.secret", .{});
     defer token_file.close();
 
     try token_file.writer().print("{s}\n", .{tok});
@@ -573,10 +572,10 @@ fn setupLogging(gpa: std.mem.Allocator) !void {
         try folders.open(gpa, .executable_dir, .{}) orelse
         std.fs.cwd();
 
-    try cache_base.makePath(".bork");
+    try cache_base.makePath("bork");
 
     const log_name = if (options.local) "bork-local.log" else "bork.log";
-    const log_path = try std.fmt.allocPrint(gpa, ".bork/{s}", .{log_name});
+    const log_path = try std.fmt.allocPrint(gpa, "bork/{s}", .{log_name});
 
     log_file = try cache_base.createFile(log_path, .{ .truncate = false });
     const end = try log_file.?.getEndPos();
