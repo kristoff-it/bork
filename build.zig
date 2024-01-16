@@ -120,6 +120,13 @@ pub fn build(b: *std.Build) !void {
             .target = b.resolveTargetQuery(t),
             .optimize = .ReleaseSafe,
         });
+        release_exe.root_module.addImport("known-folders", known_folders.module("known-folders"));
+        release_exe.root_module.addImport("datetime", datetime.module("zig-datetime"));
+        release_exe.root_module.addImport("ziglyph", ziglyph.module("ziglyph"));
+        release_exe.root_module.addImport("tzif", tzif.module("tzif"));
+        release_exe.root_module.addImport("clap", clap.module("clap"));
+
+        release_exe.root_module.addOptions("build_options", options);
 
         const target_output = b.addInstallArtifact(release_exe, .{
             .dest_dir = .{

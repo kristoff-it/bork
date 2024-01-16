@@ -2,3 +2,4 @@ zig-cache/
 .DS_Store
 *.log
 zig-out/
+release/
