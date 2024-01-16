@@ -22,6 +22,8 @@ pub const Event = union(enum) {
     },
 };
 
+config: BorkConfig,
+token: []const u8,
 listener: std.net.StreamServer,
 alloc: std.mem.Allocator,
 ch: *Channel(GlobalEventUnion),
@@ -30,9 +32,13 @@ thread: std.Thread,
 pub fn init(
     self: *Server,
     alloc: std.mem.Allocator,
+    config: BorkConfig,
+    token: []const u8,
     ch: *Channel(GlobalEventUnion),
 ) !void {
     self.alloc = alloc;
+    self.config = config;
+    self.token = token;
     self.ch = ch;
 
     const tmp_dir_path = try folders.getPath(alloc, .cache) orelse "/tmp";
@@ -87,24 +93,24 @@ fn handle(self: *Server, stream: std.net.Stream) !void {
     };
     defer std.log.debug("remote cmd: {s}", .{cmd});
 
-    // if (std.mem.eql(u8, cmd, "SEND")) {
-    //     const msg = stream.reader().readUntilDelimiterAlloc(self.alloc, '\n', 4096) catch |err| {
-    //         std.log.debug("remote could read: {}", .{err});
-    //         return;
-    //     };
-    //     defer self.alloc.free(msg);
+    if (std.mem.eql(u8, cmd, "SEND")) {
+        const msg = stream.reader().readUntilDelimiterAlloc(self.alloc, '\n', 4096) catch |err| {
+            std.log.debug("remote could read: {}", .{err});
+            return;
+        };
+        defer self.alloc.free(msg);
 
-    //     std.log.debug("remote msg: {s}", .{msg});
+        std.log.debug("remote msg: {s}", .{msg});
 
-    //     // Since sending the message from the main connection
-    //     // makes it so that twitch doesn't echo it back, we're
-    //     // opening a one-off connection to send the message.
-    //     // This way we don't have to implement locally emote
-    //     // parsing.
-    //     var twitch_conn = Network.connect(self.alloc, self.config.nick, self.token) catch return;
-    //     defer twitch_conn.close();
-    //     twitch_conn.writer().print("PRIVMSG #{s} :{s}\n", .{ self.config.nick, msg }) catch return;
-    // }
+        // Since sending the message from the main connection
+        // makes it so that twitch doesn't echo it back, we're
+        // opening a one-off connection to send the message.
+        // This way we don't have to implement locally emote
+        // parsing.
+        var twitch_conn = Network.connect(self.alloc, self.config.nick, self.token) catch return;
+        defer twitch_conn.close();
+        twitch_conn.writer().print("PRIVMSG #{s} :{s}\n", .{ self.config.nick, msg }) catch return;
+    }
 
     if (std.mem.eql(u8, cmd, "QUIT")) {
         self.ch.put(GlobalEventUnion{ .remote = .quit });
@@ -118,44 +124,44 @@ fn handle(self: *Server, stream: std.net.Stream) !void {
         self.ch.put(GlobalEventUnion{ .remote = .{ .links = stream } });
     }
 
-    // if (std.mem.eql(u8, cmd, "BAN")) {
-    //     const user = stream.reader().readUntilDelimiterAlloc(self.alloc, '\n', 4096) catch |err| {
-    //         std.log.debug("remote could read: {}", .{err});
-    //         return;
-    //     };
+    if (std.mem.eql(u8, cmd, "BAN")) {
+        const user = stream.reader().readUntilDelimiterAlloc(self.alloc, '\n', 4096) catch |err| {
+            std.log.debug("remote could read: {}", .{err});
+            return;
+        };
 
-    //     defer self.alloc.free(user);
+        defer self.alloc.free(user);
 
-    //     std.log.debug("remote msg: {s}", .{user});
+        std.log.debug("remote msg: {s}", .{user});
 
-    //     // Since sending the message from the main connection
-    //     // makes it so that twitch doesn't echo it back, we're
-    //     // opening a one-off connection to send the message.
-    //     // This way we don't have to implement locally emote
-    //     // parsing.
-    //     var twitch_conn = Network.connect(self.alloc, self.config.nick, self.token) catch return;
-    //     defer twitch_conn.close();
-    //     twitch_conn.writer().print("PRIVMSG #{s} :/ban {s}\n", .{ self.config.nick, user }) catch return;
-    // }
+        // Since sending the message from the main connection
+        // makes it so that twitch doesn't echo it back, we're
+        // opening a one-off connection to send the message.
+        // This way we don't have to implement locally emote
+        // parsing.
+        var twitch_conn = Network.connect(self.alloc, self.config.nick, self.token) catch return;
+        defer twitch_conn.close();
+        twitch_conn.writer().print("PRIVMSG #{s} :/ban {s}\n", .{ self.config.nick, user }) catch return;
+    }
 
-    // if (std.mem.eql(u8, cmd, "UNBAN")) {
-    //     const user = stream.reader().readUntilDelimiterAlloc(self.alloc, '\n', 4096) catch |err| {
-    //         std.log.debug("remote could read: {}", .{err});
-    //         return;
-    //     };
-    //     defer self.alloc.free(user);
+    if (std.mem.eql(u8, cmd, "UNBAN")) {
+        const user = stream.reader().readUntilDelimiterAlloc(self.alloc, '\n', 4096) catch |err| {
+            std.log.debug("remote could read: {}", .{err});
+            return;
+        };
+        defer self.alloc.free(user);
 
-    //     std.log.debug("remote msg: {s}", .{user});
+        std.log.debug("remote msg: {s}", .{user});
 
-    //     // Since sending the message from the main connection
-    //     // makes it so that twitch doesn't echo it back, we're
-    //     // opening a one-off connection to send the message.
-    //     // This way we don't have to implement locally emote
-    //     // parsing.
-    //     var twitch_conn = Network.connect(self.alloc, self.config.nick, self.token) catch return;
-    //     defer twitch_conn.close();
-    //     twitch_conn.writer().print("PRIVMSG #{s} :/ban {s}\n", .{ self.config.nick, user }) catch return;
-    // }
+        // Since sending the message from the main connection
+        // makes it so that twitch doesn't echo it back, we're
+        // opening a one-off connection to send the message.
+        // This way we don't have to implement locally emote
+        // parsing.
+        var twitch_conn = Network.connect(self.alloc, self.config.nick, self.token) catch return;
+        defer twitch_conn.close();
+        twitch_conn.writer().print("PRIVMSG #{s} :/ban {s}\n", .{ self.config.nick, user }) catch return;
+    }
 
     if (std.mem.eql(u8, cmd, "AFK")) {
         const reader = stream.reader();
