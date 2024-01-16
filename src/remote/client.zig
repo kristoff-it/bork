@@ -1,12 +1,23 @@
 const std = @import("std");
+const folders = @import("known-folders");
 const ArgIterator = std.process.ArgIterator;
 const clap = @import("clap");
 const Event = @import("../remote.zig").Event;
 const BorkConfig = @import("../main.zig").BorkConfig;
 const parseTime = @import("./utils.zig").parseTime;
 
-fn connect(alloc: std.mem.Allocator, port: u16) std.net.Stream {
-    return std.net.tcpConnectToHost(alloc, "127.0.0.1", port) catch |err| switch (err) {
+fn connect(gpa: std.mem.Allocator) std.net.Stream {
+    const tmp_dir_path = (folders.getPath(gpa, .cache) catch @panic("oom")) orelse "/tmp";
+    defer gpa.free(tmp_dir_path);
+
+    const socket_path = std.fmt.allocPrint(
+        gpa,
+        "{s}/bork.sock",
+        .{tmp_dir_path},
+    ) catch @panic("oom");
+    defer gpa.free(socket_path);
+
+    return std.net.connectUnixSocket(socket_path) catch |err| switch (err) {
         error.ConnectionRefused => {
             std.debug.print(
                 \\Connection refused!
@@ -25,13 +36,13 @@ fn connect(alloc: std.mem.Allocator, port: u16) std.net.Stream {
     };
 }
 
-pub fn send(alloc: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIterator) !void {
+pub fn send(gpa: std.mem.Allocator, it: *std.process.ArgIterator) !void {
     const message = it.next() orelse {
         std.debug.print("Usage ./bork send \"my message Kappa\"\n", .{});
         return;
     };
 
-    const conn = connect(alloc, config.remote_port);
+    const conn = connect(gpa);
     defer conn.close();
 
     try conn.writer().writeAll("SEND\n");
@@ -39,29 +50,32 @@ pub fn send(alloc: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIt
     try conn.writer().writeAll("\n");
 }
 
-pub fn quit(alloc: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIterator) !void {
+pub fn quit(gpa: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIterator) !void {
+    _ = config;
     _ = it;
-    const conn = connect(alloc, config.remote_port);
+    const conn = connect(gpa);
     defer conn.close();
 
     try conn.writer().writeAll("QUIT\n");
 }
 
-pub fn reconnect(alloc: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIterator) !void {
+pub fn reconnect(gpa: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIterator) !void {
+    _ = config;
     // TODO: validation
     _ = it;
 
-    const conn = connect(alloc, config.remote_port);
+    const conn = connect(gpa);
     defer conn.close();
 
     try conn.writer().writeAll("RECONNECT\n");
 }
 
-pub fn links(alloc: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIterator) !void {
+pub fn links(gpa: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIterator) !void {
+    _ = config;
     // TODO: validation
     _ = it;
 
-    const conn = connect(alloc, config.remote_port);
+    const conn = connect(gpa);
     defer conn.close();
 
     try conn.writer().writeAll("LINKS\n");
@@ -77,13 +91,14 @@ pub fn links(alloc: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgI
     }
 }
 
-pub fn ban(alloc: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIterator) !void {
+pub fn ban(gpa: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIterator) !void {
+    _ = config;
     const user = it.next() orelse {
         std.debug.print("Usage ./bork ban \"username\"\n", .{});
         return;
     };
 
-    const conn = connect(alloc, config.remote_port);
+    const conn = connect(gpa);
     defer conn.close();
 
     try conn.writer().writeAll("BAN\n");
@@ -91,10 +106,11 @@ pub fn ban(alloc: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIte
     try conn.writer().writeAll("\n");
 }
 
-pub fn unban(alloc: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIterator) !void {
-    const user = try it.next(alloc);
+pub fn unban(gpa: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIterator) !void {
+    _ = config;
+    const user = try it.next(gpa);
 
-    if (it.next(alloc)) |_| {
+    if (it.next(gpa)) |_| {
         std.debug.print(
             \\Usage ./bork unban ["username"]
             \\Omitting <username> will try to unban the last banned
@@ -104,7 +120,7 @@ pub fn unban(alloc: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgI
         return;
     }
 
-    const conn = connect(alloc, config.remote_port);
+    const conn = connect(gpa);
     defer conn.close();
 
     try conn.writer().writeAll("UNBAN\n");
@@ -112,7 +128,7 @@ pub fn unban(alloc: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgI
     try conn.writer().writeAll("\n");
 }
 
-pub fn afk(alloc: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIterator) !void {
+pub fn afk(gpa: std.mem.Allocator, it: *std.process.ArgIterator) !void {
     const summary =
         \\Creates an AFK message with a countdown.
         \\Click on the message to dismiss it.
@@ -139,7 +155,7 @@ pub fn afk(alloc: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIte
 
     var diag: clap.Diagnostic = undefined;
     const res = clap.parseEx(clap.Help, &params, parsers, it, .{
-        .allocator = alloc,
+        .allocator = gpa,
         .diagnostic = &diag,
     }) catch |err| {
         // Report any useful error and exit
@@ -196,7 +212,7 @@ pub fn afk(alloc: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIte
 
     std.debug.print("timer: {s}, reason: {?s}, title: {?s}\n", .{ time, reason, title });
 
-    const conn = connect(alloc, config.remote_port);
+    const conn = connect(gpa);
     defer conn.close();
 
     const w = conn.writer();

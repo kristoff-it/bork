@@ -245,7 +245,7 @@ pub fn init(self: *Terminal, gpa: std.mem.Allocator, ch: *Channel(GlobalEventUni
         .thread = undefined,
     };
 
-    self.thread = try std.Thread.spawn(.{}, notifyDisplayEvents, .{ ch, config.remote });
+    self.thread = try std.Thread.spawn(.{}, notifyDisplayEvents, .{ ch, true });
 }
 
 pub fn toggleCtrlCMessage(self: *Terminal, new: bool) !bool {

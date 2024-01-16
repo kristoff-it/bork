@@ -24,8 +24,11 @@ pub const known_folders_config = .{
 };
 
 pub const BorkConfig = struct {
-    const version = 1;
-    const path = std.fmt.comptimePrint(".bork/config_v{d}.json", .{version});
+    nick: []const u8,
+    prevent_ctrlc: bool = false,
+    top_emoji: []const u8 = "⚡",
+    afk_position: AfkPosition = .bottom,
+
     const AfkPosition = enum {
         top,
         hover,
@@ -40,15 +43,6 @@ pub const BorkConfig = struct {
             , .{@tagName(self)});
         }
     };
-
-    nick: []const u8,
-    top_emoji: []const u8 = "⚡",
-    remote: bool = false,
-    remote_port: u16 = default_port,
-    afk_position: AfkPosition = .bottom,
-
-    // TODO what's the right size for port numbers?
-    const default_port: u16 = 6226;
 };
 
 const Subcommand = enum {
@@ -68,9 +62,7 @@ pub fn main() !void {
     var gpa_impl = std.heap.GeneralPurposeAllocator(.{}){};
     const gpa = gpa_impl.allocator();
 
-    var arena_impl = std.heap.ArenaAllocator.init(gpa);
-    const arena = arena_impl.allocator();
-    _ = arena;
+    setupLogging(gpa) catch @panic("could not setup logging");
 
     var it = try std.process.ArgIterator.initWithAllocator(gpa);
     defer it.deinit();
@@ -94,11 +86,11 @@ pub fn main() !void {
 
     switch (subcommand) {
         .start => try borkStart(gpa, config, token),
-        .send => try remote.client.send(gpa, config, &it),
+        .send => try remote.client.send(gpa, &it),
         .quit => try remote.client.quit(gpa, config, &it),
         .reconnect => try remote.client.reconnect(gpa, config, &it),
         .links => try remote.client.links(gpa, config, &it),
-        .afk => try remote.client.afk(gpa, config, &it),
+        .afk => try remote.client.afk(gpa, &it),
         .ban => try remote.client.ban(gpa, config, &it),
         .version => printVersion(),
         .@"--help", .@"-h" => printHelpFatal(),
@@ -109,33 +101,28 @@ fn borkStart(alloc: std.mem.Allocator, config: BorkConfig, token: []const u8) !v
     var buf: [24]Event = undefined;
     var ch = Channel(Event).init(&buf);
 
-    // If remote control is enabled, do that first
-    // so that we can immediately know if there's
-    // another instance of Bork running.
     var remote_server: remote.Server = undefined;
-    if (config.remote) {
-        remote_server.init(config, token, alloc, &ch) catch |err| {
-            switch (err) {
-                error.AddressInUse => {
-                    std.debug.print(
-                        \\ Unable to start Bork, port {} is already in use.
-                        \\ Make sure all other instances of Bork are closed first.
-                        \\
-                    , .{config.remote_port});
-                },
-                else => {
-                    std.debug.print(
-                        \\ Unable to listen for remote control.
-                        \\ Error: {}
-                        \\
-                    , .{err});
-                },
-            }
-            std.os.exit(1);
-        };
-    }
+    remote_server.init(alloc, &ch) catch |err| {
+        switch (err) {
+            // error.AddressInUse => {
+            //     std.debug.print(
+            //         \\ Unable to start Bork, the socket is already in use.
+            //         \\ Make sure all other instances of Bork are closed first.
+            //         \\
+            //     , .{});
+            // },
+            else => {
+                std.debug.print(
+                    \\ Unable to listen for remote control.
+                    \\ Error: {}
+                    \\
+                , .{err});
+            },
+        }
+        std.os.exit(1);
+    };
 
-    defer if (config.remote) remote_server.deinit();
+    defer remote_server.deinit();
 
     var display: Terminal = undefined;
     try display.init(alloc, &ch, config);
@@ -212,8 +199,7 @@ fn borkStart(alloc: std.mem.Allocator, config: BorkConfig, token: []const u8) !v
                     },
 
                     .CTRL_C => {
-                        if (config.remote) {
-                            // TODO: show something
+                        if (true) {
                             need_repaint = try display.toggleCtrlCMessage(true);
                         } else {
                             return;
@@ -263,9 +249,7 @@ fn borkStart(alloc: std.mem.Allocator, config: BorkConfig, token: []const u8) !v
     // TODO: implement real cleanup
 }
 
-var log_path: ?[]const u8 = null;
 var log_file: ?std.fs.File = null;
-
 pub const std_options = struct {
     var log_level: std.log.Level = .warn;
     pub fn logFn(
@@ -280,17 +264,9 @@ pub const std_options = struct {
         mutex.lock();
         defer mutex.unlock();
 
-        const l = log_file orelse blk: {
-            const file_path = log_path orelse if (options.local)
-                "bork-local.log"
-            else
-                return; // no logs in this case, too bad
-
-            const log_inner = std.fs.cwd().createFile(file_path, .{ .truncate = false, .intended_io_mode = .blocking }) catch return;
-            const end = log_inner.getEndPos() catch return;
-            log_inner.seekTo(end) catch return;
-            log_file = log_inner;
-            break :blk log_inner;
+        const l = log_file orelse {
+            std.debug.print(format, args);
+            return;
         };
 
         const writer = l.writer();
@@ -332,70 +308,47 @@ const ConfigAndToken = struct {
     token: []const u8,
 };
 
-fn getConfigAndToken(alloc: std.mem.Allocator, check_token: bool) !ConfigAndToken {
-    const base_path = (try folders.getPath(alloc, .home)) orelse
-        (try folders.getPath(alloc, .executable_dir)) orelse
-        @panic("couldn't find a way of creating a config file");
-
-    var base = try std.fs.openDirAbsolute(base_path, .{});
-    defer base.close();
+fn getConfigAndToken(gpa: std.mem.Allocator, check_token: bool) !ConfigAndToken {
+    const config_base = try folders.open(gpa, .local_configuration, .{}) orelse
+        try folders.open(gpa, .home, .{}) orelse
+        try folders.open(gpa, .executable_dir, .{}) orelse
+        std.fs.cwd();
 
     // Ensure existence of .bork/
-    try base.makePath(".bork");
+    try config_base.makePath(".bork");
 
-    // Prepare the log_file path for `log`.
-    {
-        const mutex = std.debug.getStderrMutex();
-        mutex.lock();
-        defer mutex.unlock();
-
-        const log_name = if (options.local) "bork-local.log" else "bork.log";
-        log_path = try std.fmt.allocPrint(alloc, "{s}/.bork/{s}", .{ base_path, log_name });
-    }
-
-    // Check if we still have an old .bork-oauth file that needs to be migrated
-    var old = cleanupOldTokenAndGreet(alloc) catch null;
-
-    var config: BorkConfig = config: {
-        const file = base.openFile(BorkConfig.path, .{}) catch |err| switch (err) {
+    const config: BorkConfig = config: {
+        const file = config_base.openFile(".bork/config.json", .{}) catch |err| switch (err) {
             else => return err,
-            error.FileNotFound => break :config try create_config(alloc, base, base_path, old == null),
+            error.FileNotFound => break :config try createConfig(gpa, config_base),
         };
         defer file.close();
 
-        const config_json = try file.reader().readAllAlloc(alloc, 4096);
-        const res = try std.json.parseFromSliceLeaky(BorkConfig, alloc, config_json, .{
+        const config_json = try file.reader().readAllAlloc(gpa, 4096);
+        const res = try std.json.parseFromSliceLeaky(BorkConfig, gpa, config_json, .{
             .allocate = .alloc_always,
+            .ignore_unknown_fields = true,
         });
-        alloc.free(config_json);
+        gpa.free(config_json);
 
         break :config res;
     };
 
-    const port_override = std.os.getenv("BORK_PORT");
-    if (port_override) |po| config.remote_port = try std.fmt.parseInt(u16, po, 10);
-
     const token: []const u8 = token: {
-        const file = base.openFile(".bork/token.secret", .{}) catch |err| switch (err) {
+        const file = config_base.openFile(".bork/token.secret", .{}) catch |err| switch (err) {
             else => return err,
             error.FileNotFound => {
-                if (old) |o| {
-                    var token_file = try base.createFile(".bork/token.secret", .{});
-                    defer token_file.close();
-                    try token_file.writer().print("{s}\n", .{o.token});
-                    break :token o.token;
-                }
-                break :token try create_token(alloc, base, .new);
+                break :token try createToken(gpa, config_base, .new);
             },
         };
         defer file.close();
 
-        const token_raw = try file.reader().readAllAlloc(alloc, 4096);
+        const token_raw = try file.reader().readAllAlloc(gpa, 4096);
         const token = std.mem.trim(u8, token_raw, " \n");
 
         if (check_token) {
             // Check that the token is not expired in the meantime
-            if (try Network.checkTokenValidity(alloc, token)) {
+            if (try Network.checkTokenValidity(gpa, token)) {
                 break :token token;
             }
         } else {
@@ -403,11 +356,8 @@ fn getConfigAndToken(alloc: std.mem.Allocator, check_token: bool) !ConfigAndToke
         }
 
         // Token needs to be renewed
-        break :token try create_token(alloc, base, .renew);
+        break :token try createToken(gpa, config_base, .renew);
     };
-
-    // Only delete the file if everything went ok.
-    if (old) |*o| o.tryDeleteFile();
 
     return ConfigAndToken{
         .config = config,
@@ -415,89 +365,26 @@ fn getConfigAndToken(alloc: std.mem.Allocator, check_token: bool) !ConfigAndToke
     };
 }
 
-const OldTokenAndPath = struct {
-    const file_name = ".bork-oauth";
-
-    token: []const u8,
-    dir: std.fs.Dir,
-
-    pub fn tryDeleteFile(self: *OldTokenAndPath) void {
-        defer self.dir.close();
-        self.dir.deleteFile(file_name) catch |err| {
-            std.debug.print(
-                \\Error while trying to delete the old .bork-oauth file:
-                \\{}
-                \\
-            , .{err});
-        };
-    }
-};
-
-fn cleanupOldTokenAndGreet(alloc: std.mem.Allocator) !OldTokenAndPath {
-    // Find out it the user has an old bork auth token file
-    const old_dir_p = std.os.getenv("HOME") orelse ".";
-    var old_dir = try std.fs.openDirAbsolute(old_dir_p, .{});
-    errdefer old_dir.close();
-
-    // error.FileNotFound will make us bail out
-    const old_oauth_file = try old_dir.openFile(OldTokenAndPath.file_name, .{});
-    defer old_oauth_file.close();
-
-    const old_oauth = try old_oauth_file.reader().readAllAlloc(alloc, 150);
-
-    return OldTokenAndPath{ .token = old_oauth, .dir = old_dir };
-}
-
-fn create_config(alloc: std.mem.Allocator, base: std.fs.Dir, base_path: []const u8, is_new_user: bool) !BorkConfig {
+fn createConfig(
+    gpa: std.mem.Allocator,
+    config_base: std.fs.Dir,
+) !BorkConfig {
     const in = std.io.getStdIn();
     const in_reader = in.reader();
 
-    if (is_new_user) {
-        std.debug.print(
-            \\
-            \\ Hi, welcome to Bork!
-            \\ Please input your Twich username.
-            \\
-            \\ Your Twitch username:
-        , .{});
-    } else {
-        std.debug.print(
-            \\
-            \\ Hi, you seem to be a long time user of Bork!
-            \\
-            \\ Thank you for putting up with the jankyness as the project
-            \\ moved forward and became a reasonably functional Twitch
-            \\ chat application.
-            \\
-            \\ This new release of bork features some improvements
-            \\ that should make you happy!
-            \\
-            \\ - No more panicky stack traces when quitting Bork!
-            \\ - No more bork.log files created in random directories!
-            \\ - Bork now will automatically repaint on window resize
-            \\   when running on Linux (macOS seems to have issues).
-            \\ - The old `.bork-oauth` file has been cleaned up and the
-            \\   token is now stored inside `.bork/` alongside a config
-            \\   file and `bork.log` which has finally found a foreverhome.
-            \\
-            \\ Your bork config dir is located here:
-            \\
-            \\   {s}/.bork
-            \\
-            \\ There are also more features that will be presented soon,
-            \\ this was a special thank you note for the people that have
-            \\ been using bork for long enough to have had to pass their
-            \\ Twitch username as a command line argument every time they
-            \\ stated Bork.
-            \\
-            \\ Now that we have a config file we can finally have you
-            \\ input it once and for all :^)
-            \\
-            \\ Your Twitch username:
-        , .{base_path});
-    }
+    std.debug.print(
+        \\
+        \\ Hi, welcome to Bork!
+        \\ This is the initial setup procedure that will 
+        \\ help you create an initial config file.
+        \\
+        \\ Please input your Twich username.
+        \\
+        \\ Your Twitch username: 
+    , .{});
+
     const nickname: []const u8 = while (true) {
-        const maybe_nick_raw = try in_reader.readUntilDelimiterOrEofAlloc(alloc, '\n', 1024);
+        const maybe_nick_raw = try in_reader.readUntilDelimiterOrEofAlloc(gpa, '\n', 1024);
 
         if (maybe_nick_raw) |nick_raw| {
             const nick = std.mem.trim(u8, nick_raw, " ");
@@ -507,7 +394,7 @@ fn create_config(alloc: std.mem.Allocator, base: std.fs.Dir, base_path: []const 
                 break nick;
             }
 
-            alloc.free(nick_raw);
+            gpa.free(nick_raw);
         }
 
         std.debug.print(
@@ -517,40 +404,30 @@ fn create_config(alloc: std.mem.Allocator, base: std.fs.Dir, base_path: []const 
             \\
             \\ Your Twitch username:
         , .{});
-    } else unreachable; // TODO: remove in stage 2
+    };
 
-    std.debug.print(
-        \\
-        \\ OK!
-        \\
-    , .{});
-
-    const remote_port: ?u16 = remote_port: {
-        // Inside this scope user input is set to immediate mode.
+    // Inside this scope user input is set to immediate mode.
+    const protection: bool = blk: {
+        const original_termios = try std.os.tcgetattr(in.handle);
+        defer std.os.tcsetattr(in.handle, .FLUSH, original_termios) catch {};
         {
-            const original_termios = try std.os.tcgetattr(in.handle);
-            defer std.os.tcsetattr(in.handle, .FLUSH, original_termios) catch {};
-            {
-                var termios = original_termios;
-                // set immediate input mode
-                termios.lflag &= ~@as(std.os.system.tcflag_t, std.os.system.ICANON);
-                try std.os.tcsetattr(in.handle, .FLUSH, termios);
-            }
+            var termios = original_termios;
+            // set immediate input mode
+            termios.lflag &= ~@as(std.os.system.tcflag_t, std.os.system.ICANON);
+            try std.os.tcsetattr(in.handle, .FLUSH, termios);
 
             std.debug.print(
-                \\
-                \\
+                \\ 
                 \\ ===========================================================
                 \\
                 \\ Bork allows you to interact with it in two ways: clicking
                 \\ on messages, which will allow you to highlight them, and
-                \\ by invoking the Bork executable with various subcommands
-                \\ that will interact with the main Bork instance.
+                \\ by invoking the Bork executable with various subcommands 
+                \\ that will interact with the main Bork instance. 
                 \\
-                \\ This second mode will allow you to send messages to Twitch
+                \\ This second mode will allow you to send messages to Twitch 
                 \\ chat, display popups in Bork, set AFK status, etc.
-                \\
-                \\ NOTE: some of these commands are still WIP :^)
+                \\ 
                 \\
                 \\ Press any key to continue reading...
                 \\
@@ -562,20 +439,15 @@ fn create_config(alloc: std.mem.Allocator, base: std.fs.Dir, base_path: []const 
             std.debug.print(
                 \\         ======> ! IMPORTANT ! <======
                 \\ To protect you from accidentally closing Bork while
-                \\ streaming, with this feature enabled, Bork will not
-                \\ close when you press CTRL+C.
+                \\ streaming, with CTRL+C protection enabled, Bork will
+                \\ not close when you press CTRL+C. 
                 \\
-                \\ To close it, you will instead have to execute in a
+                \\ To close it, you will instead have to execute in a 
                 \\ separate shell:
                 \\
                 \\                 `bork quit`
-                \\
-                \\ NOTE: yes, this command is already implemented :^)
-                \\
-                \\ To enable this second feature Bork will need to listen
-                \\ to a port on localhost.
-                \\
-                \\ Enable remote control? [Y/n]
+                \\ 
+                \\ Enable CTRL+C protection? [Y/n] 
             , .{});
 
             const enable = try in_reader.readByte();
@@ -584,73 +456,38 @@ fn create_config(alloc: std.mem.Allocator, base: std.fs.Dir, base_path: []const 
                     std.debug.print(
                         \\
                         \\
-                        \\ CLI control is disabled.
-                        \\ You can enable it in the future by editing the
+                        \\ CTRL+C protection is disabled.
+                        \\ You can enable it in the future by editing the 
                         \\ configuration file.
-                        \\
+                        \\ 
                         \\
                     , .{});
-                    break :remote_port null;
+                    break :blk false;
                 },
-                'y', 'Y', '\n' => {},
-            }
-        }
-
-        std.debug.print(
-            \\
-            \\ CLI control enabled!
-            \\ Which port should Bork listen to?
-            \\
-            \\ Port? [{}]:
-        , .{BorkConfig.default_port});
-
-        while (true) {
-            const maybe_port = try in_reader.readUntilDelimiterOrEofAlloc(alloc, '\n', 1024);
-
-            if (maybe_port) |port_raw| {
-                if (port_raw.len == 0) {
-                    break :remote_port BorkConfig.default_port;
-                }
-                break :remote_port std.fmt.parseInt(u16, port_raw, 10) catch {
-                    std.debug.print(
-                        \\
-                        \\ Invalid port value.
-                        \\
-                        \\ Port? [{}]
-                    , .{BorkConfig.default_port});
-                    continue;
-                };
-            } else {
-                std.debug.print(
-                    \\
-                    \\ Success!
-                    \\
-                    \\
-                , .{});
-                break :remote_port BorkConfig.default_port;
+                'y', 'Y', '\n' => {
+                    break :blk true;
+                },
             }
         }
     };
 
-    var result: BorkConfig = .{
+    const result: BorkConfig = .{
         .nick = nickname,
+        .prevent_ctrlc = protection,
     };
-    if (remote_port) |r| {
-        result.remote = true;
-        result.remote_port = r;
-    } else {
-        result.remote = false;
-    }
 
     // create the config file
-    var file = try base.createFile(BorkConfig.path, .{});
-
+    var file = try config_base.createFile(".bork/config.json", .{});
     try std.json.stringify(result, .{}, file.writer());
     return result;
 }
 
 const TokenActon = enum { new, renew };
-fn create_token(alloc: std.mem.Allocator, base: std.fs.Dir, action: TokenActon) ![]const u8 {
+fn createToken(
+    alloc: std.mem.Allocator,
+    config_base: std.fs.Dir,
+    action: TokenActon,
+) ![]const u8 {
     var in = std.io.getStdIn();
     const original_termios = try std.os.tcgetattr(in.handle);
     var termios = original_termios;
@@ -683,7 +520,7 @@ fn create_token(alloc: std.mem.Allocator, base: std.fs.Dir, action: TokenActon) 
             \\ The Twitch OAuth token expired, we must refresh it.
             \\
             \\ Please open the following URL and paste in here the
-            \\ oauth token you will be shown after logging in.
+            \\ OAuth token you will be shown after logging in.
             \\
             \\    https://twitchapps.com/tmi/
             \\
@@ -707,7 +544,7 @@ fn create_token(alloc: std.mem.Allocator, base: std.fs.Dir, action: TokenActon) 
         std.os.exit(1);
     }
 
-    var token_file = try base.createFile(".bork/token.secret", .{});
+    var token_file = try config_base.createFile(".bork/token.secret", .{});
     defer token_file.close();
 
     try token_file.writer().print("{s}\n", .{tok});
@@ -728,4 +565,20 @@ fn create_token(alloc: std.mem.Allocator, base: std.fs.Dir, action: TokenActon) 
 
 fn printVersion() void {
     std.debug.print("{s}\n", .{options.version});
+}
+
+fn setupLogging(gpa: std.mem.Allocator) !void {
+    const cache_base = try folders.open(gpa, .cache, .{}) orelse
+        try folders.open(gpa, .home, .{}) orelse
+        try folders.open(gpa, .executable_dir, .{}) orelse
+        std.fs.cwd();
+
+    try cache_base.makePath(".bork");
+
+    const log_name = if (options.local) "bork-local.log" else "bork.log";
+    const log_path = try std.fmt.allocPrint(gpa, ".bork/{s}", .{log_name});
+
+    log_file = try cache_base.createFile(log_path, .{ .truncate = false });
+    const end = try log_file.?.getEndPos();
+    try log_file.?.seekTo(end);
 }
