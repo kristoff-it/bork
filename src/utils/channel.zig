@@ -4,6 +4,8 @@ pub fn Channel(comptime T: type) type {
     return struct {
         lock: std.Thread.Mutex = .{},
         fifo: Fifo,
+        writeable: std.Thread.Condition = .{},
+        readable: std.Thread.Condition = .{},
 
         const Fifo = std.fifo.LinearFifo(T, .Slice);
         const Self = @This();
@@ -14,12 +16,13 @@ pub fn Channel(comptime T: type) type {
 
         pub fn put(self: *Self, item: T) void {
             self.lock.lock();
-            defer self.lock.unlock();
+            defer {
+                self.lock.unlock();
+                self.readable.signal();
+            }
 
             while (true) return self.fifo.writeItem(item) catch {
-                self.lock.unlock();
-                std.Thread.yield() catch {};
-                self.lock.lock();
+                self.writeable.wait(&self.lock);
                 continue;
             };
         }
@@ -33,12 +36,13 @@ pub fn Channel(comptime T: type) type {
 
         pub fn get(self: *Self) T {
             self.lock.lock();
-            defer self.lock.unlock();
+            defer {
+                self.lock.unlock();
+                self.writeable.signal();
+            }
 
             while (true) return self.fifo.readItem() orelse {
-                self.lock.unlock();
-                std.Thread.yield() catch {};
-                self.lock.lock();
+                self.readable.wait(&self.lock);
                 continue;
             };
         }
