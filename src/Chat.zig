@@ -1,3 +1,5 @@
+const Chat = @This();
+
 const std = @import("std");
 const display = @import("zbox");
 const url = @import("./utils/url.zig");
@@ -7,10 +9,11 @@ nick: []const u8,
 last_message: ?*Message = null,
 last_link_message: ?*Message = null,
 bottom_message: ?*Message = null,
+scroll_offset: isize = 0,
 
 disconnected: bool = false,
 
-const Self = @This();
+const log = std.log.scoped(.chat);
 
 pub const Message = struct {
     prev: ?*Message = null,
@@ -88,7 +91,22 @@ pub const Message = struct {
 
     // ------
 
-    pub const SubTier = enum { prime, t1, t2, t3 };
+    pub const SubTier = enum {
+        prime,
+        t1,
+        t2,
+        t3,
+
+        pub fn name(self: SubTier) []const u8 {
+            return switch (self) {
+                .prime => "Prime",
+                .t1 => "Tier 1",
+                .t2 => "Tier 2",
+                .t3 => "Tier 3",
+            };
+        }
+    };
+
     pub const Emote = struct {
         twitch_id: []const u8,
         start: usize,
@@ -102,7 +120,7 @@ pub const Message = struct {
     };
 };
 
-pub fn setConnectionStatus(self: *Self, status: enum { disconnected, reconnected }) !void {
+pub fn setConnectionStatus(self: *Chat, status: enum { disconnected, reconnected }) !void {
     switch (status) {
         .disconnected => self.disconnected = true,
         .reconnected => {
@@ -121,35 +139,38 @@ pub fn setConnectionStatus(self: *Self, status: enum { disconnected, reconnected
     }
 }
 
-// Returns whether the scroll had any effect.
-pub fn scroll(self: *Self, direction: enum { up, down }, n: usize) bool {
-    std.log.debug("scroll", .{});
-    var i = n;
-    var msg = self.bottom_message;
-    while (i > 0) : (i -= 1) {
-        if (msg) |m| {
-            msg = switch (direction) {
-                .up => m.prev,
-                .down => m.next,
-            };
+pub fn scroll(self: *Chat, n: isize) void {
+    self.scroll_offset += n;
+    if (self.scroll_offset < 0) {
+        const changed = self.scrollBottomMessage(.down);
+        if (!changed) self.scroll_offset = 0;
+    }
+}
 
-            if (msg != null) {
-                self.bottom_message = msg;
-            } else {
-                break;
-            }
-        } else {
-            break;
+// returns if the scroll did any effect
+pub fn scrollBottomMessage(self: *Chat, direction: enum { up, down }) bool {
+    log.debug("scroll {}", .{direction});
+
+    var msg = self.bottom_message;
+    if (msg) |m| {
+        msg = switch (direction) {
+            .up => m.prev,
+            .down => m.next,
+        };
+
+        if (msg != null) {
+            self.bottom_message = msg;
+            return true;
         }
     }
 
-    return i != n;
+    return false;
 }
 
 // Automatically scrolls down unless the user scrolled up.
 // Returns whether there was any change in the view.
-pub fn addMessage(self: *Self, msg: *Message) bool {
-    std.log.debug("message", .{});
+pub fn addMessage(self: *Chat, msg: *Message) bool {
+    log.debug("message", .{});
 
     // Find if the message has URLs and attach it
     // to the URL linked list, unless it's our own
@@ -195,9 +216,9 @@ pub fn addMessage(self: *Self, msg: *Message) bool {
 }
 
 /// TODO: we leakin, we scanning
-pub fn clearChat(self: *Self, all_or_name: ?[]const u8) void {
+pub fn clearChat(self: *Chat, all_or_name: ?[]const u8) void {
     if (all_or_name) |login_name| {
-        std.log.debug("clear chat: {s}", .{login_name});
+        log.debug("clear chat: {s}", .{login_name});
         var current = self.last_message;
         while (current) |c| : (current = c.prev) {
             if (std.mem.eql(u8, login_name, c.login_name)) {
@@ -232,7 +253,7 @@ pub fn clearChat(self: *Self, all_or_name: ?[]const u8) void {
             }
         }
     } else {
-        std.log.debug("clear chat all", .{});
+        log.debug("clear chat all", .{});
         self.last_message = null;
         self.bottom_message = null;
         self.last_link_message = null;

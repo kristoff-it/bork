@@ -25,7 +25,11 @@
 
         .datetime = .{
             .url = "git+https://github.com/frmdstryr/zig-datetime.git#a9c75242dfc119a305c1381c2352d2fc16b2e0aa",
-            .hash = "122038b4b5df08d2af6daf81e5f18d4c244d807c9323224db826cc107ce3894f6fa9",            
+            .hash = "122038b4b5df08d2af6daf81e5f18d4c244d807c9323224db826cc107ce3894f6fa9",
+        },
+
+        .spoon = .{
+          .path = "../zig-spoon",
         },
     },
     .paths = .{"."},

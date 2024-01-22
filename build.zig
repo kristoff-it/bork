@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const bork_version = std.SemanticVersion{ .major = 0, .minor = 2, .patch = 0 };
+const bork_version = std.SemanticVersion{ .major = 0, .minor = 3, .patch = 0 };
 
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
@@ -78,17 +78,20 @@ pub fn build(b: *std.Build) !void {
         .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
         .optimize = optimize,
+        // .strip = true,
     });
 
     const known_folders = b.dependency("known-folders", .{});
     const datetime = b.dependency("datetime", .{});
     const ziglyph = b.dependency("ziglyph", .{});
+    const spoon = b.dependency("spoon", .{});
     const tzif = b.dependency("tzif", .{});
     const clap = b.dependency("clap", .{});
 
     exe.root_module.addImport("known-folders", known_folders.module("known-folders"));
     exe.root_module.addImport("datetime", datetime.module("zig-datetime"));
     exe.root_module.addImport("ziglyph", ziglyph.module("ziglyph"));
+    exe.root_module.addImport("spoon", spoon.module("spoon"));
     exe.root_module.addImport("tzif", tzif.module("tzif"));
     exe.root_module.addImport("clap", clap.module("clap"));
 
