@@ -1,5 +1,6 @@
 const Network = @This();
 
+const build_opts = @import("build_options");
 const std = @import("std");
 const datetime = @import("datetime").datetime;
 const Channel = @import("utils/channel.zig").Channel;
@@ -8,9 +9,8 @@ const Chat = @import("Chat.zig");
 const parser = @import("network/parser.zig");
 const EmoteCache = @import("network/EmoteCache.zig");
 
-const build_opts = @import("build_options");
-
 pub const checkTokenValidity = @import("network/auth.zig").checkTokenValidity;
+
 pub const Event = union(enum) {
     message: Chat.Message,
     connected,
@@ -23,6 +23,9 @@ pub const UserCommand = union(enum) {
     message: []const u8,
     // ban: []const u8,
 };
+
+const log = std.log.scoped(.network);
+
 const Command = union(enum) {
     user: UserCommand,
     pong,
@@ -74,19 +77,19 @@ pub fn deinit(self: *Network) void {
 
     // Now we can kill the connection and nobody will try to reconnect
     std.os.shutdown(self.socket.handle, .both) catch |err| {
-        std.log.debug("shutdown failed, err: {}", .{err});
+        log.debug("shutdown failed, err: {}", .{err});
     };
     self.socket.close();
 }
 
 fn receiveMessages(self: *Network) void {
-    defer std.log.debug("receiveMessages done", .{});
-    std.log.debug("reader started", .{});
+    defer log.debug("receiveMessages done", .{});
+    log.debug("reader started", .{});
 
     while (true) {
         const data = data: {
             const d = self.reader.readUntilDelimiterAlloc(self.allocator, '\n', 4096) catch |err| {
-                std.log.debug("receiveMessages errored out: {}", .{err});
+                log.debug("receiveMessages errored out: {}", .{err});
                 self.reconnect(false);
                 return;
             };
@@ -98,10 +101,10 @@ fn receiveMessages(self: *Network) void {
             break :data d;
         };
 
-        std.log.debug("receiveMessages succeded", .{});
+        log.debug("receiveMessages succeded", .{});
 
         const p = parser.parseMessage(data, self.allocator, self.tz) catch |err| {
-            std.log.debug("parsing error: [{}]", .{err});
+            log.debug("parsing error: [{}]", .{err});
             continue;
         };
         switch (p) {
@@ -116,13 +119,13 @@ fn receiveMessages(self: *Network) void {
                     else => {},
                     .chat => |c| {
                         self.emote_cache.fetch(c.emotes) catch |err| {
-                            std.log.debug("fetching error: [{}]", .{err});
+                            log.debug("fetching error: [{}]", .{err});
                             continue;
                         };
                     },
                     .resub => |c| {
                         self.emote_cache.fetch(c.resub_message_emotes) catch |err| {
-                            std.log.debug("fetching error: [{}]", .{err});
+                            log.debug("fetching error: [{}]", .{err});
                             continue;
                         };
                     },
@@ -180,13 +183,13 @@ fn send(self: *Network, cmd: Command) void {
 
     const comm = switch (cmd) {
         .pong => blk: {
-            std.log.debug("PONG!", .{});
+            log.debug("PONG!", .{});
             break :blk self.writer.print("PONG :tmi.twitch.tv\n", .{});
         },
         .user => |uc| blk: {
             switch (uc) {
                 .message => |msg| {
-                    std.log.debug("SEND MESSAGE!", .{});
+                    log.debug("SEND MESSAGE!", .{});
                     break :blk self.writer.print("PRIVMSG #{s} :{s}\n", .{ self.name, msg });
                 },
             }
@@ -326,7 +329,7 @@ pub fn connect(alloc: std.mem.Allocator, name: []const u8, oauth: []const u8) !s
 
     errdefer socket.close();
 
-    const oua = if (build_opts.local) "foo" else oauth;
+    const oua = if (build_opts.local) "##SECRET##" else oauth;
 
     try socket.writer().print(
         \\PASS {0s}

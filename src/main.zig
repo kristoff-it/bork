@@ -8,11 +8,11 @@ const Channel = @import("utils/channel.zig").Channel;
 const senseUserTZ = @import("utils/sense_tz.zig").senseUserTZ;
 const remote = @import("remote.zig");
 const Network = @import("Network.zig");
-const Terminal = @import("Terminal.zig");
+const Display = @import("Display.zig");
 const Chat = @import("Chat.zig");
 
 pub const Event = union(enum) {
-    display: Terminal.Event,
+    display: Display.Event,
     network: Network.Event,
     remote: remote.Server.Event,
 };
@@ -78,11 +78,13 @@ pub fn main() !void {
         };
     };
 
-    const cat = try getConfigAndToken(gpa, subcommand == .start);
+    const starting = subcommand == .start;
+    if (starting) {
+        std.debug.print("Checking token validity... \n", .{});
+    }
+    const cat = try getConfigAndToken(gpa, starting);
     const config = cat.config;
     const token = cat.token;
-    // const config = BorkConfig{ .nick = "blah" };
-    // const token = "blah";
 
     switch (subcommand) {
         .start => try borkStart(gpa, config, token),
@@ -124,20 +126,19 @@ fn borkStart(alloc: std.mem.Allocator, config: BorkConfig, token: []const u8) !v
 
     defer remote_server.deinit();
 
-    var display: Terminal = undefined;
-    try display.init(alloc, &ch, config);
-    defer display.deinit();
-
+    std.debug.print("Connecting to Twitch... \n", .{});
     var network: Network = undefined;
     try network.init(alloc, &ch, config.nick, token, try senseUserTZ(alloc));
     defer network.deinit();
 
     var chat = Chat{ .allocator = alloc, .nick = config.nick };
+    try Display.setup(alloc, &ch, config, &chat);
+    defer Display.teardown();
+
     // Initial paint!
-    try display.renderChat(&chat);
+    try Display.render();
 
     // Main control loop
-    var chaos = false;
     while (true) {
         var need_repaint = false;
         const event = ch.get();
@@ -156,62 +157,38 @@ fn borkStart(alloc: std.mem.Allocator, config: BorkConfig, token: []const u8) !v
                         remote.Server.replyLinks(&chat, conn);
                     },
                     .afk => |afk| {
-                        try display.setAfkMessage(afk.target_time, afk.reason, afk.title);
+                        try Display.setAfkMessage(afk.target_time, afk.reason, afk.title);
                         need_repaint = true;
                     },
                 }
             },
             .display => |de| {
                 switch (de) {
-                    // TODO: SIGWINCH is disabled because of
-                    //       rendering bugs. Re-enable .calm
-                    //       and .chaos when restoring resize
-                    //       signal support
-                    .chaos => {
-                        // chaos = true;
+                    .size_changed => {
+                        need_repaint = Display.sizeChanged();
                     },
-                    .calm => {
-                        // chaos = false;
-                        // try display.sizeChanged();
-                        // need_repaint = true;
-                    },
-                    .dirty => {
-                        try display.sizeChanged();
-                        need_repaint = true;
-                    },
-                    .disableCtrlCMessage => {
-                        need_repaint = try display.toggleCtrlCMessage(false);
-                    },
-                    .other => |c| {
-                        std.log.debug("[key] [{s}]", .{c});
-                        switch (c[0]) {
-                            'r', 'R' => {
-                                try display.sizeChanged();
-                                need_repaint = true;
-                                chaos = false;
-                            },
-                            else => {},
-                        }
-                    },
-                    .leftClick => |pos| {
+                    .tick => need_repaint = true,
+                    .left_click => |pos| {
                         std.log.debug("click at {}", .{pos});
-                        need_repaint = try display.handleClick(pos.row - 1, pos.col - 1);
+                        need_repaint = try Display.handleClick(pos.row - 1, pos.col - 1);
                     },
-
-                    .CTRL_C => {
-                        if (true) {
-                            need_repaint = try display.toggleCtrlCMessage(true);
+                    .ctrl_c => {
+                        if (config.prevent_ctrlc) {
+                            need_repaint = try Display.showCtrlCMessage();
                         } else {
                             return;
                         }
                     },
-                    .up, .wheelUp, .pageUp => {
-                        need_repaint = chat.scroll(.up, 1);
+                    .up, .wheel_up, .page_up => {
+                        chat.scroll(1);
+                        need_repaint = true;
                     },
-                    .down, .wheelDown, .pageDown => {
-                        need_repaint = chat.scroll(.down, 1);
+                    .down, .wheel_down, .page_down => {
+                        chat.scroll(-1);
+                        need_repaint = true;
                     },
-                    .escape, .right, .left, .tick => {},
+
+                    .left, .right => {},
                 }
             },
             .network => |ne| switch (ne) {
@@ -229,21 +206,19 @@ fn borkStart(alloc: std.mem.Allocator, config: BorkConfig, token: []const u8) !v
                     // Terminal wants to pre-render the message
                     // and keep a small buffer attached to the message
                     // as a form of caching.
-                    const msg = try display.prepareMessage(m);
+                    const msg = try Display.prepareMessage(m);
                     need_repaint = chat.addMessage(msg);
                 },
                 .clear => |c| {
-                    display.clearActiveInteraction(c);
+                    Display.clearActiveInteraction(c);
                     chat.clearChat(c);
                     need_repaint = true;
                 },
             },
         }
 
-        need_repaint = need_repaint or display.needAnimationFrame();
-        if (need_repaint and !chaos) {
-            try display.renderChat(&chat);
-        }
+        need_repaint = need_repaint or Display.needAnimationFrame();
+        if (need_repaint) try Display.render();
     }
 
     // TODO: implement real cleanup
@@ -275,9 +250,11 @@ pub const std_options = struct {
 };
 
 pub fn panic(msg: []const u8, trace: ?*std.builtin.StackTrace, ret_addr: ?usize) noreturn {
-    Terminal.panic();
-    std.log.err("{s}", .{msg});
-    std.builtin.default_panic(msg, trace, ret_addr);
+    _ = ret_addr;
+    Display.teardown();
+    std.log.err("{s}\n\n{?}", .{ msg, trace });
+    @breakpoint();
+    std.process.exit(1);
 }
 
 fn printHelpFatal() noreturn {
@@ -574,7 +551,7 @@ fn setupLogging(gpa: std.mem.Allocator) !void {
 
     try cache_base.makePath("bork");
 
-    const log_name = if (options.local) "bork-local.log" else "bork.log";
+    const log_name = if (options.local) "bork-local.log" else "bork1.log";
     const log_path = try std.fmt.allocPrint(gpa, "bork/{s}", .{log_name});
 
     log_file = try cache_base.createFile(log_path, .{ .truncate = false });

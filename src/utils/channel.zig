@@ -31,7 +31,10 @@ pub fn Channel(comptime T: type) type {
             self.lock.lock();
             defer self.lock.unlock();
 
-            return self.fifo.writeItem(item);
+            try self.fifo.writeItem(item);
+
+            // only signal on success
+            self.readable.signal();
         }
 
         pub fn get(self: *Self) T {
@@ -51,7 +54,10 @@ pub fn Channel(comptime T: type) type {
             self.lock.lock();
             defer self.lock.unlock();
 
-            return self.fifo.readItem();
+            if (self.fifo.readItem()) |item| return item;
+
+            // signal on empty queue
+            self.writeable.signal();
         }
     };
 }

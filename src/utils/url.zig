@@ -1,5 +1,6 @@
 const std = @import("std");
 
+/// AI-powered URL detection
 pub fn sense(word: []const u8) bool {
     return std.mem.startsWith(u8, word, "http") or
         std.mem.startsWith(u8, word, "(http");
