@@ -27,9 +27,9 @@
             .url = "git+https://github.com/frmdstryr/zig-datetime.git#a9c75242dfc119a305c1381c2352d2fc16b2e0aa",
             .hash = "122038b4b5df08d2af6daf81e5f18d4c244d807c9323224db826cc107ce3894f6fa9",
         },
-
-        .spoon = .{
-          .path = "../zig-spoon",
+        .ws = .{
+            .url = "git+https://github.com/karlseguin/websocket.zig.git#1f2c4a56c642dab52fe12cdda1bd3f56865d1f86",            
+            .hash = "1220ce168e550f8904364acd0a72f5cafd40caa08a50ba83aac50b97ba700d7bcf20",
         },
     },
     .paths = .{"."},

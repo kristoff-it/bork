@@ -1,6 +1,6 @@
 const std = @import("std");
 const datetime = @import("datetime").datetime;
-const Chat = @import("../Chat.zig");
+const Chat = @import("../../Chat.zig");
 
 const ParseResult = union(enum) {
     ping,
@@ -8,8 +8,10 @@ const ParseResult = union(enum) {
     message: Chat.Message,
 };
 
+const log = std.log.scoped(.parser);
+
 pub fn parseMessage(data: []u8, alloc: std.mem.Allocator, tz: datetime.Timezone) !ParseResult {
-    std.log.debug("data:\n{s}\n", .{data});
+    log.debug("data:\n{s}\n", .{data});
     if (data.len == 0) return error.NoData;
 
     // Basic message structure:
@@ -33,7 +35,7 @@ pub fn parseMessage(data: []u8, alloc: std.mem.Allocator, tz: datetime.Timezone)
         // Message has no metadata
         break :blk "";
     };
-    std.log.debug("metadata: [{s}]", .{metadata});
+    log.debug("metadata: [{s}]", .{metadata});
 
     // Prefix
     const prefix = blk: {
@@ -48,7 +50,7 @@ pub fn parseMessage(data: []u8, alloc: std.mem.Allocator, tz: datetime.Timezone)
         // Message has no prefix
         break :blk "";
     };
-    std.log.debug("prefix: [{s}]", .{prefix});
+    log.debug("prefix: [{s}]", .{prefix});
 
     // Command and arguments
     const cmd_and_args = blk: {
@@ -64,11 +66,11 @@ pub fn parseMessage(data: []u8, alloc: std.mem.Allocator, tz: datetime.Timezone)
         remaining_data = "";
         break :blk cmd_and_args;
     };
-    std.log.debug("cmd and args: [{s}]", .{cmd_and_args});
+    log.debug("cmd and args: [{s}]", .{cmd_and_args});
 
     // Trailer
     const trailer = remaining_data[0..]; // Empty string if no trailer
-    std.log.debug("trailer: [{s}]", .{trailer});
+    log.debug("trailer: [{s}]", .{trailer});
 
     var cmd_and_args_it = std.mem.tokenize(u8, cmd_and_args, " ");
     const cmd = cmd_and_args_it.next().?; // Calling the iterator once should never fail
@@ -443,7 +445,7 @@ fn parseEmotes(data: []const u8, allocator: std.mem.Allocator) ![]Chat.Message.E
 
     // Sort the array by start position
     std.mem.sort(Chat.Message.Emote, emotes, {}, Chat.Message.Emote.lessThan);
-    for (emotes) |em| std.log.debug("{}", .{em});
+    for (emotes) |em| log.debug("{}", .{em});
 
     return emotes;
 }
@@ -522,7 +524,7 @@ fn parseMetaSubsetLinear(meta: []const u8, keys: anytype) ![keys.len][]const u8 
     };
 
     // Fallback to bad search, but first complain about it.
-    std.log.debug("Linear scan of metadata failed! Let the maintainers know that Gondor calls for aid!", .{});
+    log.debug("Linear scan of metadata failed! Let the maintainers know that Gondor calls for aid!", .{});
 
     // bad scan
     outer: for (keys[first_miss..], 0..) |k, i| {

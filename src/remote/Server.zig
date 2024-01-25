@@ -6,7 +6,6 @@ const Channel = @import("../utils/channel.zig").Channel;
 const url = @import("../utils/url.zig");
 const GlobalEventUnion = @import("../main.zig").Event;
 const Chat = @import("../Chat.zig");
-const BorkConfig = @import("../main.zig").BorkConfig;
 const Network = @import("../Network.zig");
 const parseTime = @import("./utils.zig").parseTime;
 
@@ -22,8 +21,7 @@ pub const Event = union(enum) {
     },
 };
 
-config: BorkConfig,
-token: []const u8,
+auth: Network.Auth,
 listener: std.net.StreamServer,
 alloc: std.mem.Allocator,
 ch: *Channel(GlobalEventUnion),
@@ -32,13 +30,11 @@ thread: std.Thread,
 pub fn init(
     self: *Server,
     alloc: std.mem.Allocator,
-    config: BorkConfig,
-    token: []const u8,
+    auth: Network.Auth,
     ch: *Channel(GlobalEventUnion),
 ) !void {
     self.alloc = alloc;
-    self.config = config;
-    self.token = token;
+    self.auth = auth;
     self.ch = ch;
 
     const tmp_dir_path = try folders.getPath(alloc, .cache) orelse "/tmp";
@@ -107,9 +103,16 @@ fn handle(self: *Server, stream: std.net.Stream) !void {
         // opening a one-off connection to send the message.
         // This way we don't have to implement locally emote
         // parsing.
-        var twitch_conn = Network.connect(self.alloc, self.config.nick, self.token) catch return;
+        var twitch_conn = Network.connect(
+            self.alloc,
+            self.auth.login,
+            self.auth.token,
+        ) catch return;
         defer twitch_conn.close();
-        twitch_conn.writer().print("PRIVMSG #{s} :{s}\n", .{ self.config.nick, msg }) catch return;
+        twitch_conn.writer().print("PRIVMSG #{s} :{s}\n", .{
+            self.auth.login,
+            msg,
+        }) catch return;
     }
 
     if (std.mem.eql(u8, cmd, "QUIT")) {
@@ -139,9 +142,16 @@ fn handle(self: *Server, stream: std.net.Stream) !void {
         // opening a one-off connection to send the message.
         // This way we don't have to implement locally emote
         // parsing.
-        var twitch_conn = Network.connect(self.alloc, self.config.nick, self.token) catch return;
+        var twitch_conn = Network.connect(
+            self.alloc,
+            self.auth.login,
+            self.auth.token,
+        ) catch return;
         defer twitch_conn.close();
-        twitch_conn.writer().print("PRIVMSG #{s} :/ban {s}\n", .{ self.config.nick, user }) catch return;
+        twitch_conn.writer().print("PRIVMSG #{s} :/ban {s}\n", .{
+            self.auth.login,
+            user,
+        }) catch return;
     }
 
     if (std.mem.eql(u8, cmd, "UNBAN")) {
@@ -158,9 +168,16 @@ fn handle(self: *Server, stream: std.net.Stream) !void {
         // opening a one-off connection to send the message.
         // This way we don't have to implement locally emote
         // parsing.
-        var twitch_conn = Network.connect(self.alloc, self.config.nick, self.token) catch return;
+        var twitch_conn = Network.connect(
+            self.alloc,
+            self.auth.login,
+            self.auth.token,
+        ) catch return;
         defer twitch_conn.close();
-        twitch_conn.writer().print("PRIVMSG #{s} :/ban {s}\n", .{ self.config.nick, user }) catch return;
+        twitch_conn.writer().print("PRIVMSG #{s} :/ban {s}\n", .{
+            self.auth.login,
+            user,
+        }) catch return;
     }
 
     if (std.mem.eql(u8, cmd, "AFK")) {
