@@ -4,7 +4,7 @@ const builtin = @import("builtin");
 const std = @import("std");
 const os = std.os;
 const b64 = std.base64.standard.Encoder;
-const Emote = @import("../Chat.zig").Message.Emote;
+const Emote = @import("../../Chat.zig").Message.Emote;
 
 const EmoteHashMap = std.StringHashMap(struct {
     data: []const u8,

@@ -1,0 +1,12 @@
+<html>
+	<body>
+	<h1>Success! <a id="redirect" href="">Click here</a> if your browser doesn't redirect you automatically.</h1> 
+
+	<script>
+	  const fragment = document.location.hash;
+		const redirect = document.getElementById("redirect");
+		redirect.href = "/?" + fragment.slice(1);
+		window.location = redirect.href;
+	</script>
+	</body>
+</html>

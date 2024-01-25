@@ -36,6 +36,8 @@ pub const Message = struct {
         sub_mistery_gift: SubMisteryGift,
         sub_gift: SubGift,
         sub: Sub,
+        follow: Follow,
+        charity: Charity,
     },
 
     pub const Comment = struct {
@@ -52,6 +54,14 @@ pub const Message = struct {
         is_mod: bool = false,
         /// Highlighed message by redeeming points
         is_highlighted: bool = false,
+    };
+
+    pub const Follow = struct {
+        display_name: []const u8,
+    };
+    pub const Charity = struct {
+        display_name: []const u8,
+        amount: []const u8,
     };
 
     pub const Raid = struct {

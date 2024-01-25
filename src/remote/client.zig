@@ -3,7 +3,7 @@ const folders = @import("known-folders");
 const ArgIterator = std.process.ArgIterator;
 const clap = @import("clap");
 const Event = @import("../remote.zig").Event;
-const BorkConfig = @import("../main.zig").BorkConfig;
+const Config = @import("../Config.zig");
 const parseTime = @import("./utils.zig").parseTime;
 
 fn connect(gpa: std.mem.Allocator) std.net.Stream {
@@ -50,8 +50,7 @@ pub fn send(gpa: std.mem.Allocator, it: *std.process.ArgIterator) !void {
     try conn.writer().writeAll("\n");
 }
 
-pub fn quit(gpa: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIterator) !void {
-    _ = config;
+pub fn quit(gpa: std.mem.Allocator, it: *std.process.ArgIterator) !void {
     _ = it;
     const conn = connect(gpa);
     defer conn.close();
@@ -59,8 +58,7 @@ pub fn quit(gpa: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIter
     try conn.writer().writeAll("QUIT\n");
 }
 
-pub fn reconnect(gpa: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIterator) !void {
-    _ = config;
+pub fn reconnect(gpa: std.mem.Allocator, it: *std.process.ArgIterator) !void {
     // TODO: validation
     _ = it;
 
@@ -70,8 +68,7 @@ pub fn reconnect(gpa: std.mem.Allocator, config: BorkConfig, it: *std.process.Ar
     try conn.writer().writeAll("RECONNECT\n");
 }
 
-pub fn links(gpa: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIterator) !void {
-    _ = config;
+pub fn links(gpa: std.mem.Allocator, it: *std.process.ArgIterator) !void {
     // TODO: validation
     _ = it;
 
@@ -91,8 +88,7 @@ pub fn links(gpa: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIte
     }
 }
 
-pub fn ban(gpa: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIterator) !void {
-    _ = config;
+pub fn ban(gpa: std.mem.Allocator, it: *std.process.ArgIterator) !void {
     const user = it.next() orelse {
         std.debug.print("Usage ./bork ban \"username\"\n", .{});
         return;
@@ -106,8 +102,7 @@ pub fn ban(gpa: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgItera
     try conn.writer().writeAll("\n");
 }
 
-pub fn unban(gpa: std.mem.Allocator, config: BorkConfig, it: *std.process.ArgIterator) !void {
-    _ = config;
+pub fn unban(gpa: std.mem.Allocator, it: *std.process.ArgIterator) !void {
     const user = try it.next(gpa);
 
     if (it.next(gpa)) |_| {

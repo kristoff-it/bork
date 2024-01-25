@@ -10,15 +10,15 @@ const GraphemeIterator = Grapheme.GraphemeIterator;
 // const WordIterator = Word.WordIterator;
 const main = @import("main.zig");
 const url = @import("utils/url.zig");
+const Config = @import("Config.zig");
 const Chat = @import("Chat.zig");
 const Channel = @import("utils/channel.zig").Channel;
 const GlobalEventUnion = main.Event;
-const BorkConfig = main.BorkConfig;
 
 const log = std.log.scoped(.display);
 
 var gpa: std.mem.Allocator = undefined;
-var config: BorkConfig = undefined;
+var config: Config = undefined;
 var ch: *Channel(GlobalEventUnion) = undefined;
 
 var size: Size = undefined;
@@ -78,7 +78,7 @@ pub const Event = union(enum) {
 pub fn setup(
     gpa_: std.mem.Allocator,
     ch_: *Channel(GlobalEventUnion),
-    config_: BorkConfig,
+    config_: Config,
     chat_: *Chat,
 ) !void {
     gpa = gpa_;
@@ -163,9 +163,8 @@ fn winchHandler(_: c_int) callconv(.C) void {
 
 fn tick() void {
     while (true) {
-        log.debug("tick!", .{});
-        std.time.sleep(250 * std.time.ns_per_ms);
         ch.tryPut(.{ .display = .tick }) catch {};
+        std.time.sleep(250 * std.time.ns_per_ms);
     }
 }
 
@@ -296,6 +295,8 @@ pub fn render() !void {
         if (showing_quit_message) |timeout| {
             const now = std.time.timestamp();
             if (timeout <= now) showing_quit_message = null;
+        }
+        if (showing_quit_message != null) {
             const msg = "run `bork quit`";
             try writeStyle(w, .{ .bg = .white, .fg = .red });
             const padding = (size.cols -| msg.len) / 2;
@@ -382,7 +383,7 @@ pub fn render() !void {
         try w.writeAll("╚");
         for (0..size.cols) |_| try w.writeAll("═");
         try w.writeAll("╝\r\n");
-        for (row..row + 7) |idx| elements[idx] = .afk;
+        for (row..row + 5) |idx| elements[idx] = .afk;
     }
 
     var current_message = chat.bottom_message;
@@ -572,7 +573,9 @@ fn renderMessage(
             };
         },
 
-        inline .raid,
+        inline .charity,
+        .follow,
+        .raid,
         .sub,
         .resub,
         .sub_gift,
@@ -608,6 +611,7 @@ fn renderMessage(
                 const emoji = switch (tag) {
                     .raid => "🚨",
                     .sub_gift, .sub_mistery_gift => "🎁",
+                    .charity => "💝",
                     else => "🎉",
                 };
                 const emoji_width = comptime dw.strWidth(
@@ -616,6 +620,8 @@ fn renderMessage(
                 ) catch unreachable;
 
                 const fmt = switch (tag) {
+                    .charity => " {s} charity donation! ",
+                    .follow => " Is now a follower! ",
                     .raid => " Raiding with {} people! ",
                     .sub => " Is now a {s} subscriber! ",
                     .resub => " Resubbed at {s}! ",
@@ -624,6 +630,8 @@ fn renderMessage(
                     else => unreachable,
                 };
                 const args = switch (tag) {
+                    .charity => .{x.amount},
+                    .follow => .{},
                     .raid => .{x.count},
                     .sub => .{x.tier.name()},
                     .resub => .{x.tier.name()},
@@ -899,8 +907,8 @@ pub fn clearActiveInteraction(c: ?[]const u8) void {
     _ = c;
 }
 
-pub fn needAnimationFrame() bool {
-    return false;
+pub fn wantTick() bool {
+    return afk != null or showing_quit_message != null;
 }
 
 pub fn panic() void {
