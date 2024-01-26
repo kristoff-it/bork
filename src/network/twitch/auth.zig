@@ -146,7 +146,7 @@ fn authenticateTokenNative(gpa: std.mem.Allocator, token: []const u8) !?Auth {
 }
 
 fn waitForToken(gpa: std.mem.Allocator) ![]const u8 {
-    var server = std.http.Server.init(gpa, .{
+    var server = std.http.Server.init(.{
         .reuse_address = true,
         .reuse_port = true,
     });
