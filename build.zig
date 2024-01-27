@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const bork_version = std.SemanticVersion{ .major = 0, .minor = 4, .patch = 0 };
+const bork_version = std.SemanticVersion{ .major = 0, .minor = 4, .patch = 1 };
 
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
