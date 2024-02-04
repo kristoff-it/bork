@@ -155,7 +155,7 @@ fn waitForToken(gpa: std.mem.Allocator) ![]const u8 {
     const address = try std.net.Address.parseIp("127.0.0.1", 22890);
     try server.listen(address);
 
-    var header_buffer: [1024]u8 = undefined;
+    var header_buffer: [2048]u8 = undefined;
     accept: while (true) {
         var res = try server.accept(.{
             .allocator = gpa,
