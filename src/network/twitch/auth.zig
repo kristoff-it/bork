@@ -155,11 +155,9 @@ fn waitForToken(gpa: std.mem.Allocator) ![]const u8 {
     const address = try std.net.Address.parseIp("127.0.0.1", 22890);
     try server.listen(address);
 
-    var header_buffer: [2048]u8 = undefined;
     accept: while (true) {
         var res = try server.accept(.{
             .allocator = gpa,
-            .header_strategy = .{ .static = &header_buffer },
         });
         defer res.deinit();
 
@@ -176,6 +174,7 @@ fn waitForToken(gpa: std.mem.Allocator) ![]const u8 {
 }
 
 const collect_fragment_html = @embedFile("collect_fragment.html");
+var access_token: [30]u8 = undefined;
 fn handleRequest(res: *std.http.Server.Response) !?[]const u8 {
     res.status = .ok;
 
@@ -209,7 +208,8 @@ fn handleRequest(res: *std.http.Server.Response) !?[]const u8 {
             const key = kv_it.next() orelse return error.BadURI;
             const value = kv_it.next() orelse return error.BadURI;
             if (std.mem.eql(u8, key, "access_token")) {
-                return value;
+                @memcpy(&access_token, value);
+                return &access_token;
             }
         }
 
