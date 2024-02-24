@@ -103,20 +103,24 @@ pub fn setup(
     var new_termios = original_termios.?;
 
     // termios flags for 'raw' mode.
-    new_termios.iflag &= ~@as(
-        os.system.tcflag_t,
-        os.system.IGNBRK | os.system.BRKINT | os.system.PARMRK | os.system.ISTRIP |
-            os.system.INLCR | os.system.IGNCR | os.system.ICRNL | os.system.IXON,
-    );
-    new_termios.lflag &= ~@as(
-        os.system.tcflag_t,
-        os.system.ICANON | os.system.ECHO | os.system.ECHONL | os.system.IEXTEN | os.system.ISIG,
-    );
-    new_termios.oflag &= ~@as(os.system.tcflag_t, os.system.OPOST);
-    new_termios.cflag |= os.system.CS8;
+    new_termios.iflag.IGNBRK = false;
+    new_termios.iflag.BRKINT = false;
+    new_termios.iflag.PARMRK = false;
+    new_termios.iflag.ISTRIP = false;
+    new_termios.iflag.INLCR = false;
+    new_termios.iflag.IGNCR = false;
+    new_termios.iflag.ICRNL = false;
+    new_termios.iflag.IXON = false;
 
-    // new_termios.cc[VMIN] = 0; // read can timeout before any data is actually written; async timer
-    // new_termios.cc[VTIME] = 1; // 1/10th of a second
+    new_termios.lflag.ICANON = false;
+    new_termios.lflag.ECHO = false;
+    new_termios.lflag.ECHONL = false;
+    new_termios.lflag.IEXTEN = false;
+    new_termios.lflag.ISIG = false;
+
+    new_termios.oflag.OPOST = false;
+
+    new_termios.cflag.CSIZE = .CS8;
 
     try os.tcsetattr(tty.handle, .FLUSH, new_termios);
     errdefer os.tcsetattr(tty.handle, .FLUSH, original_termios.?) catch {};
@@ -223,7 +227,7 @@ const Size = struct {
 fn getTermSize() Size {
     var winsize = std.mem.zeroes(os.system.winsize);
 
-    const err = os.system.ioctl(tty.handle, TIOCGWINSZ, @intFromPtr(&winsize));
+    const err = os.system.ioctl(tty.handle, std.os.T.IOCGWINSZ, @intFromPtr(&winsize));
     if (os.errno(err) == .SUCCESS) {
         return Size{ .rows = winsize.ws_row, .cols = winsize.ws_col };
     }
@@ -917,27 +921,6 @@ pub fn panic() void {
     //     t.deinit();
     // }
 }
-
-// These bits were in the stdlib, got deleted, maybe contribute them back
-// one day. These are some missing termios bits for darwin.
-pub const TIOCGWINSZ = switch (builtin.os.tag) {
-    .linux => 0x5413,
-    .macos => ior(0x40000000, 't', 104, @sizeOf(os.system.winsize)),
-    else => @compileError("Missing termiosbits for this target, sorry."),
-};
-
-pub const IOCPARM_MASK = 0x1fff;
-fn ior(inout: u32, group: usize, num: usize, len: usize) usize {
-    return (inout | ((len & IOCPARM_MASK) << 16) | ((group) << 8) | (num));
-}
-
-// TODO: these are not portable across architectures
-// they should be getting pulled in from c headers or
-// make it into linux/bits per architecture.
-// const VTIME = 5;
-// const VMIN = 6;
-const VTIME = 17;
-const VMIN = 16;
 
 pub const Style = struct {
     weight: enum { none, bold, normal, feint } = .none,

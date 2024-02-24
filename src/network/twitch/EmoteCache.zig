@@ -14,6 +14,7 @@ const EmoteHashMap = std.StringHashMap(struct {
 gpa: std.mem.Allocator,
 idx_counter: u32 = 1,
 cache: EmoteHashMap,
+read_buf: std.ArrayList(u8),
 
 // TODO: for people with 8k SUMQHD terminals, let them use bigger size emotes
 // const path_fmt = "https://localhost:443/emoticons/v1/{s}/3.0";
@@ -23,6 +24,7 @@ pub fn init(gpa: std.mem.Allocator) EmoteCache {
     return EmoteCache{
         .gpa = gpa,
         .cache = EmoteHashMap.init(gpa),
+        .read_buf = std.ArrayList(u8).init(gpa),
     };
 }
 
@@ -33,13 +35,10 @@ pub fn fetch(self: *EmoteCache, emote_list: []Emote) !void {
         .allocator = self.gpa,
     };
     defer client.deinit();
-    var headers = try std.http.Headers.initList(self.gpa, &.{
-        .{ .name = "User-Agent", .value = "Bork" },
-        .{ .name = "Accept", .value = "*/*" },
-    });
-    defer headers.deinit();
 
     for (emote_list) |*emote| {
+        self.read_buf.clearRetainingCapacity();
+
         std.log.debug("fetching  {}", .{emote.*});
         const result = try self.cache.getOrPut(emote.twitch_id);
         errdefer _ = self.cache.remove(emote.twitch_id);
@@ -54,9 +53,9 @@ pub fn fetch(self: *EmoteCache, emote_list: []Emote) !void {
                 );
                 defer self.gpa.free(url);
 
-                const res = try client.fetch(self.gpa, .{
-                    .headers = headers,
+                const res = try client.fetch(.{
                     .location = .{ .url = url },
+                    .response_storage = .{ .dynamic = &self.read_buf },
                 });
 
                 if (res.status != .ok) {
@@ -64,10 +63,7 @@ pub fn fetch(self: *EmoteCache, emote_list: []Emote) !void {
                     return error.HttpFailed;
                 }
 
-                break :img res.body orelse {
-                    std.log.debug("http missing body", .{});
-                    return error.HttpFailed;
-                };
+                break :img self.read_buf.items;
             };
 
             const encode_buf = try self.gpa.alloc(u8, std.base64.standard.Encoder.calcSize(img.len));

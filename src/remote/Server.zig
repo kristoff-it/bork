@@ -22,7 +22,7 @@ pub const Event = union(enum) {
 };
 
 auth: Network.Auth,
-listener: std.net.StreamServer,
+listener: std.net.Server,
 alloc: std.mem.Allocator,
 ch: *Channel(GlobalEventUnion),
 thread: std.Thread,
@@ -50,14 +50,12 @@ pub fn init(
     };
 
     const address = try std.net.Address.initUnix(socket_path);
-
-    self.listener = std.net.StreamServer.init(.{
+    self.listener = try address.listen(.{
         .reuse_address = true,
         .reuse_port = true,
     });
-    errdefer self.listener.deinit();
 
-    try self.listener.listen(address);
+    errdefer self.listener.deinit();
 
     self.thread = try std.Thread.spawn(.{}, start, .{self});
 }
@@ -74,7 +72,7 @@ pub fn start(self: *Server) !void {
 
 pub fn deinit(self: *Server) void {
     std.log.debug("deiniting Remote Server", .{});
-    std.os.shutdown(self.listener.sockfd.?, .both) catch |err| {
+    std.os.shutdown(self.listener.stream.handle, .both) catch |err| {
         std.log.debug("remote shutdown encountered an error: {}", .{err});
     };
     std.log.debug("deinit done", .{});

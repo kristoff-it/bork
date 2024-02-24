@@ -210,7 +210,7 @@ const Handler = struct {
         );
         defer gpa.free(header_oauth);
 
-        const headers = try std.http.Headers.initList(gpa, &.{
+        const headers: []const std.http.Header = &.{
             .{
                 .name = "Authorization",
                 .value = header_oauth,
@@ -219,11 +219,7 @@ const Handler = struct {
                 .name = "Client-Id",
                 .value = client_id,
             },
-            .{
-                .name = "Content-Type",
-                .value = "application/json",
-            },
-        });
+        };
 
         const body_fmt =
             \\{{
@@ -245,17 +241,19 @@ const Handler = struct {
         });
 
         const url = "https://api.twitch.tv/helix/eventsub/subscriptions";
-        const result = try client.fetch(gpa, .{
+        const result = try client.fetch(.{
             .method = .POST,
-            .headers = headers,
+            .headers = .{
+                .content_type = .{ .override = "application/json" },
+            },
+            .extra_headers = headers,
             .location = .{ .url = url },
-            .payload = .{ .string = body },
+            .payload = body,
         });
 
-        log.debug("sub request reply: name: {s} code: {}, body: {?s}", .{
+        log.debug("sub request reply: name: {s} code: {}", .{
             event_name,
             result.status,
-            result.body,
         });
     }
 };

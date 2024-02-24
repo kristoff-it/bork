@@ -42,7 +42,7 @@ pub fn create(config_base: std.fs.Dir) !Config {
         {
             var termios = original_termios;
             // set immediate input mode
-            termios.lflag &= ~@as(std.os.system.tcflag_t, std.os.system.ICANON);
+            termios.lflag.ICANON = false;
             try std.os.tcsetattr(in.handle, .FLUSH, termios);
 
             std.debug.print(

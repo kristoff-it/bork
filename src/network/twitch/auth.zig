@@ -145,29 +145,26 @@ fn authenticateTokenNative(gpa: std.mem.Allocator, token: []const u8) !?Auth {
     return auth;
 }
 
-fn waitForToken(gpa: std.mem.Allocator) ![]const u8 {
-    var server = std.http.Server.init(.{
+fn waitForToken() ![]const u8 {
+    const address = try std.net.Address.parseIp("127.0.0.1", 22890);
+    var tcp_server = try address.listen(.{
         .reuse_address = true,
         .reuse_port = true,
     });
-    defer server.deinit();
-
-    const address = try std.net.Address.parseIp("127.0.0.1", 22890);
-    try server.listen(address);
+    defer tcp_server.deinit();
 
     accept: while (true) {
-        var res = try server.accept(.{
-            .allocator = gpa,
-        });
-        defer res.deinit();
+        var conn = try tcp_server.accept();
+        defer conn.stream.close();
 
-        while (res.reset() != .closing) {
-            res.wait() catch |err| switch (err) {
-                error.HttpHeadersInvalid => continue :accept,
-                error.EndOfStream => continue,
-                else => return err,
+        var read_buffer: [8000]u8 = undefined;
+        var server = std.http.Server.init(conn, &read_buffer);
+        while (server.state == .ready) {
+            var request = server.receiveHead() catch |err| {
+                std.debug.print("error: {s}\n", .{@errorName(err)});
+                continue :accept;
             };
-            const maybe_auth = try handleRequest(&res);
+            const maybe_auth = try handleRequest(&request);
             return maybe_auth orelse continue :accept;
         }
     }
@@ -175,27 +172,19 @@ fn waitForToken(gpa: std.mem.Allocator) ![]const u8 {
 
 const collect_fragment_html = @embedFile("collect_fragment.html");
 var access_token: [30]u8 = undefined;
-fn handleRequest(res: *std.http.Server.Response) !?[]const u8 {
-    res.status = .ok;
-
-    const query = res.request.target;
+fn handleRequest(request: *std.http.Server.Request) !?[]const u8 {
+    const query = request.head.target;
 
     if (std.mem.eql(u8, query, "/")) {
-        res.transfer_encoding = .{ .content_length = collect_fragment_html.len };
-        try res.headers.append("content-type", "text/html");
-        try res.headers.append("connection", "close");
-        try res.send();
-        _ = try res.writer().writeAll(collect_fragment_html);
-        try res.finish();
+        try request.respond(collect_fragment_html, .{
+            .extra_headers = &.{.{ .name = "content-type", .value = "text/html" }},
+        });
         return null;
     } else {
         const response_html = "<html><body><h1>Success! You can now return to bork</h1></body></html>";
-        res.transfer_encoding = .{ .content_length = response_html.len };
-        try res.headers.append("content-type", "text/html");
-        try res.headers.append("connection", "close");
-        try res.send();
-        _ = try res.writer().writeAll(response_html);
-        try res.finish();
+        try request.respond(response_html, .{
+            .extra_headers = &.{.{ .name = "content-type", .value = "text/html" }},
+        });
 
         if (!std.mem.startsWith(u8, query, "/?")) {
             return error.BadURI;
@@ -249,7 +238,7 @@ fn createToken(
 
     std.debug.print("Waiting...\n", .{});
 
-    const token = waitForToken(gpa) catch |err| {
+    const token = waitForToken() catch |err| {
         std.debug.print("\nAn error occurred while waiting for the OAuth flow to complete: {s}\n", .{@errorName(err)});
         std.process.exit(1);
     };
@@ -273,7 +262,7 @@ fn createToken(
         defer std.os.tcsetattr(in.handle, .FLUSH, original_termios) catch {};
         var termios = original_termios;
         // set immediate input mode
-        termios.lflag &= ~@as(std.os.system.tcflag_t, std.os.system.ICANON);
+        termios.lflag.ICANON = false;
         try std.os.tcsetattr(in.handle, .FLUSH, termios);
 
         std.debug.print(
