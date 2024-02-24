@@ -20,9 +20,8 @@ pub const known_folders_config = .{
     .xdg_on_mac = true,
 };
 
-pub const std_options = struct {
-    // pub const log_level: std.log.Level = .warn;
-    pub const logFn = logging.logFn;
+pub const std_options: std.Options = .{
+    .logFn = logging.logFn,
 };
 
 pub fn panic(
