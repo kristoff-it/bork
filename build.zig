@@ -84,6 +84,7 @@ pub fn build(b: *std.Build) !void {
     const known_folders = b.dependency("known-folders", .{});
     const datetime = b.dependency("datetime", .{});
     const ziglyph = b.dependency("ziglyph", .{});
+    const ziggy = b.dependency("ziggy", .{});
     const tzif = b.dependency("tzif", .{});
     const clap = b.dependency("clap", .{});
     const ws = b.dependency("ws", .{});
@@ -91,6 +92,7 @@ pub fn build(b: *std.Build) !void {
     exe.root_module.addImport("known-folders", known_folders.module("known-folders"));
     exe.root_module.addImport("datetime", datetime.module("zig-datetime"));
     exe.root_module.addImport("ziglyph", ziglyph.module("ziglyph"));
+    exe.root_module.addImport("ziggy", ziggy.module("ziggy"));
     exe.root_module.addImport("tzif", tzif.module("tzif"));
     exe.root_module.addImport("clap", clap.module("clap"));
     exe.root_module.addImport("ws", ws.module("websocket"));

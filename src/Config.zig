@@ -1,5 +1,6 @@
 const Config = @This();
 const std = @import("std");
+const ziggy = @import("ziggy");
 
 ctrl_c_protection: bool = false,
 notifications: struct {
@@ -8,19 +9,13 @@ notifications: struct {
 } = .{},
 
 pub fn get(gpa: std.mem.Allocator, config_base: std.fs.Dir) !Config {
-    const file = config_base.openFile("bork/config.json", .{}) catch |err| switch (err) {
+    const bytes = config_base.readFileAllocOptions(gpa, "bork/config.ziggy", ziggy.max_size, null, 1, 0) catch |err| switch (err) {
         else => return err,
         error.FileNotFound => return create(config_base),
     };
-    defer file.close();
+    defer gpa.free(bytes);
 
-    const config_json = try file.reader().readAllAlloc(gpa, 4096);
-    defer gpa.free(config_json);
-
-    return std.json.parseFromSliceLeaky(Config, gpa, config_json, .{
-        .allocate = .alloc_always,
-        .ignore_unknown_fields = true,
-    });
+    return ziggy.parseLeaky(Config, gpa, bytes, .{});
 }
 
 pub fn create(config_base: std.fs.Dir) !Config {
@@ -109,12 +104,16 @@ pub fn create(config_base: std.fs.Dir) !Config {
         }
     };
 
-    const result: Config = .{ .ctrl_c_protection = protection };
-
     // create the config file
-    var file = try config_base.createFile("bork/config.json", .{});
+    var file = try config_base.createFile("bork/config.ziggy", .{});
     defer file.close();
-    try std.json.stringify(result, .{}, file.writer());
+    try file.writer().print(".ctrl_c_protection = {},\n", .{protection});
 
+    // ensure presence of the schema file
+    var schema_file = try config_base.createFile("bork/config.ziggy-schema", .{});
+    defer schema_file.close();
+    try schema_file.writeAll(@embedFile("config.ziggy-schema"));
+
+    const result: Config = .{ .ctrl_c_protection = protection };
     return result;
 }

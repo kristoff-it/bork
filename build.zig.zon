@@ -28,8 +28,12 @@
             .hash = "122038b4b5df08d2af6daf81e5f18d4c244d807c9323224db826cc107ce3894f6fa9",
         },
         .ws = .{
-            .url = "git+https://github.com/karlseguin/websocket.zig.git#1f2c4a56c642dab52fe12cdda1bd3f56865d1f86",            
+            .url = "git+https://github.com/karlseguin/websocket.zig.git#1f2c4a56c642dab52fe12cdda1bd3f56865d1f86",
             .hash = "1220ce168e550f8904364acd0a72f5cafd40caa08a50ba83aac50b97ba700d7bcf20",
+        },
+        .ziggy = .{
+            .url = "git+https://github.com/kristoff-it/ziggy.git#dcea3ea393ebf07646af6ae61cbeb249a4699b4c",
+            .hash = "1220524b50659b67fe89f4f7f26fc28aa55c8cd415dd79dcbcbeacb012cf74a2dc0a",
         },
     },
     .paths = .{"."},
