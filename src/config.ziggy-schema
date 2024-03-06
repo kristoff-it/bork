@@ -1,0 +1,26 @@
+root = Config
+
+
+struct Config {
+    ///When enabled, you will need to run `bork quit`
+    ///in another terminal to close your main bork instance.
+    ctrl_c_protection: bool,
+    /// Settings relative to highlighted notifications diplayed in bork.
+    notifications: Notifications,
+}
+
+struct Notifications {
+    ///Enable new follower notifications. 
+    ///
+    ///Since users can unfollow and refollow right after,
+    ///effectively spamming their notifications, only one 
+    ///follow notification per user will be displayed per 
+    ///session.
+    follows: bool,
+    ///Enable charity donation notifications.
+    ///
+    ///Bork only supports notifications for new monetary
+    ///donations, so no notifications will be generated
+    ///when creating new charity fundraisers.
+    charity: bool,
+}
