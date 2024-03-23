@@ -110,7 +110,7 @@ fn borkStart(gpa: std.mem.Allocator) !void {
             \\ Error: {}
             \\
         , .{err});
-        std.os.exit(1);
+        std.process.exit(1);
     };
 
     defer remote_server.deinit();

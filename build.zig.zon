@@ -3,8 +3,8 @@
     .version = "0.0.0",
     .dependencies = .{
         .clap = .{
-            .url = "git+https://github.com/Hejsil/zig-clap.git#9c23bcb5aebe0c2542b4de4472f60959974e2222",
-            .hash = "12209e829da9d7d0bc089e4e0cbc07bb882f6192cd583277277da34df53cd05b8f2a",
+            .url = "git+https://github.com/Hejsil/zig-clap.git#209ba4da76e46412acfe18f711cb0b041ff37f10",
+            .hash = "12200103e7b4a0cb162f2912df4fe97914024a25b5c9fcce6ea4119744f3f2a7f24e",
         },
 
         .tzif = .{
@@ -28,8 +28,8 @@
             .hash = "122038b4b5df08d2af6daf81e5f18d4c244d807c9323224db826cc107ce3894f6fa9",
         },
         .ws = .{
-            .url = "git+https://github.com/karlseguin/websocket.zig.git#1f2c4a56c642dab52fe12cdda1bd3f56865d1f86",
-            .hash = "1220ce168e550f8904364acd0a72f5cafd40caa08a50ba83aac50b97ba700d7bcf20",
+            .url = "git+https://github.com/karlseguin/websocket.zig.git#c0a6c4963dcd963cdb110b465077b3a04bd321e6",
+            .hash = "1220376acac4a7fa2c1772d0bd2a1d030513fb3599322552f11c5bd743de58d0e486",
         },
         .ziggy = .{
             .url = "git+https://github.com/kristoff-it/ziggy.git#dcea3ea393ebf07646af6ae61cbeb249a4699b4c",
