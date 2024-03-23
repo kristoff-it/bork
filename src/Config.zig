@@ -32,13 +32,13 @@ pub fn create(config_base: std.fs.Dir) !Config {
 
     // Inside this scope user input is set to immediate mode.
     const protection: bool = blk: {
-        const original_termios = try std.os.tcgetattr(in.handle);
-        defer std.os.tcsetattr(in.handle, .FLUSH, original_termios) catch {};
+        const original_termios = try std.posix.tcgetattr(in.handle);
+        defer std.posix.tcsetattr(in.handle, .FLUSH, original_termios) catch {};
         {
             var termios = original_termios;
             // set immediate input mode
             termios.lflag.ICANON = false;
-            try std.os.tcsetattr(in.handle, .FLUSH, termios);
+            try std.posix.tcsetattr(in.handle, .FLUSH, termios);
 
             std.debug.print(
                 \\ 

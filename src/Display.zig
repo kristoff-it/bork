@@ -2,6 +2,7 @@ const builtin = @import("builtin");
 const options = @import("build_options");
 const std = @import("std");
 const os = std.os;
+const posix = std.posix;
 const ziglyph = @import("ziglyph");
 const dw = ziglyph.display_width;
 const Grapheme = ziglyph.Grapheme;
@@ -23,7 +24,7 @@ var ch: *Channel(GlobalEventUnion) = undefined;
 
 var size: Size = undefined;
 var tty: std.fs.File = undefined;
-var original_termios: ?os.termios = null;
+var original_termios: ?posix.termios = null;
 var emulator_supports_emotes = false;
 var message_rendering_buffer: std.ArrayListUnmanaged(u8) = .{};
 var emote_cache: std.AutoHashMapUnmanaged(u32, void) = .{};
@@ -86,8 +87,8 @@ pub fn setup(
     config = config_;
     chat = chat_;
 
-    const name = std.os.getenv("TERM") orelse
-        std.os.getenv("TERM_PROGRAM") orelse
+    const name = std.posix.getenv("TERM") orelse
+        std.posix.getenv("TERM_PROGRAM") orelse
         "";
 
     emulator_supports_emotes = std.mem.eql(u8, name, "xterm-ghostty") or
@@ -97,7 +98,7 @@ pub fn setup(
     tty = try std.fs.openFileAbsolute("/dev/tty", .{ .mode = .read_write });
     errdefer tty.close();
 
-    original_termios = try os.tcgetattr(tty.handle);
+    original_termios = try posix.tcgetattr(tty.handle);
     errdefer original_termios = null;
 
     var new_termios = original_termios.?;
@@ -122,8 +123,8 @@ pub fn setup(
 
     new_termios.cflag.CSIZE = .CS8;
 
-    try os.tcsetattr(tty.handle, .FLUSH, new_termios);
-    errdefer os.tcsetattr(tty.handle, .FLUSH, original_termios.?) catch {};
+    try posix.tcsetattr(tty.handle, .FLUSH, new_termios);
+    errdefer posix.tcsetattr(tty.handle, .FLUSH, original_termios.?) catch {};
 
     try tty.writeAll(
         // enter alt screen
@@ -140,11 +141,11 @@ pub fn setup(
     errdefer restoreModes();
 
     // resize handler
-    try std.os.sigaction(std.os.SIG.WINCH, &std.os.Sigaction{
+    try std.posix.sigaction(std.posix.SIG.WINCH, &std.posix.Sigaction{
         .handler = .{ .handler = winchHandler },
         .mask = switch (builtin.os.tag) {
             .macos => 0,
-            .linux => std.os.empty_sigset,
+            .linux => std.posix.empty_sigset,
             .windows => @compileError("TODO: SIGWINCH support for windows"),
             else => @compileError("os not supported"),
         },
@@ -176,7 +177,7 @@ pub fn teardown() void {
     log.debug("display teardown!", .{});
     if (original_termios) |og| {
         restoreModes();
-        os.tcsetattr(tty.handle, .FLUSH, og) catch std.process.exit(1);
+        posix.tcsetattr(tty.handle, .FLUSH, og) catch std.process.exit(1);
         message_rendering_buffer.deinit(gpa);
         original_termios = null;
     }
@@ -225,10 +226,10 @@ const Size = struct {
 };
 
 fn getTermSize() Size {
-    var winsize = std.mem.zeroes(os.system.winsize);
+    var winsize = std.mem.zeroes(posix.system.winsize);
 
-    const err = os.system.ioctl(tty.handle, std.os.T.IOCGWINSZ, @intFromPtr(&winsize));
-    if (os.errno(err) == .SUCCESS) {
+    const err = posix.system.ioctl(tty.handle, std.posix.T.IOCGWINSZ, @intFromPtr(&winsize));
+    if (posix.errno(err) == .SUCCESS) {
         return Size{ .rows = winsize.ws_row, .cols = winsize.ws_col };
     }
 

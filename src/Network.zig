@@ -69,8 +69,41 @@ pub fn init(
 }
 
 const ws_host = if (options.local) "localhost" else "eventsub.wss.twitch.tv";
+fn noopSigHandler(_: c_int) callconv(.C) void {}
 fn wsHandler(self: *Network) void {
-    std.os.maybeIgnoreSigpipe();
+    // copy and pasted from std.start.maybeIgnoreSigpipe
+    // TODO make maybeIgnoreSigpipe pub so we don't have to copy and paste it
+    const have_sigpipe_support = switch (@import("builtin").os.tag) {
+        .linux,
+        .plan9,
+        .solaris,
+        .netbsd,
+        .openbsd,
+        .haiku,
+        .macos,
+        .ios,
+        .watchos,
+        .tvos,
+        .dragonfly,
+        .freebsd,
+        => true,
+
+        else => false,
+    };
+
+    if (have_sigpipe_support and !std.options.keep_sigpipe) {
+        const posix = std.posix;
+        const act: posix.Sigaction = .{
+            // Set handler to a noop function instead of `SIG.IGN` to prevent
+            // leaking signal disposition to a child process.
+            .handler = .{ .handler = noopSigHandler },
+            .mask = posix.empty_sigset,
+            .flags = 0,
+        };
+        posix.sigaction(posix.SIG.PIPE, &act, null) catch |err|
+            std.debug.panic("failed to set noop SIGPIPE handler: {s}", .{@errorName(err)});
+    }
+
     const h: Handler = .{ .network = self };
     while (true) {
         var retries: usize = 0;
@@ -266,7 +299,7 @@ pub fn deinit(self: *Network) void {
     // }
 
     // // Now we can kill the connection and nobody will try to reconnect
-    // std.os.shutdown(self.socket.handle, .both) catch |err| {
+    // std.posix.shutdown(self.socket.handle, .both) catch |err| {
     //     log.debug("shutdown failed, err: {}", .{err});
     // };
     // self.socket.close();
@@ -306,7 +339,7 @@ fn ircHandler(self: *Network) void {
             log.debug("reconnecting after network error: {s}", .{@errorName(err)});
 
             self.writer_lock.lock();
-            std.os.shutdown(self.socket.handle, .both) catch |sherr| {
+            std.posix.shutdown(self.socket.handle, .both) catch |sherr| {
                 log.debug("reader thread shutdown failed err: {}", .{sherr});
             };
             self.socket.close();
@@ -397,7 +430,7 @@ fn receiveIrcMessages(self: *Network) !void {
 // Public interface for sending commands (messages, bans, ...)
 pub fn sendCommand(self: *Network, cmd: UserCommand) void {
     self.send(Command{ .user = cmd }) catch {
-        std.os.shutdown(self.socket.handle, .both) catch |err| {
+        std.posix.shutdown(self.socket.handle, .both) catch |err| {
             log.debug("shutdown failed, err: {}", .{err});
             @panic("");
         };
