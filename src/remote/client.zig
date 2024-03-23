@@ -24,14 +24,14 @@ fn connect(gpa: std.mem.Allocator) std.net.Stream {
                 \\Is Bork running?
                 \\
             , .{});
-            std.os.exit(1);
+            std.process.exit(1);
         },
         else => {
             std.debug.print(
                 \\Unexpected error: {}
                 \\
             , .{err});
-            std.os.exit(1);
+            std.process.exit(1);
         },
     };
 }

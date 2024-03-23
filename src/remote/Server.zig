@@ -72,7 +72,7 @@ pub fn start(self: *Server) !void {
 
 pub fn deinit(self: *Server) void {
     std.log.debug("deiniting Remote Server", .{});
-    std.os.shutdown(self.listener.stream.handle, .both) catch |err| {
+    std.posix.shutdown(self.listener.stream.handle, .both) catch |err| {
         std.log.debug("remote shutdown encountered an error: {}", .{err});
     };
     std.log.debug("deinit done", .{});
