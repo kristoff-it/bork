@@ -90,10 +90,16 @@ pub fn authenticateToken(gpa: std.mem.Allocator, token: []const u8) !Auth {
         return error.TokenExpired;
     }
 
-    var auth = try std.json.parseFromSliceLeaky(Auth, gpa, result.stdout, .{
+    var auth = std.json.parseFromSliceLeaky(Auth, gpa, result.stdout, .{
         .allocate = .alloc_always,
         .ignore_unknown_fields = true,
-    });
+    }) catch {
+        // NOTE: A parsing error means token exprired for us because
+        //       twitch likes to do `{"status":401,"message":"invalid access token"}`
+        //       instead of using HTTP status codes correctly :^(
+        return error.TokenExpired;
+    };
+
     auth.token = token;
     return auth;
 }
