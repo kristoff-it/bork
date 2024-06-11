@@ -70,7 +70,7 @@ pub fn authenticateToken(gpa: std.mem.Allocator, token: []const u8) !Auth {
     );
     defer gpa.free(header_oauth);
 
-    const result = try std.ChildProcess.run(.{
+    const result = try std.process.Child.run(.{
         .allocator = gpa,
         .argv = &.{
             "curl",

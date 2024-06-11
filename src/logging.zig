@@ -15,18 +15,16 @@ pub fn logFn(
     const l = log_file orelse return;
     const scope_prefix = "(" ++ @tagName(scope) ++ "): ";
     const prefix = "[" ++ @tagName(level) ++ "] " ++ scope_prefix;
-    const mutex = std.debug.getStderrMutex();
-    mutex.lock();
-    defer mutex.unlock();
+    std.debug.lockStdErr();
+    defer std.debug.unlockStdErr();
 
     const writer = l.writer();
     writer.print(prefix ++ format ++ "\n", args) catch return;
 }
 
 pub fn setup(gpa: std.mem.Allocator) void {
-    const mutex = std.debug.getStderrMutex();
-    mutex.lock();
-    defer mutex.unlock();
+    std.debug.lockStdErr();
+    defer std.debug.unlockStdErr();
 
     setup_internal(gpa) catch {
         log_file = null;
