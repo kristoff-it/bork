@@ -3,8 +3,8 @@
     .version = "0.0.0",
     .dependencies = .{
         .clap = .{
-            .url = "git+https://github.com/Hejsil/zig-clap.git#209ba4da76e46412acfe18f711cb0b041ff37f10",
-            .hash = "12200103e7b4a0cb162f2912df4fe97914024a25b5c9fcce6ea4119744f3f2a7f24e",
+            .url = "git+https://github.com/Hejsil/zig-clap.git#7a51c11319b3892b81784149fb2cb2915073710c",
+            .hash = "1220c900c70daf3e715fad6f266ec14b1d0f5e6c2d3f34b32142f60306cb9b5e5f05",
         },
 
         .tzif = .{
@@ -14,26 +14,26 @@
         },
 
         .ziglyph = .{
-            .url = "git+https://codeberg.org/dude_the_builder/ziglyph.git#0e17bd36a4e882b194a87c283bd78562ea215116",
-            .hash = "12208553f3f47e51494e187f4c0e6f6b3844e3993436cad4a0e8c4db4e99645967b5",
+            .url = "git+https://codeberg.org/dude_the_builder/ziglyph.git#b89d43d1e3fb01b6074bc1f7fc980324b04d26a5",
+            .hash = "12207831bce7d4abce57b5a98e8f3635811cfefd160bca022eb91fe905d36a02cf25",
         },
 
         .@"known-folders" = .{
-            .url = "git+https://github.com/ziglibs/known-folders.git#2aa7f2e9855d45b20072e15107fb379b9380adbe",
-            .hash = "12209925016f4b5486a713828ead3bcc900fa4f039c93de1894aa7d5253f7633b92c",
+            .url = "git+https://github.com/ziglibs/known-folders.git#21a04eae9e0dca52e274ff848596941d5d68649f",
+            .hash = "12204536e3fef16cd9000b9f023a7c8c53399c4ebd70a9f7e310d1464484d410731d",
         },
 
         .datetime = .{
-            .url = "git+https://github.com/frmdstryr/zig-datetime.git#a9c75242dfc119a305c1381c2352d2fc16b2e0aa",
-            .hash = "122038b4b5df08d2af6daf81e5f18d4c244d807c9323224db826cc107ce3894f6fa9",
+            .url = "git+https://github.com/frmdstryr/zig-datetime.git#1334f86ffed7f98c4395c633a3aaa92999b73409",
+            .hash = "1220f7f4a9210f6ce3949446276566b0a22775e85dc6b81daf7aae55e0ec5588f4dc",
         },
         .ws = .{
-            .url = "git+https://github.com/karlseguin/websocket.zig.git#c77f87d0e6548865636eb9781106a8be72e5755a",
-            .hash = "12208720b772330f309cfb48957f4152ee0930b716837d0c1d07fee2dea2f4dc712e",
+            .url = "git+https://github.com/karlseguin/websocket.zig.git#6e355261b12eb9781991f2b0b02947cdef884f12",
+            .hash = "1220a50d663f8faee47f5aafdd57e29f1330e56977e33154c92a3fb5a0c61f5a1fff",
         },
         .ziggy = .{
-            .url = "git+https://github.com/kristoff-it/ziggy.git#dcea3ea393ebf07646af6ae61cbeb249a4699b4c",
-            .hash = "1220524b50659b67fe89f4f7f26fc28aa55c8cd415dd79dcbcbeacb012cf74a2dc0a",
+            .url = "git+https://github.com/kristoff-it/ziggy.git#ae30921d8c98970942d3711553aa66ff907482fe",
+            .hash = "1220c198cdaf6cb73fca6603cc5039046ed10de2e9f884cae9224ff826731df1c68d",
         },
     },
     .paths = .{"."},

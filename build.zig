@@ -75,7 +75,7 @@ pub fn build(b: *std.Build) !void {
 
     const exe = b.addExecutable(.{
         .name = "bork",
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
         // .strip = true,
@@ -121,7 +121,7 @@ pub fn build(b: *std.Build) !void {
     for (targets) |t| {
         const release_exe = b.addExecutable(.{
             .name = "bork",
-            .root_source_file = .{ .path = "src/main.zig" },
+            .root_source_file = b.path("src/main.zig"),
             .target = b.resolveTargetQuery(t),
             .optimize = .ReleaseSafe,
         });

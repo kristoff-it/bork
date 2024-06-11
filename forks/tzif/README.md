@@ -46,7 +46,7 @@ pub fn build(b: *Build) void {
 
     const exe = b.addExecutable(.{
         .name = "tzif",
-        .root_source_file = .{ .path = "tzif.zig" },
+        .root_source_file = b.path("tzif.zig"),
         .target = target,
         .optimize = optimize,
     });
