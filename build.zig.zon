@@ -14,17 +14,17 @@
         },
 
         .ziglyph = .{
-            .url = "git+https://codeberg.org/dude_the_builder/ziglyph.git",
+            .url = "git+https://codeberg.org/dude_the_builder/ziglyph.git#b89d43d1e3fb01b6074bc1f7fc980324b04d26a5",
             .hash = "12207831bce7d4abce57b5a98e8f3635811cfefd160bca022eb91fe905d36a02cf25",
         },
 
         .@"known-folders" = .{
-            .url = "git+https://github.com/ziglibs/known-folders.git",
+            .url = "git+https://github.com/ziglibs/known-folders.git#1cceeb70e77dec941a4178160ff6c8d05a74de6f",
             .hash = "12205f5e7505c96573f6fc5144592ec38942fb0a326d692f9cddc0c7dd38f9028f29",
         },
 
         .datetime = .{
-            .url = "git+https://github.com/frmdstryr/zig-datetime.git",
+            .url = "git+https://github.com/frmdstryr/zig-datetime.git#70aebf28fb3e137cd84123a9349d157a74708721",
             .hash = "122077215ce36e125a490e59ec1748ffd4f6ba00d4d14f7308978e5360711d72d77f",
         },
         .ws = .{
@@ -32,7 +32,7 @@
             .hash = "12208720b772330f309cfb48957f4152ee0930b716837d0c1d07fee2dea2f4dc712e",
         },
         .ziggy = .{
-            .url = "git+https://github.com/kristoff-it/ziggy.git",
+            .url = "git+https://github.com/kristoff-it/ziggy.git#42b6f5d7320340bc5903c4c29d34065e8517a549",
             .hash = "12200b69baf035d0474e04b131862d36b2657fbce88a5c9dc657af861430e5fc7e3d",
         },
     },
