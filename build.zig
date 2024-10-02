@@ -38,7 +38,7 @@ pub fn build(b: *std.Build) !void {
             },
             2 => {
                 // Untagged development build (e.g. 0.8.0-684-gbbe2cca1a).
-                var it = std.mem.split(u8, git_describe, "-");
+                var it = std.mem.splitScalar(u8, git_describe, '-');
                 const tagged_ancestor = it.next() orelse unreachable;
                 const commit_height = it.next() orelse unreachable;
                 const commit_id = it.next() orelse unreachable;
@@ -75,7 +75,7 @@ pub fn build(b: *std.Build) !void {
 
     const exe = b.addExecutable(.{
         .name = "bork",
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
         // .strip = true,
@@ -121,12 +121,13 @@ pub fn build(b: *std.Build) !void {
     for (targets) |t| {
         const release_exe = b.addExecutable(.{
             .name = "bork",
-            .root_source_file = .{ .path = "src/main.zig" },
+            .root_source_file = b.path("src/main.zig"),
             .target = b.resolveTargetQuery(t),
             .optimize = .ReleaseSafe,
         });
         release_exe.root_module.addImport("known-folders", known_folders.module("known-folders"));
         release_exe.root_module.addImport("datetime", datetime.module("zig-datetime"));
+        release_exe.root_module.addImport("ziggy", ziggy.module("ziggy"));
         release_exe.root_module.addImport("ziglyph", ziglyph.module("ziglyph"));
         release_exe.root_module.addImport("tzif", tzif.module("tzif"));
         release_exe.root_module.addImport("clap", clap.module("clap"));
