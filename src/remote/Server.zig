@@ -241,7 +241,7 @@ pub fn replyLinks(chat: *Chat, stream: std.net.Stream) void {
             .chat => |comment| comment.text,
             else => continue,
         };
-        var it = std.mem.tokenize(u8, text, " ");
+        var it = std.mem.tokenizeScalar(u8, text, ' ');
         while (it.next()) |word| {
             if (url.sense(word)) {
                 const indent = "   >>";

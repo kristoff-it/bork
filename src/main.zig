@@ -119,7 +119,7 @@ fn borkStart(gpa: std.mem.Allocator) !void {
     try network.init(gpa, &ch, config, auth, try senseUserTZ(gpa));
     defer network.deinit();
 
-    var chat = Chat{ .allocator = gpa, .nick = auth.login };
+    var chat: Chat = .{ .allocator = gpa, .nick = auth.login };
     try Display.setup(gpa, &ch, config, &chat);
     defer Display.teardown();
 

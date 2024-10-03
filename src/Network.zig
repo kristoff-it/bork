@@ -100,8 +100,7 @@ fn wsHandler(self: *Network) void {
             .mask = posix.empty_sigset,
             .flags = 0,
         };
-        posix.sigaction(posix.SIG.PIPE, &act, null) catch |err|
-            std.debug.panic("failed to set noop SIGPIPE handler: {s}", .{@errorName(err)});
+        posix.sigaction(posix.SIG.PIPE, &act, null);
     }
 
     const h: Handler = .{ .network = self };
@@ -115,7 +114,9 @@ fn wsHandler(self: *Network) void {
                     std.time.sleep(t * std.time.ns_per_s);
                 },
             }
-            var client = ws.connect(self.gpa, ws_host, 443, .{
+            var client = ws.Client.init(self.gpa, .{
+                .host = ws_host,
+                .port = 443,
                 .tls = !options.local,
             }) catch |err| {
                 wslog.debug("connection failed: {s}", .{@errorName(err)});
@@ -145,12 +146,11 @@ const Handler = struct {
     network: *Network,
 
     var seen_follows: std.StringHashMapUnmanaged(void) = .{};
-    pub fn handle(self: Handler, message: ws.Message) !void {
+    pub fn serverMessage(self: Handler, data: []const u8) !void {
         errdefer |err| {
             wslog.debug("websocket handler errored out: {s}", .{@errorName(err)});
         }
 
-        const data = message.data;
         wslog.debug("ws event: {s}", .{data});
 
         const event = try event_parser.parseEvent(self.network.gpa, data);
