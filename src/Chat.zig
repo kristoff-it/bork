@@ -188,7 +188,7 @@ pub fn addMessage(self: *Chat, msg: *Message) bool {
     if (!std.mem.eql(u8, msg.login_name, self.nick)) {
         switch (msg.kind) {
             .chat => |c| {
-                var it = std.mem.tokenize(u8, c.text, " ");
+                var it = std.mem.tokenizeScalar(u8, c.text, ' ');
                 while (it.next()) |word| {
                     if (url.sense(word)) {
                         if (self.last_link_message) |old| {

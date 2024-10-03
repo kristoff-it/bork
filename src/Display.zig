@@ -141,7 +141,7 @@ pub fn setup(
     errdefer restoreModes();
 
     // resize handler
-    try std.posix.sigaction(std.posix.SIG.WINCH, &std.posix.Sigaction{
+    std.posix.sigaction(std.posix.SIG.WINCH, &std.posix.Sigaction{
         .handler = .{ .handler = winchHandler },
         .mask = switch (builtin.os.tag) {
             .macos => 0,
@@ -226,11 +226,11 @@ const Size = struct {
 };
 
 fn getTermSize() Size {
-    var winsize = std.mem.zeroes(posix.system.winsize);
+    var winsize = std.mem.zeroes(posix.winsize);
 
     const err = posix.system.ioctl(tty.handle, std.posix.T.IOCGWINSZ, @intFromPtr(&winsize));
     if (posix.errno(err) == .SUCCESS) {
-        return Size{ .rows = winsize.ws_row, .cols = winsize.ws_col };
+        return Size{ .rows = winsize.row, .cols = winsize.col };
     }
 
     log.err("updateTermSize failed!", .{});
@@ -254,7 +254,7 @@ pub fn sizeChanged() bool {
 
 const window_title_width = window_title.len - 2;
 const window_title: []const u8 = blk: {
-    var v = std.mem.tokenize(u8, options.version, ".");
+    var v = std.mem.tokenizeScalar(u8, options.version, '.');
     const major = v.next().?;
     const minor = v.next().?;
     const patch = v.next().?;
