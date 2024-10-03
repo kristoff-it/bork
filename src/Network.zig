@@ -52,7 +52,7 @@ pub fn init(
     auth: Auth,
     tz: datetime.Timezone,
 ) !void {
-    self.* = Network{
+    self.* = .{
         .config = config,
         .auth = auth,
         .tz = tz,
@@ -161,9 +161,9 @@ const Handler = struct {
                 wslog.debug("event: {s}", .{@tagName(event)});
             },
             .charity => |c| {
-                self.network.ch.put(GlobalEventUnion{
+                self.network.ch.put(.{
                     .network = .{
-                        .message = Chat.Message{
+                        .message = .{
                             .login_name = c.login_name,
                             .time = c.time,
                             .kind = .{
@@ -182,9 +182,9 @@ const Handler = struct {
                     f.login_name,
                 );
                 if (!gop.found_existing) {
-                    self.network.ch.put(GlobalEventUnion{
+                    self.network.ch.put(.{
                         .network = .{
-                            .message = Chat.Message{
+                            .message = .{
                                 .login_name = f.login_name,
                                 .time = f.time,
                                 .kind = .{
@@ -370,7 +370,7 @@ fn receiveIrcMessages(self: *Network) !void {
                 try self.send(.pong);
             },
             .clear => |c| {
-                self.ch.put(GlobalEventUnion{ .network = .{ .clear = c } });
+                self.ch.put(.{ .network = .{ .clear = c } });
             },
             .message => |msg| {
                 switch (msg.kind) {
@@ -389,7 +389,7 @@ fn receiveIrcMessages(self: *Network) !void {
                     },
                 }
 
-                self.ch.put(GlobalEventUnion{ .network = .{ .message = msg } });
+                self.ch.put(.{ .network = .{ .message = msg } });
 
                 // Hack: when receiving resub events, we generate a fake chat message
                 //       to display the resub message. In the future this should be
@@ -399,9 +399,9 @@ fn receiveIrcMessages(self: *Network) !void {
                 switch (msg.kind) {
                     .resub => |r| {
                         if (r.resub_message.len > 0) {
-                            self.ch.put(GlobalEventUnion{
+                            self.ch.put(.{
                                 .network = .{
-                                    .message = Chat.Message{
+                                    .message = .{
                                         .login_name = msg.login_name,
                                         .time = msg.time,
                                         .kind = .{
@@ -429,7 +429,7 @@ fn receiveIrcMessages(self: *Network) !void {
 
 // Public interface for sending commands (messages, bans, ...)
 pub fn sendCommand(self: *Network, cmd: UserCommand) void {
-    self.send(Command{ .user = cmd }) catch {
+    self.send(.{ .user = cmd }) catch {
         std.posix.shutdown(self.socket.handle, .both) catch |err| {
             log.debug("shutdown failed, err: {}", .{err});
             @panic("");
