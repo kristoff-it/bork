@@ -35,6 +35,10 @@
             .url = "git+https://github.com/kristoff-it/ziggy.git#ae30921d8c98970942d3711553aa66ff907482fe",
             .hash = "1220c198cdaf6cb73fca6603cc5039046ed10de2e9f884cae9224ff826731df1c68d",
         },
+        .vaxis = .{
+            .url = "git+https://github.com/rockorager/libvaxis#6afd4786ebc757e8860a1afd20bb0510d74ab74f",
+            .hash = "1220680db15ff50c362000df632b1c157d0f4840126a1bb390ccf0c78fd3d54c2f89",
+        },
     },
     .paths = .{"."},
 }

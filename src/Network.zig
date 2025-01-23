@@ -8,10 +8,18 @@ const Channel = @import("utils/channel.zig").Channel;
 const GlobalEventUnion = @import("main.zig").Event;
 const Chat = @import("Chat.zig");
 const Config = @import("Config.zig");
+const oauth = @import("network/oauth.zig");
+const livechat = @import("network/youtube/livechat.zig");
 const irc_parser = @import("network/twitch/irc_parser.zig");
 const event_parser = @import("network/twitch/event_parser.zig");
 const EmoteCache = @import("network/twitch/EmoteCache.zig");
-pub const Auth = @import("network/twitch/auth.zig");
+pub const TwitchAuth = @import("network/twitch/Auth.zig");
+pub const YouTubeAuth = @import("network/youtube/Auth.zig");
+
+pub const Auth = struct {
+    twitch: TwitchAuth,
+    youtube: YouTubeAuth = .{},
+};
 
 pub const Event = union(enum) {
     // chat
@@ -66,6 +74,11 @@ pub fn init(
 
     const ws_thread = try std.Thread.spawn(.{}, wsHandler, .{self});
     ws_thread.detach();
+
+    if (auth.youtube.enabled) {
+        const yt_thread = try std.Thread.spawn(.{}, livechat.poll, .{self});
+        yt_thread.detach();
+    }
 }
 
 const ws_host = if (options.local) "localhost" else "eventsub.wss.twitch.tv";
@@ -227,9 +240,9 @@ const Handler = struct {
         event_name: []const u8,
         version: []const u8,
     ) !void {
-        const client_id = Auth.client_id;
-        const user_id = self.network.auth.user_id;
-        const token = self.network.auth.token;
+        const client_id = oauth.client_id;
+        const user_id = self.network.auth.twitch.user_id;
+        const token = self.network.auth.twitch.token;
         const gpa = self.network.gpa;
 
         var client: std.http.Client = .{
@@ -319,8 +332,8 @@ fn ircHandler(self: *Network) void {
             }
             self.socket = connect(
                 self.gpa,
-                self.auth.login,
-                self.auth.token,
+                self.auth.twitch.login,
+                self.auth.twitch.token,
             ) catch |reconnect_err| {
                 log.debug("reconnect attempt #{} failed: {s}", .{
                     retries,
@@ -452,7 +465,7 @@ fn send(self: *Network, cmd: Command) !void {
                 .message => |msg| {
                     log.debug("SEND MESSAGE!", .{});
                     try w.print("PRIVMSG #{s} :{s}\n", .{
-                        self.auth.login,
+                        self.auth.twitch.login,
                         msg,
                     });
                 },
@@ -461,7 +474,7 @@ fn send(self: *Network, cmd: Command) !void {
     }
 }
 
-pub fn connect(gpa: std.mem.Allocator, name: []const u8, oauth: []const u8) !std.net.Stream {
+pub fn connect(gpa: std.mem.Allocator, name: []const u8, token: []const u8) !std.net.Stream {
     var socket = if (options.local)
         try std.net.tcpConnectToHost(gpa, "localhost", 6667)
     else
@@ -469,7 +482,11 @@ pub fn connect(gpa: std.mem.Allocator, name: []const u8, oauth: []const u8) !std
 
     errdefer socket.close();
 
-    const oua = if (options.local) "##SECRET##" else oauth;
+    const oua = if (options.local) "##SECRET##" else blk: {
+        var it = std.mem.tokenizeScalar(u8, token, ' ');
+        _ = it.next().?;
+        break :blk it.next().?;
+    };
 
     try socket.writer().print(
         \\PASS oauth:{0s}

@@ -88,6 +88,35 @@ pub fn links(gpa: std.mem.Allocator, it: *std.process.ArgIterator) !void {
     }
 }
 
+pub fn youtube(gpa: std.mem.Allocator, it: *std.process.ArgIterator) !void {
+    const video_url_or_id = it.next() orelse {
+        std.debug.print("Usage ./bork youtube video_url_or_id\n", .{});
+        return;
+    };
+
+    const video_id = if (std.mem.startsWith(u8, video_url_or_id, "https://")) blk: {
+        var url_it = std.mem.tokenizeSequence(u8, video_url_or_id, "v=");
+        _ = url_it.next() orelse @panic("bad url");
+        var query_it = std.mem.tokenizeAny(u8, url_it.next() orelse @panic("bad url"), "&#");
+        break :blk query_it.next() orelse @panic("bad url");
+    } else video_url_or_id;
+
+    const conn = connect(gpa);
+    defer conn.close();
+
+    try conn.writer().writeAll("YT\n");
+    try conn.writer().writeAll(video_id);
+    try conn.writer().writeAll("\n");
+
+    var buf: [100]u8 = undefined;
+    var n = try conn.read(&buf);
+
+    const out = std.io.getStdOut();
+    while (n != 0) : (n = try conn.read(&buf)) {
+        try out.writeAll(buf[0..n]);
+    }
+}
+
 pub fn ban(gpa: std.mem.Allocator, it: *std.process.ArgIterator) !void {
     const user = it.next() orelse {
         std.debug.print("Usage ./bork ban \"username\"\n", .{});
@@ -204,8 +233,6 @@ pub fn afk(gpa: std.mem.Allocator, it: *std.process.ArgIterator) !void {
             },
         };
     }
-
-    std.debug.print("timer: {s}, reason: {?s}, title: {?s}\n", .{ time, reason, title });
 
     const conn = connect(gpa);
     defer conn.close();
