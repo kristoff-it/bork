@@ -7,7 +7,10 @@ const url = @import("../utils/url.zig");
 const GlobalEventUnion = @import("../main.zig").Event;
 const Chat = @import("../Chat.zig");
 const Network = @import("../Network.zig");
+const livechat = @import("../network/youtube/livechat.zig");
 const parseTime = @import("./utils.zig").parseTime;
+
+const log = std.log.scoped(.server);
 
 pub const Event = union(enum) {
     quit,
@@ -23,7 +26,7 @@ pub const Event = union(enum) {
 
 auth: Network.Auth,
 listener: std.net.Server,
-alloc: std.mem.Allocator,
+gpa: std.mem.Allocator,
 ch: *Channel(GlobalEventUnion),
 thread: std.Thread,
 
@@ -33,7 +36,7 @@ pub fn init(
     auth: Network.Auth,
     ch: *Channel(GlobalEventUnion),
 ) !void {
-    self.alloc = alloc;
+    self.gpa = alloc;
     self.auth = auth;
     self.ch = ch;
 
@@ -66,7 +69,9 @@ pub fn start(self: *Server) !void {
     while (true) {
         const conn = try self.listener.accept();
         defer conn.stream.close();
-        try self.handle(conn.stream);
+        self.handle(conn.stream) catch |err| {
+            log.err("Error while handling remote command: {s}", .{@errorName(err)});
+        };
     }
 }
 
@@ -88,11 +93,11 @@ fn handle(self: *Server, stream: std.net.Stream) !void {
     defer std.log.debug("remote cmd: {s}", .{cmd});
 
     if (std.mem.eql(u8, cmd, "SEND")) {
-        const msg = stream.reader().readUntilDelimiterAlloc(self.alloc, '\n', 4096) catch |err| {
+        const msg = stream.reader().readUntilDelimiterAlloc(self.gpa, '\n', 4096) catch |err| {
             std.log.debug("remote could read: {}", .{err});
             return;
         };
-        defer self.alloc.free(msg);
+        defer self.gpa.free(msg);
 
         std.log.debug("remote msg: {s}", .{msg});
 
@@ -102,13 +107,13 @@ fn handle(self: *Server, stream: std.net.Stream) !void {
         // This way we don't have to implement locally emote
         // parsing.
         var twitch_conn = Network.connect(
-            self.alloc,
-            self.auth.login,
-            self.auth.token,
+            self.gpa,
+            self.auth.twitch.login,
+            self.auth.twitch.token,
         ) catch return;
         defer twitch_conn.close();
         twitch_conn.writer().print("PRIVMSG #{s} :{s}\n", .{
-            self.auth.login,
+            self.auth.twitch.login,
             msg,
         }) catch return;
     }
@@ -126,12 +131,12 @@ fn handle(self: *Server, stream: std.net.Stream) !void {
     }
 
     if (std.mem.eql(u8, cmd, "BAN")) {
-        const user = stream.reader().readUntilDelimiterAlloc(self.alloc, '\n', 4096) catch |err| {
+        const user = stream.reader().readUntilDelimiterAlloc(self.gpa, '\n', 4096) catch |err| {
             std.log.debug("remote could read: {}", .{err});
             return;
         };
 
-        defer self.alloc.free(user);
+        defer self.gpa.free(user);
 
         std.log.debug("remote msg: {s}", .{user});
 
@@ -141,23 +146,83 @@ fn handle(self: *Server, stream: std.net.Stream) !void {
         // This way we don't have to implement locally emote
         // parsing.
         var twitch_conn = Network.connect(
-            self.alloc,
-            self.auth.login,
-            self.auth.token,
+            self.gpa,
+            self.auth.twitch.login,
+            self.auth.twitch.token,
         ) catch return;
         defer twitch_conn.close();
         twitch_conn.writer().print("PRIVMSG #{s} :/ban {s}\n", .{
-            self.auth.login,
+            self.auth.twitch.login,
             user,
         }) catch return;
     }
 
-    if (std.mem.eql(u8, cmd, "UNBAN")) {
-        const user = stream.reader().readUntilDelimiterAlloc(self.alloc, '\n', 4096) catch |err| {
+    if (std.mem.eql(u8, cmd, "YT")) {
+        const video_id = stream.reader().readUntilDelimiterAlloc(self.gpa, '\n', 4096) catch |err| {
             std.log.debug("remote could read: {}", .{err});
             return;
         };
-        defer self.alloc.free(user);
+        defer self.gpa.free(video_id);
+
+        const url_fmt = "https://www.googleapis.com/youtube/v3/liveBroadcasts?id={s}&part=id,snippet,status";
+
+        var yt: std.http.Client = .{
+            .allocator = self.gpa,
+        };
+        defer yt.deinit();
+
+        const live_url = try std.fmt.allocPrint(self.gpa, url_fmt, .{video_id});
+        defer self.gpa.free(live_url);
+
+        var live_buf = std.ArrayList(u8).init(self.gpa);
+        defer live_buf.deinit();
+
+        const res = try yt.fetch(.{
+            .location = .{ .url = live_url },
+            .method = .GET,
+            .response_storage = .{ .dynamic = &live_buf },
+            .extra_headers = &.{
+                .{ .name = "Authorization", .value = self.auth.youtube.token },
+            },
+        });
+
+        const w = stream.writer();
+
+        if (res.status != .ok) {
+            try w.print("Error while fetching livestream details: {} \n{s}\n\n", .{
+                res.status, live_buf.items,
+            });
+            return;
+        }
+
+        const lives = std.json.parseFromSlice(livechat.LiveBroadcasts, self.gpa, live_buf.items, .{
+            .ignore_unknown_fields = true,
+        }) catch {
+            try w.print("Error while parsing livestream details.\n", .{});
+            return;
+        };
+
+        defer lives.deinit();
+
+        const chat_id = for (lives.value.items) |l| {
+            if (std.mem.eql(u8, l.status.lifeCycleStatus, "live")) break try self.gpa.dupeZ(u8, l.snippet.liveChatId);
+        } else {
+            try w.print("The provided livestream does not seem to be live.\n", .{});
+            return;
+        };
+
+        try w.print("Success!\n", .{});
+
+        const maybe_old = @atomicRmw(?[*:0]const u8, &livechat.new_chat_id, .Xchg, chat_id, .acq_rel);
+        if (maybe_old) |m| self.gpa.free(std.mem.span(m));
+    }
+
+    if (std.mem.eql(u8, cmd, "UNBAN")) {
+        const user = stream.reader().readUntilDelimiterAlloc(self.gpa, '\n', 4096) catch |err| {
+            std.log.debug("remote could read: {}", .{err});
+            return;
+        };
+        defer self.gpa.free(user);
 
         std.log.debug("remote msg: {s}", .{user});
 
@@ -167,24 +232,24 @@ fn handle(self: *Server, stream: std.net.Stream) !void {
         // This way we don't have to implement locally emote
         // parsing.
         var twitch_conn = Network.connect(
-            self.alloc,
-            self.auth.login,
-            self.auth.token,
+            self.gpa,
+            self.auth.twitch.login,
+            self.auth.twitch.token,
         ) catch return;
         defer twitch_conn.close();
         twitch_conn.writer().print("PRIVMSG #{s} :/ban {s}\n", .{
-            self.auth.login,
+            self.auth.twitch.login,
             user,
         }) catch return;
     }
 
     if (std.mem.eql(u8, cmd, "AFK")) {
         const reader = stream.reader();
-        const time_string = reader.readUntilDelimiterAlloc(self.alloc, '\n', 4096) catch |err| {
+        const time_string = reader.readUntilDelimiterAlloc(self.gpa, '\n', 4096) catch |err| {
             std.log.debug("remote could read: {}", .{err});
             return;
         };
-        defer self.alloc.free(time_string);
+        defer self.gpa.free(time_string);
 
         const parsed_time = parseTime(time_string) catch {
             std.log.debug("remote failed to parse time", .{});
@@ -195,24 +260,24 @@ fn handle(self: *Server, stream: std.net.Stream) !void {
 
         const target_time = std.time.timestamp() + parsed_time;
 
-        const reason = reader.readUntilDelimiterAlloc(self.alloc, '\n', 4096) catch |err| {
+        const reason = reader.readUntilDelimiterAlloc(self.gpa, '\n', 4096) catch |err| {
             std.log.debug("remote could read: {}", .{err});
             return;
         };
 
-        errdefer self.alloc.free(reason);
+        errdefer self.gpa.free(reason);
 
         for (reason) |c| switch (c) {
             else => {},
             '\n', '\r', '\t' => return error.BadReason,
         };
 
-        const title = reader.readUntilDelimiterAlloc(self.alloc, '\n', 4096) catch |err| {
+        const title = reader.readUntilDelimiterAlloc(self.gpa, '\n', 4096) catch |err| {
             std.log.debug("remote could read: {}", .{err});
             return;
         };
 
-        errdefer self.alloc.free(title);
+        errdefer self.gpa.free(title);
 
         for (title) |c| switch (c) {
             else => {},

@@ -2,6 +2,7 @@ const Config = @This();
 const std = @import("std");
 const ziggy = @import("ziggy");
 
+youtube: bool = false,
 ctrl_c_protection: bool = false,
 notifications: struct {
     follows: bool = true,
@@ -31,7 +32,8 @@ pub fn create(config_base: std.fs.Dir) !Config {
     , .{});
 
     // Inside this scope user input is set to immediate mode.
-    const protection: bool = blk: {
+    const config: Config = blk: {
+        var config: Config = .{};
         const original_termios = try std.posix.tcgetattr(in.handle);
         defer std.posix.tcsetattr(in.handle, .FLUSH, original_termios) catch {};
         {
@@ -70,6 +72,28 @@ pub fn create(config_base: std.fs.Dir) !Config {
             _ = try in_reader.readByte();
 
             std.debug.print(
+                \\
+                \\--- YouTube Support
+                \\
+                \\If you plan to simulcast to both Twitch and YouTube,
+                \\Bork can display live chat from both platforms in a 
+                \\unified stream.
+                \\
+                \\Enabling YouTube support will require you to authenticate
+                \\with YouTube when launching Bork. You can always enable
+                \\it later by modifiyng Bork's config file.
+                \\
+                \\Enable YouTube support? [y/N] 
+            , .{});
+
+            config.youtube = switch (try in_reader.readByte()) {
+                else => false,
+                'y', 'Y' => true,
+            };
+
+            std.debug.print(
+                \\
+                \\
                 \\         ======> ! IMPORTANT ! <======
                 \\To protect you from accidentally closing Bork while
                 \\streaming, with CTRL+C protection enabled, Bork will
@@ -83,37 +107,24 @@ pub fn create(config_base: std.fs.Dir) !Config {
                 \\Enable CTRL+C protection? [Y/n] 
             , .{});
 
-            const enable = try in_reader.readByte();
-            switch (enable) {
-                else => {
-                    std.debug.print(
-                        \\
-                        \\
-                        \\CTRL+C protection is disabled.
-                        \\You can enable it in the future by editing the 
-                        \\configuration file.
-                        \\ 
-                        \\
-                    , .{});
-                    break :blk false;
-                },
-                'y', 'Y', '\n' => {
-                    break :blk true;
-                },
-            }
+            config.ctrl_c_protection = switch (try in_reader.readByte()) {
+                else => false,
+                'y', 'Y', '\n' => true,
+            };
         }
+        break :blk config;
     };
 
     // create the config file
     var file = try config_base.createFile("bork/config.ziggy", .{});
     defer file.close();
-    try file.writer().print(".ctrl_c_protection = {},\n", .{protection});
+    try file.writer().print(".ctrl_c_protection = {},\n", .{config.ctrl_c_protection});
+    try file.writer().print(".youtube = {},\n", .{config.youtube});
 
     // ensure presence of the schema file
     var schema_file = try config_base.createFile("bork/config.ziggy-schema", .{});
     defer schema_file.close();
     try schema_file.writeAll(@embedFile("config.ziggy-schema"));
 
-    const result: Config = .{ .ctrl_c_protection = protection };
-    return result;
+    return config;
 }

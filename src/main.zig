@@ -12,6 +12,8 @@ const remote = @import("remote.zig");
 const Config = @import("Config.zig");
 const Network = @import("Network.zig");
 const Auth = Network.Auth;
+const TwitchAuth = Network.TwitchAuth;
+const YouTubeAuth = Network.YouTubeAuth;
 const Display = @import("Display.zig");
 const Chat = @import("Chat.zig");
 
@@ -54,6 +56,8 @@ const Subcommand = enum {
     quit,
     reconnect,
     version,
+    yt,
+    youtube,
 };
 
 pub fn main() !void {
@@ -84,6 +88,7 @@ pub fn main() !void {
         .links => try remote.client.links(gpa, &it),
         .afk => try remote.client.afk(gpa, &it),
         .ban => try remote.client.ban(gpa, &it),
+        .youtube, .yt => try remote.client.youtube(gpa, &it),
         .version => printVersion(),
         .help, .@"--help", .@"-h" => printHelpFatal(),
     }
@@ -101,7 +106,10 @@ fn borkStart(gpa: std.mem.Allocator) !void {
     try config_base.makePath("bork");
 
     const config = try Config.get(gpa, config_base);
-    const auth = try Auth.get(gpa, config_base);
+    const auth: Network.Auth = .{
+        .twitch = try TwitchAuth.get(gpa, config_base),
+        .youtube = if (config.youtube) try YouTubeAuth.get(gpa, config_base) else .{},
+    };
 
     var remote_server: remote.Server = undefined;
     remote_server.init(gpa, auth, &ch) catch |err| {
@@ -119,7 +127,7 @@ fn borkStart(gpa: std.mem.Allocator) !void {
     try network.init(gpa, &ch, config, auth, try senseUserTZ(gpa));
     defer network.deinit();
 
-    var chat = Chat{ .allocator = gpa, .nick = auth.login };
+    var chat = Chat{ .allocator = gpa, .nick = auth.twitch.login };
     try Display.setup(gpa, &ch, config, &chat);
     defer Display.teardown();
 
