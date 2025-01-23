@@ -7,6 +7,9 @@ struct Config {
     ctrl_c_protection: bool,
     /// Settings relative to highlighted notifications diplayed in bork.
     notifications: Notifications,
+    /// Enable YouTube LiveChat support (when simulcasting). 
+    /// Defaults to disabled.
+    youtube: ?bool,
 }
 
 struct Notifications {
