@@ -4,20 +4,20 @@ const options = @import("build_options");
 const datetime = @import("datetime");
 const zfetch = @import("zfetch");
 const folders = @import("known-folders");
+const vaxis = @import("vaxis");
 
 const logging = @import("logging.zig");
 const Channel = @import("utils/channel.zig").Channel;
-const senseUserTZ = @import("utils/sense_tz.zig").senseUserTZ;
 const remote = @import("remote.zig");
 const Config = @import("Config.zig");
 const Network = @import("Network.zig");
 const Auth = Network.Auth;
 const TwitchAuth = Network.TwitchAuth;
 const YouTubeAuth = Network.YouTubeAuth;
-const Display = @import("Display.zig");
+const Display = @import("Display1.zig");
 const Chat = @import("Chat.zig");
 
-pub const known_folders_config = .{
+pub const known_folders_config: folders.KnownFolderConfig = .{
     .xdg_force_default = true,
     .xdg_on_mac = true,
 };
@@ -28,20 +28,28 @@ pub const std_options: std.Options = .{
 
 pub fn panic(
     msg: []const u8,
-    trace: ?*std.builtin.StackTrace,
+    error_return_trace: ?*std.builtin.StackTrace,
     ret_addr: ?usize,
 ) noreturn {
-    _ = ret_addr;
     Display.teardown();
-    std.log.err("{s}\n\n{?}", .{ msg, trace });
+    vaxis.recover();
+    std.log.err("{s}\n\n", .{msg});
+    if (error_return_trace) |t| std.debug.dumpStackTrace(t.*);
+    std.debug.dumpCurrentStackTrace(ret_addr orelse @returnAddress());
+
     if (builtin.mode == .Debug) @breakpoint();
     std.process.exit(1);
 }
 
 pub const Event = union(enum) {
-    display: Display.Event,
+    // display: Display.Event,
     network: Network.Event,
     remote: remote.Server.Event,
+
+    // vaxis-specific events
+    key_press: vaxis.Key,
+    winsize: vaxis.Winsize,
+    // focus_in,
 };
 
 const Subcommand = enum {
@@ -95,9 +103,6 @@ pub fn main() !void {
 }
 
 fn borkStart(gpa: std.mem.Allocator) !void {
-    var buf: [24]Event = undefined;
-    var ch = Channel(Event).init(&buf);
-
     const config_base = try folders.open(gpa, .local_configuration, .{}) orelse
         try folders.open(gpa, .home, .{}) orelse
         try folders.open(gpa, .executable_dir, .{}) orelse
@@ -111,8 +116,23 @@ fn borkStart(gpa: std.mem.Allocator) !void {
         .youtube = if (config.youtube) try YouTubeAuth.get(gpa, config_base) else .{},
     };
 
+    var tty = try vaxis.Tty.init();
+    defer tty.deinit();
+
+    var vx = try vaxis.init(gpa, .{});
+    defer vx.deinit(null, tty.anyWriter());
+
+    var loop: vaxis.Loop(Event) = .{
+        .tty = &tty,
+        .vaxis = &vx,
+    };
+    try loop.init();
+
+    try loop.start();
+    defer loop.stop();
+
     var remote_server: remote.Server = undefined;
-    remote_server.init(gpa, auth, &ch) catch |err| {
+    remote_server.init(gpa, auth, &loop) catch |err| {
         std.debug.print(
             \\ Unable to listen for remote control.
             \\ Error: {}
@@ -124,20 +144,25 @@ fn borkStart(gpa: std.mem.Allocator) !void {
     defer remote_server.deinit();
 
     var network: Network = undefined;
-    try network.init(gpa, &ch, config, auth, try senseUserTZ(gpa));
+    try network.init(gpa, &loop, config, auth);
     defer network.deinit();
 
     var chat = Chat{ .allocator = gpa, .nick = auth.twitch.login };
-    try Display.setup(gpa, &ch, config, &chat);
+
+    try vx.enterAltScreen(tty.anyWriter());
+
+    try vx.queryTerminal(tty.anyWriter(), 1 * std.time.ns_per_s);
+
+    try Display.setup(gpa, &loop, config, &chat);
     defer Display.teardown();
 
     // Initial paint!
-    try Display.render();
+    // try Display.render();
 
     // Main control loop
     while (true) {
         var need_repaint = false;
-        const event = ch.get();
+        const event = loop.nextEvent();
         switch (event) {
             .remote => |re| {
                 switch (re) {
@@ -156,37 +181,46 @@ fn borkStart(gpa: std.mem.Allocator) !void {
                     },
                 }
             },
-            .display => |de| {
-                switch (de) {
-                    .tick => {
-                        need_repaint = Display.wantTick();
-                    },
-                    .size_changed => {
-                        need_repaint = Display.sizeChanged();
-                    },
-                    .left_click => |pos| {
-                        std.log.debug("click at {}", .{pos});
-                        need_repaint = try Display.handleClick(pos.row - 1, pos.col - 1);
-                    },
-                    .ctrl_c => {
-                        if (config.ctrl_c_protection) {
-                            need_repaint = try Display.showCtrlCMessage();
-                        } else {
-                            return;
-                        }
-                    },
-                    .up, .wheel_up, .page_up => {
-                        chat.scroll(1);
-                        need_repaint = true;
-                    },
-                    .down, .wheel_down, .page_down => {
-                        chat.scroll(-1);
-                        need_repaint = true;
-                    },
+            .winsize => |ws| try vx.resize(gpa, tty.anyWriter(), ws),
 
-                    .left, .right => {},
+            .key_press => |key| {
+                if (key.matches('c', .{ .ctrl = true })) {
+                    break;
+                } else {
+                    need_repaint = true;
+                    std.log.debug("key pressed: {}", .{key});
                 }
-            },
+            }, // .display => |de| {
+            //     switch (de) {
+            //         .tick => {
+            //             need_repaint = Display.wantTick();
+            //         },
+            //         .size_changed => {
+            //             need_repaint = Display.sizeChanged();
+            //         },
+            //         .left_click => |pos| {
+            //             std.log.debug("click at {}", .{pos});
+            //             need_repaint = try Display.handleClick(pos.row - 1, pos.col - 1);
+            //         },
+            //         .ctrl_c => {
+            //             if (config.ctrl_c_protection) {
+            //                 need_repaint = try Display.showCtrlCMessage();
+            //             } else {
+            //                 return;
+            //             }
+            //         },
+            //         .up, .wheel_up, .page_up => {
+            //             chat.scroll(1);
+            //             need_repaint = true;
+            //         },
+            //         .down, .wheel_down, .page_down => {
+            //             chat.scroll(-1);
+            //             need_repaint = true;
+            //         },
+
+            //         .left, .right => {},
+            //     }
+            // },
             .network => |ne| switch (ne) {
                 .connected => {},
                 .disconnected => {

@@ -15,7 +15,7 @@ pub fn poll(n: *Network) !void {
     var arena_impl = std.heap.ArenaAllocator.init(n.gpa);
     const arena = arena_impl.allocator();
 
-    var yt: std.http.Client = .{ .allocator = arena };
+    var yt: std.http.Client = .{ .allocator = n.gpa };
 
     var state: union(enum) {
         searching,
@@ -94,11 +94,29 @@ pub fn poll(n: *Network) !void {
                 page_token.appendSlice(messages.nextPageToken) catch @panic("increase pageToken buffer");
 
                 for (messages.items) |m| {
-                    log.debug("{s}\n{s}\n\n", .{
-                        m.authorDetails.displayName,
-                        m.snippet.textMessageDetails.messageText,
+                    const name = try n.gpa.dupe(u8, m.authorDetails.displayName);
+                    const msg = try n.gpa.dupe(u8, m.snippet.textMessageDetails.messageText);
+
+                    log.debug("{s}\n{s}\n\n", .{ name, msg });
+
+                    n.ch.postEvent(.{
+                        .network = .{
+                            .message = .{
+                                .login_name = name,
+                                .time = "--:--".*,
+                                .kind = .{
+                                    .chat = .{
+                                        .text = msg,
+                                        .display_name = name,
+                                        .sub_months = 0,
+                                        .is_founder = false,
+                                    },
+                                },
+                            },
+                        },
                     });
                 }
+
                 // std.debug.print("Sleeping for {}ms", .{messages.pollingIntervalMillis});
                 const delay = messages.pollingIntervalMillis * std.time.ns_per_ms;
                 std.time.sleep(delay);

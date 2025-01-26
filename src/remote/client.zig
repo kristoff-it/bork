@@ -196,7 +196,7 @@ pub fn afk(gpa: std.mem.Allocator, it: *std.process.ArgIterator) !void {
         return;
     }
 
-    const time = positionals[0];
+    const time = positionals[0].?;
     _ = parseTime(time) catch {
         std.debug.print(
             \\Bad timer!

@@ -2,7 +2,8 @@ const Server = @This();
 
 const std = @import("std");
 const folders = @import("known-folders");
-const Channel = @import("../utils/channel.zig").Channel;
+const vaxis = @import("vaxis");
+
 const url = @import("../utils/url.zig");
 const GlobalEventUnion = @import("../main.zig").Event;
 const Chat = @import("../Chat.zig");
@@ -27,14 +28,14 @@ pub const Event = union(enum) {
 auth: Network.Auth,
 listener: std.net.Server,
 gpa: std.mem.Allocator,
-ch: *Channel(GlobalEventUnion),
+ch: *vaxis.Loop(GlobalEventUnion),
 thread: std.Thread,
 
 pub fn init(
     self: *Server,
     alloc: std.mem.Allocator,
     auth: Network.Auth,
-    ch: *Channel(GlobalEventUnion),
+    ch: *vaxis.Loop(GlobalEventUnion),
 ) !void {
     self.gpa = alloc;
     self.auth = auth;
@@ -119,15 +120,15 @@ fn handle(self: *Server, stream: std.net.Stream) !void {
     }
 
     if (std.mem.eql(u8, cmd, "QUIT")) {
-        self.ch.put(GlobalEventUnion{ .remote = .quit });
+        self.ch.postEvent(GlobalEventUnion{ .remote = .quit });
     }
 
     if (std.mem.eql(u8, cmd, "RECONNECT")) {
-        self.ch.put(GlobalEventUnion{ .remote = .reconnect });
+        self.ch.postEvent(GlobalEventUnion{ .remote = .reconnect });
     }
 
     if (std.mem.eql(u8, cmd, "LINKS")) {
-        self.ch.put(GlobalEventUnion{ .remote = .{ .links = stream } });
+        self.ch.postEvent(GlobalEventUnion{ .remote = .{ .links = stream } });
     }
 
     if (std.mem.eql(u8, cmd, "BAN")) {
@@ -284,7 +285,7 @@ fn handle(self: *Server, stream: std.net.Stream) !void {
             '\n', '\r', '\t' => return error.BadReason,
         };
 
-        self.ch.put(GlobalEventUnion{
+        self.ch.postEvent(GlobalEventUnion{
             .remote = .{
                 .afk = .{
                     .target_time = target_time,
@@ -306,7 +307,7 @@ pub fn replyLinks(chat: *Chat, stream: std.net.Stream) void {
             .chat => |comment| comment.text,
             else => continue,
         };
-        var it = std.mem.tokenize(u8, text, " ");
+        var it = std.mem.tokenizeScalar(u8, text, ' ');
         while (it.next()) |word| {
             if (url.sense(word)) {
                 const indent = "   >>";

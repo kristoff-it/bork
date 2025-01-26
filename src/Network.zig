@@ -2,9 +2,10 @@ const Network = @This();
 
 const options = @import("build_options");
 const std = @import("std");
-const datetime = @import("datetime").datetime;
+const zeit = @import("zeit");
 const ws = @import("ws");
-const Channel = @import("utils/channel.zig").Channel;
+const vaxis = @import("vaxis");
+
 const GlobalEventUnion = @import("main.zig").Event;
 const Chat = @import("Chat.zig");
 const Config = @import("Config.zig");
@@ -45,9 +46,9 @@ const Command = union(enum) {
 
 config: Config,
 auth: Auth,
-tz: datetime.Timezone,
+tz: zeit.TimeZone,
 gpa: std.mem.Allocator,
-ch: *Channel(GlobalEventUnion),
+ch: *vaxis.Loop(GlobalEventUnion),
 emote_cache: EmoteCache,
 socket: std.net.Stream = undefined,
 writer_lock: std.Thread.Mutex = .{},
@@ -55,11 +56,14 @@ writer_lock: std.Thread.Mutex = .{},
 pub fn init(
     self: *Network,
     gpa: std.mem.Allocator,
-    ch: *Channel(GlobalEventUnion),
+    ch: *vaxis.Loop(GlobalEventUnion),
     config: Config,
     auth: Auth,
-    tz: datetime.Timezone,
 ) !void {
+    var env = try std.process.getEnvMap(gpa);
+    defer env.deinit();
+    const tz = try zeit.local(gpa, &env);
+
     self.* = Network{
         .config = config,
         .auth = auth,
@@ -105,16 +109,16 @@ fn wsHandler(self: *Network) void {
     };
 
     if (have_sigpipe_support and !std.options.keep_sigpipe) {
-        const posix = std.posix;
-        const act: posix.Sigaction = .{
-            // Set handler to a noop function instead of `SIG.IGN` to prevent
-            // leaking signal disposition to a child process.
-            .handler = .{ .handler = noopSigHandler },
-            .mask = posix.empty_sigset,
-            .flags = 0,
-        };
-        posix.sigaction(posix.SIG.PIPE, &act, null) catch |err|
-            std.debug.panic("failed to set noop SIGPIPE handler: {s}", .{@errorName(err)});
+        // const posix = std.posix;
+        // const act: posix.Sigaction = .{
+        //     // Set handler to a noop function instead of `SIG.IGN` to prevent
+        //     // leaking signal disposition to a child process.
+        //     .handler = .{ .handler = noopSigHandler },
+        //     .mask = posix.empty_sigset,
+        //     .flags = 0,
+        // };
+        // posix.sigaction(posix.SIG.PIPE, &act, null) catch |err|
+        //     std.debug.panic("failed to set noop SIGPIPE handler: {s}", .{@errorName(err)});
     }
 
     const h: Handler = .{ .network = self };
@@ -128,7 +132,9 @@ fn wsHandler(self: *Network) void {
                     std.time.sleep(t * std.time.ns_per_s);
                 },
             }
-            var client = ws.connect(self.gpa, ws_host, 443, .{
+            var client = ws.Client.init(self.gpa, .{
+                .host = ws_host,
+                .port = 443,
                 .tls = !options.local,
             }) catch |err| {
                 wslog.debug("connection failed: {s}", .{@errorName(err)});
@@ -158,12 +164,11 @@ const Handler = struct {
     network: *Network,
 
     var seen_follows: std.StringHashMapUnmanaged(void) = .{};
-    pub fn handle(self: Handler, message: ws.Message) !void {
+    pub fn serverMessage(self: Handler, data: []u8) !void {
         errdefer |err| {
             wslog.debug("websocket handler errored out: {s}", .{@errorName(err)});
         }
 
-        const data = message.data;
         wslog.debug("ws event: {s}", .{data});
 
         const event = try event_parser.parseEvent(self.network.gpa, data);
@@ -174,7 +179,7 @@ const Handler = struct {
                 wslog.debug("event: {s}", .{@tagName(event)});
             },
             .charity => |c| {
-                self.network.ch.put(GlobalEventUnion{
+                self.network.ch.postEvent(GlobalEventUnion{
                     .network = .{
                         .message = Chat.Message{
                             .login_name = c.login_name,
@@ -195,7 +200,7 @@ const Handler = struct {
                     f.login_name,
                 );
                 if (!gop.found_existing) {
-                    self.network.ch.put(GlobalEventUnion{
+                    self.network.ch.postEvent(GlobalEventUnion{
                         .network = .{
                             .message = Chat.Message{
                                 .login_name = f.login_name,
@@ -374,7 +379,7 @@ fn receiveIrcMessages(self: *Network) !void {
 
         log.debug("receiveMessages succeded", .{});
 
-        const p = irc_parser.parseMessage(data, self.gpa, self.tz) catch |err| {
+        const p = irc_parser.parseMessage(data, self.gpa, &self.tz) catch |err| {
             log.debug("parsing error: [{}]", .{err});
             continue;
         };
@@ -383,7 +388,7 @@ fn receiveIrcMessages(self: *Network) !void {
                 try self.send(.pong);
             },
             .clear => |c| {
-                self.ch.put(GlobalEventUnion{ .network = .{ .clear = c } });
+                self.ch.postEvent(GlobalEventUnion{ .network = .{ .clear = c } });
             },
             .message => |msg| {
                 switch (msg.kind) {
@@ -402,7 +407,7 @@ fn receiveIrcMessages(self: *Network) !void {
                     },
                 }
 
-                self.ch.put(GlobalEventUnion{ .network = .{ .message = msg } });
+                self.ch.postEvent(GlobalEventUnion{ .network = .{ .message = msg } });
 
                 // Hack: when receiving resub events, we generate a fake chat message
                 //       to display the resub message. In the future this should be
@@ -412,7 +417,7 @@ fn receiveIrcMessages(self: *Network) !void {
                 switch (msg.kind) {
                     .resub => |r| {
                         if (r.resub_message.len > 0) {
-                            self.ch.put(GlobalEventUnion{
+                            self.ch.postEvent(GlobalEventUnion{
                                 .network = .{
                                     .message = Chat.Message{
                                         .login_name = msg.login_name,

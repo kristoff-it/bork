@@ -59,16 +59,16 @@ pub fn authenticateToken(gpa: std.mem.Allocator, token: []const u8) !Auth {
         .token = "$token",
     };
 
-    std.debug.print("Twitch auth... \n", .{});
+    std.debug.print("Twitch auth...\n", .{});
 
     const header_oauth = try std.fmt.allocPrint(
         gpa,
-        "Authorization: Bearer {s}",
+        "Authorization: {s}",
         .{token},
     );
     defer gpa.free(header_oauth);
 
-    const result = try std.ChildProcess.run(.{
+    const result = try std.process.Child.run(.{
         .allocator = gpa,
         .argv = &.{
             "curl",
@@ -92,6 +92,7 @@ pub fn authenticateToken(gpa: std.mem.Allocator, token: []const u8) !Auth {
         .allocate = .alloc_always,
         .ignore_unknown_fields = true,
     }) catch {
+        // std.debug.print("auth fail: {s}\n", .{result.stdout});
         // NOTE: A parsing error means token exprired for us because
         //       twitch likes to reply with 200 `{"status":401,"message":"invalid access token"}`
         //       as one does.
