@@ -1,5 +1,5 @@
 const std = @import("std");
-const datetime = @import("datetime").datetime;
+const zeit = @import("zeit");
 const Chat = @import("../../Chat.zig");
 
 const ParseResult = union(enum) {
@@ -10,7 +10,7 @@ const ParseResult = union(enum) {
 
 const log = std.log.scoped(.parser);
 
-pub fn parseMessage(data: []u8, alloc: std.mem.Allocator, tz: datetime.Timezone) !ParseResult {
+pub fn parseMessage(data: []u8, alloc: std.mem.Allocator, tz: *zeit.TimeZone) !ParseResult {
     log.debug("data:\n{s}\n", .{data});
     if (data.len == 0) return error.NoData;
 
@@ -72,15 +72,17 @@ pub fn parseMessage(data: []u8, alloc: std.mem.Allocator, tz: datetime.Timezone)
     const trailer = remaining_data[0..]; // Empty string if no trailer
     log.debug("trailer: [{s}]", .{trailer});
 
-    var cmd_and_args_it = std.mem.tokenize(u8, cmd_and_args, " ");
+    var cmd_and_args_it = std.mem.tokenizeScalar(u8, cmd_and_args, ' ');
     const cmd = cmd_and_args_it.next().?; // Calling the iterator once should never fail
 
     // Prepare fields common to multiple msg types
+    const now_utc = try zeit.instant(.{});
+    const now = now_utc.in(tz).time();
+
     var time: [5]u8 = undefined;
-    const now = datetime.Datetime.now().shiftTimezone(&tz);
     _ = std.fmt.bufPrint(&time, "{d:0>2}:{d:0>2}", .{
-        now.time.hour,
-        now.time.minute,
+        now.hour,
+        now.minute,
     }) catch unreachable; // we know we have the space
 
     // Switch over all possible message types
@@ -414,15 +416,15 @@ fn parseEmotes(data: []const u8, allocator: std.mem.Allocator) ![]Chat.Message.E
     var emotes = try allocator.alloc(Chat.Message.Emote, count);
     errdefer allocator.free(emotes);
 
-    var emote_it = std.mem.tokenize(u8, data, "/");
+    var emote_it = std.mem.tokenizeScalar(u8, data, '/');
     var i: usize = 0;
     while (emote_it.next()) |e| {
         const colon_pos = std.mem.indexOf(u8, e, ":") orelse return error.NoColon;
         const emote_id = e[0..colon_pos];
 
-        var pos_it = std.mem.tokenize(u8, e[colon_pos + 1 ..], ",");
+        var pos_it = std.mem.tokenizeScalar(u8, e[colon_pos + 1 ..], ',');
         while (pos_it.next()) |pos| : (i += 1) {
-            var it = std.mem.tokenize(u8, pos, "-");
+            var it = std.mem.tokenizeScalar(u8, pos, '-');
             const start = blk: {
                 const str = it.next() orelse return error.NoStart;
                 break :blk try std.fmt.parseInt(usize, str, 10);
@@ -456,7 +458,7 @@ const Badge = struct {
 };
 
 fn parseBadge(data: []const u8) !Badge {
-    var it = std.mem.tokenize(u8, data, "/");
+    var it = std.mem.tokenizeScalar(u8, data, '/');
     return Badge{
         .name = it.next().?, // first call will not fail
         .count = try std.fmt.parseInt(usize, it.rest(), 10),
@@ -501,12 +503,12 @@ fn parseMetaSubsetLinear(meta: []const u8, keys: anytype) ![keys.len][]const u8 
     // `emote-only` which is present when a message contains only emotes,
     // but disappears when there's also non-emote content. GJ Twitch!
     var values: [keys.len][]const u8 = undefined;
-    var it = std.mem.tokenize(u8, meta, ";");
+    var it = std.mem.tokenizeScalar(u8, meta, ';');
 
     // linear scan
     const first_miss: usize = outer: for (keys, 0..) |k, i| {
         while (it.next()) |kv| {
-            var kv_it = std.mem.tokenize(u8, kv, "=");
+            var kv_it = std.mem.tokenizeScalar(u8, kv, '=');
             const meta_k = kv_it.next().?; // First call will always succeed
             const meta_v = kv_it.rest();
             if (std.mem.eql(u8, k, meta_k)) {
@@ -528,9 +530,9 @@ fn parseMetaSubsetLinear(meta: []const u8, keys: anytype) ![keys.len][]const u8 
 
     // bad scan
     outer: for (keys[first_miss..], 0..) |k, i| {
-        it = std.mem.tokenize(u8, meta, ";"); // we now reset every loop
+        it = std.mem.tokenizeScalar(u8, meta, ';'); // we now reset every loop
         while (it.next()) |kv| {
-            var kv_it = std.mem.tokenize(u8, kv, "=");
+            var kv_it = std.mem.tokenizeScalar(u8, kv, '=');
             const meta_k = kv_it.next().?; // First call will always succeed
             const meta_v = kv_it.rest();
             if (std.mem.eql(u8, k, meta_k)) {

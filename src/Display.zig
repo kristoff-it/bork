@@ -3,10 +3,8 @@ const options = @import("build_options");
 const std = @import("std");
 const os = std.os;
 const posix = std.posix;
-const ziglyph = @import("ziglyph");
-const dw = ziglyph.display_width;
-const Grapheme = ziglyph.Grapheme;
-const GraphemeIterator = Grapheme.GraphemeIterator;
+const grapheme = @import("grapheme");
+const DisplayWidth = @import("DisplayWidth");
 // const Word = ziglyph.Word;
 // const WordIterator = Word.WordIterator;
 const main = @import("main.zig");
@@ -21,6 +19,9 @@ const log = std.log.scoped(.display);
 var gpa: std.mem.Allocator = undefined;
 var config: Config = undefined;
 var ch: *Channel(GlobalEventUnion) = undefined;
+var gd: grapheme.GraphemeData = undefined;
+var dwd: DisplayWidth.DisplayWidthData = undefined;
+const dw = DisplayWidth{ .data = &dwd };
 
 var size: Size = undefined;
 var tty: std.fs.File = undefined;
@@ -87,6 +88,9 @@ pub fn setup(
     config = config_;
     chat = chat_;
 
+    gd = try grapheme.GraphemeData.init(gpa);
+    dwd = try DisplayWidth.DisplayWidthData.init(gpa);
+
     const name = std.posix.getenv("TERM") orelse
         std.posix.getenv("TERM_PROGRAM") orelse
         "";
@@ -141,7 +145,7 @@ pub fn setup(
     errdefer restoreModes();
 
     // resize handler
-    try std.posix.sigaction(std.posix.SIG.WINCH, &std.posix.Sigaction{
+    std.posix.sigaction(std.posix.SIG.WINCH, &std.posix.Sigaction{
         .handler = .{ .handler = winchHandler },
         .mask = switch (builtin.os.tag) {
             .macos => 0,
@@ -226,11 +230,11 @@ const Size = struct {
 };
 
 fn getTermSize() Size {
-    var winsize = std.mem.zeroes(posix.system.winsize);
+    var winsize = std.mem.zeroes(std.posix.system.winsize);
 
     const err = posix.system.ioctl(tty.handle, std.posix.T.IOCGWINSZ, @intFromPtr(&winsize));
     if (posix.errno(err) == .SUCCESS) {
-        return Size{ .rows = winsize.ws_row, .cols = winsize.ws_col };
+        return Size{ .rows = winsize.row, .cols = winsize.col };
     }
 
     log.err("updateTermSize failed!", .{});
@@ -254,7 +258,7 @@ pub fn sizeChanged() bool {
 
 const window_title_width = window_title.len - 2;
 const window_title: []const u8 = blk: {
-    var v = std.mem.tokenize(u8, options.version, ".");
+    var v = std.mem.tokenizeScalar(u8, options.version, '.');
     const major = v.next().?;
     const minor = v.next().?;
     const patch = v.next().?;
@@ -346,7 +350,7 @@ pub fn render() !void {
         // central lines
         try w.writeAll("║");
         {
-            const width = try dw.strWidth(a.title, .half);
+            const width = dw.strWidth(a.title);
             const padding = (size.cols -| width) / 2;
             for (0..padding -| 1) |_| try w.writeAll(" ");
             try w.print("{s}", .{a.title});
@@ -376,7 +380,7 @@ pub fn render() !void {
         try w.writeAll("║\r\n");
         try w.writeAll("║");
         {
-            const width = try dw.strWidth(a.reason, .half);
+            const width = dw.strWidth(a.reason);
             const padding = (size.cols -| width) / 2;
             for (0..padding -| 1) |_| try w.writeAll(" ");
             try w.print("{s}", .{a.reason});
@@ -598,7 +602,7 @@ fn renderMessage(
                     .sub_gift => .{x.sender_display_name},
                     else => .{x.display_name},
                 };
-                const width = try dw.strWidth(args[0], .half) + 2;
+                const width = dw.strWidth(args[0]) + 2;
                 const padding = (size.cols -| width) / 2;
                 for (0..padding) |_| try w.writeAll(" ");
                 try w.print(fmt, args);
@@ -619,10 +623,8 @@ fn renderMessage(
                     .charity => "💝",
                     else => "🎉",
                 };
-                const emoji_width = comptime dw.strWidth(
-                    emoji,
-                    .half,
-                ) catch unreachable;
+                // const emoji_width = comptime dw.strWidth(emoji) catch unreachable;
+                const emoji_width = 2;
 
                 const fmt = switch (tag) {
                     .charity => " {s} charity donation! ",
@@ -652,7 +654,7 @@ fn renderMessage(
                     .sub_gift => std.fmt.count(fmt, .{
                         x.tier.name(),
                         "",
-                    }) + try dw.strWidth(x.recipient_display_name, .half),
+                    }) + dw.strWidth(x.recipient_display_name),
                     else => std.fmt.count(fmt, args) + (emoji_width * 2),
                 };
                 const padding = (size.cols -| width) / 2;
@@ -691,7 +693,7 @@ fn printWrap(
     while (it.next()) |word| : (cp += 1) {
         cp += try std.unicode.utf8CountCodepoints(word);
 
-        const word_width: usize = @intCast(try dw.strWidth(word, .half));
+        const word_width: usize = @intCast(dw.strWidth(word));
 
         if (emulator_supports_emotes and emote_array_idx < emotes.len and
             emotes[emote_array_idx].end == cp - 1)
@@ -743,12 +745,12 @@ fn printWrap(
                     current_col += 1;
                 }
 
-                var git = GraphemeIterator.init(link);
+                var git = grapheme.Iterator.init(link, &gd);
                 var url_is_off = true;
-                while (git.next()) |grapheme| {
-                    const bytes = grapheme.slice(link);
+                while (git.next()) |gh| {
+                    const bytes = gh.bytes(link);
                     const remaining = cols -| current_col;
-                    const grapheme_cols = try dw.strWidth(bytes, .half);
+                    const grapheme_cols = dw.strWidth(bytes);
                     if (grapheme_cols > remaining) {
                         if (!url_is_off) {
                             url_is_off = true;
@@ -795,11 +797,11 @@ fn printWrap(
                     current_col += 1;
                 }
             } else {
-                var git = GraphemeIterator.init(word);
-                while (git.next()) |grapheme| {
-                    const bytes = grapheme.slice(word);
+                var git = grapheme.Iterator.init(word, &gd);
+                while (git.next()) |gh| {
+                    const bytes = gh.bytes(word);
                     const remaining = cols -| current_col;
-                    const grapheme_cols = try dw.strWidth(bytes, .half);
+                    const grapheme_cols = dw.strWidth(bytes);
                     if (grapheme_cols > remaining) {
                         if (hl) {
                             for (0..remaining) |_| try w.writeAll(" ");
@@ -879,7 +881,7 @@ pub fn handleClick(row: usize, col: usize) !bool {
             return true;
         },
         .nick => |n| {
-            if (col < 6 or col > 6 + 1 + try dw.strWidth(n, .half) + 1) {
+            if (col < 6 or col > 6 + 1 + dw.strWidth(n) + 1) {
                 new = .none;
             }
         },
