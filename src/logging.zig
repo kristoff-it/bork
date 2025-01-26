@@ -1,8 +1,12 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const options = @import("build_options");
 const folders = @import("known-folders");
 
-var log_file: ?std.fs.File = std.io.getStdErr();
+var log_file: ?std.fs.File = switch (builtin.taget.os.tag) {
+    .windows => null,
+    else => std.io.getStdErr(),
+};
 
 pub fn logFn(
     comptime level: std.log.Level,
@@ -25,6 +29,8 @@ pub fn logFn(
 pub fn setup(gpa: std.mem.Allocator) void {
     std.debug.lockStdErr();
     defer std.debug.unlockStdErr();
+
+    log_file = std.io.getStdErr();
 
     setup_internal(gpa) catch {
         log_file = null;
