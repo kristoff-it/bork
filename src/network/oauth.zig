@@ -97,13 +97,13 @@ pub fn createToken(
     try token_file.writer().print("{s}\n", .{token});
 
     const in = std.io.getStdIn();
-    const original_termios = try std.posix.tcgetattr(in.handle);
+    // const original_termios = try std.posix.tcgetattr(in.handle);
     {
-        defer std.posix.tcsetattr(in.handle, .FLUSH, original_termios) catch {};
-        var termios = original_termios;
-        // set immediate input mode
-        termios.lflag.ICANON = false;
-        try std.posix.tcsetattr(in.handle, .FLUSH, termios);
+        // defer std.posix.tcsetattr(in.handle, .FLUSH, original_termios) catch {};
+        // var termios = original_termios;
+        // // set immediate input mode
+        // termios.lflag.ICANON = false;
+        // try std.posix.tcsetattr(in.handle, .FLUSH, termios);
 
         std.debug.print(
             \\
