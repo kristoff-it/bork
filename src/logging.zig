@@ -3,7 +3,7 @@ const builtin = @import("builtin");
 const options = @import("build_options");
 const folders = @import("known-folders");
 
-var log_file: ?std.fs.File = switch (builtin.taget.os.tag) {
+var log_file: ?std.fs.File = switch (builtin.target.os.tag) {
     .windows => null,
     else => std.io.getStdErr(),
 };

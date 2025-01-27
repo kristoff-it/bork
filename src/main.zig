@@ -131,17 +131,17 @@ fn borkStart(gpa: std.mem.Allocator) !void {
     try loop.start();
     defer loop.stop();
 
-    var remote_server: remote.Server = undefined;
-    remote_server.init(gpa, auth, &loop) catch |err| {
-        std.debug.print(
-            \\ Unable to listen for remote control.
-            \\ Error: {}
-            \\
-        , .{err});
-        std.process.exit(1);
-    };
+    // const remote_server: remote.Server = undefined;
+    // remote_server.init(gpa, auth, &loop) catch |err| {
+    //     std.debug.print(
+    //         \\ Unable to listen for remote control.
+    //         \\ Error: {}
+    //         \\
+    //     , .{err});
+    //     std.process.exit(1);
+    // };
 
-    defer remote_server.deinit();
+    // defer remote_server.deinit();
 
     var network: Network = undefined;
     try network.init(gpa, &loop, config, auth);
