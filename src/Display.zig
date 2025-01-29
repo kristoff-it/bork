@@ -79,28 +79,6 @@ pub fn setup(
     config = config_;
     chat = chat_;
 
-    // var new_termios = original_termios.?;
-
-    // // termios flags for 'raw' mode.
-    // new_termios.iflag.IGNBRK = false;
-    // new_termios.iflag.BRKINT = false;
-    // new_termios.iflag.PARMRK = false;
-    // new_termios.iflag.ISTRIP = false;
-    // new_termios.iflag.INLCR = false;
-    // new_termios.iflag.IGNCR = false;
-    // new_termios.iflag.ICRNL = false;
-    // new_termios.iflag.IXON = false;
-
-    // new_termios.lflag.ICANON = false;
-    // new_termios.lflag.ECHO = false;
-    // new_termios.lflag.ECHONL = false;
-    // new_termios.lflag.IEXTEN = false;
-    // new_termios.lflag.ISIG = false;
-
-    // new_termios.oflag.OPOST = false;
-
-    // new_termios.cflag.CSIZE = .CS8;
-
     elements = try gpa.alloc(InteractiveElement, size.rows + 1);
     const ticker_thread = try std.Thread.spawn(.{}, tick, .{});
     ticker_thread.detach();

@@ -183,7 +183,7 @@ fn handle(self: *Server, stream: std.net.Stream) !void {
             .method = .GET,
             .response_storage = .{ .dynamic = &live_buf },
             .extra_headers = &.{
-                .{ .name = "Authorization", .value = self.auth.youtube.token },
+                .{ .name = "Authorization", .value = self.auth.youtube.token.access },
             },
         });
 
