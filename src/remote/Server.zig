@@ -1,6 +1,7 @@
 const Server = @This();
 
 const std = @import("std");
+const builtin = @import("builtin");
 const folders = @import("known-folders");
 const vaxis = @import("vaxis");
 
@@ -55,8 +56,8 @@ pub fn init(
 
     const address = try std.net.Address.initUnix(socket_path);
     self.listener = try address.listen(.{
-        .reuse_address = true,
-        .reuse_port = true,
+        .reuse_address = builtin.target.os.tag != .windows,
+        .reuse_port = builtin.target.os.tag != .windows,
     });
 
     errdefer self.listener.deinit();
