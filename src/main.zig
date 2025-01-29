@@ -132,17 +132,17 @@ fn borkStart(gpa: std.mem.Allocator) !void {
     try loop.start();
     defer loop.stop();
 
-    // const remote_server: remote.Server = undefined;
-    // remote_server.init(gpa, auth, &loop) catch |err| {
-    //     std.debug.print(
-    //         \\ Unable to listen for remote control.
-    //         \\ Error: {}
-    //         \\
-    //     , .{err});
-    //     std.process.exit(1);
-    // };
+    var remote_server: remote.Server = undefined;
+    remote_server.init(gpa, auth, &loop) catch |err| {
+        std.debug.print(
+            \\ Unable to listen for remote control.
+            \\ Error: {}
+            \\
+        , .{err});
+        std.process.exit(1);
+    };
 
-    // defer remote_server.deinit();
+    defer remote_server.deinit();
 
     var network: Network = undefined;
     try network.init(gpa, &loop, config, auth);
@@ -198,16 +198,40 @@ fn borkStart(gpa: std.mem.Allocator) !void {
 
             .key_press => |key| {
                 if (key.matches('c', .{ .ctrl = true })) {
-                    break;
-                } else {
+                    if (config.ctrl_c_protection) {
+                        need_repaint = try display.showCtrlCMessage();
+                    } else {
+                        break;
+                    }
+                } else if (key.matches(vaxis.Key.up, .{})) {
+                    chat.scroll(1);
                     need_repaint = true;
+                } else if (key.matches(vaxis.Key.down, .{})) {
+                    chat.scroll(-1);
+                    need_repaint = true;
+                } else {
+                    // need_repaint = true;
                     std.log.debug("key pressed: {}", .{key});
                 }
             },
             .mouse => |m| {
                 if (m.type != .press) continue;
-                std.log.debug("click at {}:{}", .{ m.row, m.col });
-                need_repaint = try display.handleClick(m.row + 1, m.col + 1);
+
+                switch (m.button) {
+                    else => {},
+                    .left => {
+                        std.log.debug("click at {}:{}", .{ m.row, m.col });
+                        need_repaint = try display.handleClick(m.row + 1, m.col + 1);
+                    },
+                    .wheel_up => {
+                        chat.scroll(1);
+                        need_repaint = true;
+                    },
+                    .wheel_down => {
+                        chat.scroll(-1);
+                        need_repaint = true;
+                    },
+                }
             },
             .display => |de| {
                 switch (de) {
@@ -215,22 +239,6 @@ fn borkStart(gpa: std.mem.Allocator) !void {
                     .tick => {
                         need_repaint = display.wantTick();
                     },
-                    // .ctrl_c => {
-                    //     if (config.ctrl_c_protection) {
-                    //         need_repaint = try Display.showCtrlCMessage();
-                    //     } else {
-                    //         return;
-                    //     }
-                    // },
-                    // .up, .wheel_up, .page_up => {
-                    //     chat.scroll(1);
-                    //     need_repaint = true;
-                    // },
-                    // .down, .wheel_down, .page_down => {
-                    //     chat.scroll(-1);
-                    //     need_repaint = true;
-                    // },
-
                     // .left, .right => {},
                 }
             },
