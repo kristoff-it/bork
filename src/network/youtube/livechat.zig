@@ -1,6 +1,8 @@
 const std = @import("std");
 const build_opts = @import("build_options");
 const Network = @import("../../Network.zig");
+const oauth = @import("../oauth.zig");
+const auth = @import("auth.zig");
 
 const log = std.log.scoped(.livechat);
 
@@ -25,7 +27,7 @@ pub fn poll(n: *Network) !void {
 
     var livechat: std.BoundedArray(u8, 4096) = .{};
     var page_token: std.BoundedArray(u8, 128) = .{};
-
+    var token = n.auth.youtube.token;
     while (true) : (_ = arena_impl.reset(.retain_capacity)) {
         if (@atomicRmw(?[*:0]const u8, &new_chat_id, .Xchg, null, .acq_rel)) |nc| {
             const new = std.mem.span(nc);
@@ -39,13 +41,20 @@ pub fn poll(n: *Network) !void {
             page_token.len = 0;
         }
 
+        // Refresh the token once it's about to expire
+        if (token.expires_at_seconds -| std.time.timestamp() < 60 * 10) { // <10mins
+            log.debug("youtube refreshing token", .{});
+            token = try auth.refreshToken(n.gpa, token.refresh);
+            log.debug("youtube token refresh succeeded", .{});
+        }
+
         switch (state) {
             .err => {
                 // Sleep for a bit waiting for a new remote command
                 std.time.sleep(1 * std.time.ns_per_s);
             },
             .searching => {
-                const maybe_chat_id = findLive(arena, n.auth.youtube.token) catch {
+                const maybe_chat_id = findLive(arena, token) catch {
                     state = .err;
                     continue;
                 };
@@ -55,6 +64,7 @@ pub fn poll(n: *Network) !void {
                     continue;
                 }
 
+                log.debug("YT SEARCHING for active broadcast, sleeping", .{});
                 std.time.sleep(3 * std.time.ns_per_s);
             },
             .attached => |chat_id| {
@@ -62,13 +72,14 @@ pub fn poll(n: *Network) !void {
                 try livechat.writer().print(livechat_url, .{ chat_id, page_token.slice() });
                 // std.debug.print("polling {s}\n", .{url_buf.items});
 
+                log.debug("YT POLLING for messages", .{});
                 var buf = std.ArrayList(u8).init(arena);
                 const chat_res = yt.fetch(.{
                     .location = .{ .url = livechat.slice() },
                     .method = .GET,
                     .response_storage = .{ .dynamic = &buf },
                     .extra_headers = &.{
-                        .{ .name = "Authorization", .value = n.auth.youtube.token },
+                        .{ .name = "Authorization", .value = token.access },
                     },
                 }) catch {
                     state = .err;
@@ -91,7 +102,9 @@ pub fn poll(n: *Network) !void {
                 };
 
                 page_token.len = 0;
-                page_token.appendSlice(messages.nextPageToken) catch @panic("increase pageToken buffer");
+                page_token.appendSlice(messages.nextPageToken) catch {
+                    @panic("increase pageToken buffer");
+                };
 
                 for (messages.items) |m| {
                     const name = try n.gpa.dupe(u8, m.authorDetails.displayName);
@@ -117,8 +130,9 @@ pub fn poll(n: *Network) !void {
                     });
                 }
 
-                // std.debug.print("Sleeping for {}ms", .{messages.pollingIntervalMillis});
-                const delay = messages.pollingIntervalMillis * std.time.ns_per_ms;
+                const delay = @max(3500, messages.pollingIntervalMillis) * std.time.ns_per_ms;
+
+                log.debug("YT POLLING sleep for {}", .{delay});
                 std.time.sleep(delay);
             },
         }
@@ -127,25 +141,26 @@ pub fn poll(n: *Network) !void {
 
 // Searches for an active livestream and doubles as a token validation
 // function since the call will fail if the token has expired.
-pub fn findLive(gpa: std.mem.Allocator, token: []const u8) !?[]const u8 {
-    if (build_opts.local) return .{ .enabled = false };
-
+pub fn findLive(gpa: std.mem.Allocator, token: oauth.Token.YouTube) !?[]const u8 {
     var yt: std.http.Client = .{ .allocator = gpa };
     defer yt.deinit();
 
     var buf = std.ArrayList(u8).init(gpa);
     defer buf.deinit();
 
+    log.debug("YT REQUEST: find live broadcast", .{});
+
     const res = try yt.fetch(.{
         .location = .{ .url = broadcasts_url },
         .method = .GET,
         .response_storage = .{ .dynamic = &buf },
         .extra_headers = &.{
-            .{ .name = "Authorization", .value = token },
+            .{ .name = "Authorization", .value = token.access },
         },
     });
 
     if (res.status != .ok) {
+        log.debug("yt broadcast api error = {s}", .{buf.items});
         return error.InvalidToken;
     }
 
@@ -157,6 +172,8 @@ pub fn findLive(gpa: std.mem.Allocator, token: []const u8) !?[]const u8 {
     const chat_id: ?[]const u8 = for (lives.value.items) |l| {
         if (std.mem.eql(u8, l.status.lifeCycleStatus, "live")) break try gpa.dupe(u8, l.snippet.liveChatId);
     } else null;
+
+    log.debug("youtube chat_id: {?s}", .{chat_id});
 
     return chat_id;
 }
