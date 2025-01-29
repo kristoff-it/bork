@@ -11,10 +11,10 @@ const Channel = @import("utils/channel.zig").Channel;
 const remote = @import("remote.zig");
 const Config = @import("Config.zig");
 const Network = @import("Network.zig");
+const display = @import("display.zig");
 const Auth = Network.Auth;
 const TwitchAuth = Network.TwitchAuth;
 const YouTubeAuth = Network.YouTubeAuth;
-const Display = @import("Display1.zig");
 const Chat = @import("Chat.zig");
 
 pub const known_folders_config: folders.KnownFolderConfig = .{
@@ -31,7 +31,7 @@ pub fn panic(
     error_return_trace: ?*std.builtin.StackTrace,
     ret_addr: ?usize,
 ) noreturn {
-    Display.teardown();
+    display.teardown();
     vaxis.recover();
     std.log.err("{s}\n\n", .{msg});
     if (error_return_trace) |t| std.debug.dumpStackTrace(t.*);
@@ -42,12 +42,13 @@ pub fn panic(
 }
 
 pub const Event = union(enum) {
-    // display: Display.Event,
+    display: display.Event,
     network: Network.Event,
     remote: remote.Server.Event,
 
     // vaxis-specific events
     key_press: vaxis.Key,
+    mouse: vaxis.Mouse,
     winsize: vaxis.Winsize,
     // focus_in,
 };
@@ -153,8 +154,8 @@ fn borkStart(gpa: std.mem.Allocator) !void {
 
     try vx.queryTerminal(tty.anyWriter(), 1 * std.time.ns_per_s);
 
-    try Display.setup(gpa, &loop, config, &chat);
-    defer Display.teardown();
+    try display.setup(gpa, &loop, config, &chat);
+    defer display.teardown();
 
     // Initial paint!
     // try Display.render();
@@ -176,12 +177,24 @@ fn borkStart(gpa: std.mem.Allocator) !void {
                         remote.Server.replyLinks(&chat, conn);
                     },
                     .afk => |afk| {
-                        try Display.setAfkMessage(afk.target_time, afk.reason, afk.title);
+                        try display.setAfkMessage(afk.target_time, afk.reason, afk.title);
                         need_repaint = true;
                     },
                 }
             },
-            .winsize => |ws| try vx.resize(gpa, tty.anyWriter(), ws),
+            .winsize => |ws| {
+                need_repaint = display.sizeChanged(.{
+                    .rows = ws.rows,
+                    .cols = ws.cols,
+                });
+
+                vx.screen.width = ws.cols;
+                vx.screen.height = ws.rows;
+                vx.screen.width_pix = ws.x_pixel;
+                vx.screen.height_pix = ws.y_pixel;
+
+                // try vx.resize(gpa, tty.anyWriter(), ws),
+            },
 
             .key_press => |key| {
                 if (key.matches('c', .{ .ctrl = true })) {
@@ -190,37 +203,37 @@ fn borkStart(gpa: std.mem.Allocator) !void {
                     need_repaint = true;
                     std.log.debug("key pressed: {}", .{key});
                 }
-            }, // .display => |de| {
-            //     switch (de) {
-            //         .tick => {
-            //             need_repaint = Display.wantTick();
-            //         },
-            //         .size_changed => {
-            //             need_repaint = Display.sizeChanged();
-            //         },
-            //         .left_click => |pos| {
-            //             std.log.debug("click at {}", .{pos});
-            //             need_repaint = try Display.handleClick(pos.row - 1, pos.col - 1);
-            //         },
-            //         .ctrl_c => {
-            //             if (config.ctrl_c_protection) {
-            //                 need_repaint = try Display.showCtrlCMessage();
-            //             } else {
-            //                 return;
-            //             }
-            //         },
-            //         .up, .wheel_up, .page_up => {
-            //             chat.scroll(1);
-            //             need_repaint = true;
-            //         },
-            //         .down, .wheel_down, .page_down => {
-            //             chat.scroll(-1);
-            //             need_repaint = true;
-            //         },
+            },
+            .mouse => |m| {
+                if (m.type != .press) continue;
+                std.log.debug("click at {}:{}", .{ m.row, m.col });
+                need_repaint = try display.handleClick(m.row + 1, m.col + 1);
+            },
+            .display => |de| {
+                switch (de) {
+                    else => {},
+                    .tick => {
+                        need_repaint = display.wantTick();
+                    },
+                    // .ctrl_c => {
+                    //     if (config.ctrl_c_protection) {
+                    //         need_repaint = try Display.showCtrlCMessage();
+                    //     } else {
+                    //         return;
+                    //     }
+                    // },
+                    // .up, .wheel_up, .page_up => {
+                    //     chat.scroll(1);
+                    //     need_repaint = true;
+                    // },
+                    // .down, .wheel_down, .page_down => {
+                    //     chat.scroll(-1);
+                    //     need_repaint = true;
+                    // },
 
-            //         .left, .right => {},
-            //     }
-            // },
+                    // .left, .right => {},
+                }
+            },
             .network => |ne| switch (ne) {
                 .connected => {},
                 .disconnected => {
@@ -232,18 +245,18 @@ fn borkStart(gpa: std.mem.Allocator) !void {
                     need_repaint = true;
                 },
                 .message => |m| {
-                    const msg = try Display.prepareMessage(m);
+                    const msg = try display.prepareMessage(m);
                     need_repaint = chat.addMessage(msg);
                 },
                 .clear => |c| {
-                    Display.clearActiveInteraction(c);
+                    display.clearActiveInteraction(c);
                     chat.clearChat(c);
                     need_repaint = true;
                 },
             },
         }
 
-        if (need_repaint) try Display.render();
+        if (need_repaint) try display.render();
     }
 
     // TODO: implement real cleanup

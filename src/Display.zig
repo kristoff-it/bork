@@ -1,32 +1,23 @@
+const std = @import("std");
 const builtin = @import("builtin");
 const options = @import("build_options");
-const std = @import("std");
-const os = std.os;
-const posix = std.posix;
-const grapheme = @import("grapheme");
-const DisplayWidth = @import("DisplayWidth");
-// const Word = ziglyph.Word;
-// const WordIterator = Word.WordIterator;
+const vaxis = @import("vaxis");
 const main = @import("main.zig");
 const url = @import("utils/url.zig");
 const Config = @import("Config.zig");
 const Chat = @import("Chat.zig");
 const Channel = @import("utils/channel.zig").Channel;
+const os = std.os;
+const posix = std.posix;
 const GlobalEventUnion = main.Event;
 
 const log = std.log.scoped(.display);
 
 var gpa: std.mem.Allocator = undefined;
 var config: Config = undefined;
-var ch: *Channel(GlobalEventUnion) = undefined;
-var gd: grapheme.GraphemeData = undefined;
-var dwd: DisplayWidth.DisplayWidthData = undefined;
-const dw = DisplayWidth{ .data = &dwd };
+var loop: *vaxis.Loop(GlobalEventUnion) = undefined;
 
-var size: Size = undefined;
-var tty: std.fs.File = undefined;
-var original_termios: ?posix.termios = null;
-var emulator_supports_emotes = false;
+var size: Size = .{ .rows = 0, .cols = 0 };
 var message_rendering_buffer: std.ArrayListUnmanaged(u8) = .{};
 var emote_cache: std.AutoHashMapUnmanaged(u32, void) = .{};
 var chat: *Chat = undefined;
@@ -79,147 +70,72 @@ pub const Event = union(enum) {
 
 pub fn setup(
     gpa_: std.mem.Allocator,
-    ch_: *Channel(GlobalEventUnion),
+    loop_: *vaxis.Loop(GlobalEventUnion),
     config_: Config,
     chat_: *Chat,
 ) !void {
     gpa = gpa_;
-    ch = ch_;
+    loop = loop_;
     config = config_;
     chat = chat_;
 
-    gd = try grapheme.GraphemeData.init(gpa);
-    dwd = try DisplayWidth.DisplayWidthData.init(gpa);
+    // var new_termios = original_termios.?;
 
-    const name = std.posix.getenv("TERM") orelse
-        std.posix.getenv("TERM_PROGRAM") orelse
-        "";
+    // // termios flags for 'raw' mode.
+    // new_termios.iflag.IGNBRK = false;
+    // new_termios.iflag.BRKINT = false;
+    // new_termios.iflag.PARMRK = false;
+    // new_termios.iflag.ISTRIP = false;
+    // new_termios.iflag.INLCR = false;
+    // new_termios.iflag.IGNCR = false;
+    // new_termios.iflag.ICRNL = false;
+    // new_termios.iflag.IXON = false;
 
-    emulator_supports_emotes = std.mem.eql(u8, name, "xterm-ghostty") or
-        std.mem.eql(u8, name, "xterm-kitty");
-    log.debug("emulator emote support = {}", .{emulator_supports_emotes});
+    // new_termios.lflag.ICANON = false;
+    // new_termios.lflag.ECHO = false;
+    // new_termios.lflag.ECHONL = false;
+    // new_termios.lflag.IEXTEN = false;
+    // new_termios.lflag.ISIG = false;
 
-    tty = try std.fs.openFileAbsolute("/dev/tty", .{ .mode = .read_write });
-    errdefer tty.close();
+    // new_termios.oflag.OPOST = false;
 
-    original_termios = try posix.tcgetattr(tty.handle);
-    errdefer original_termios = null;
+    // new_termios.cflag.CSIZE = .CS8;
 
-    var new_termios = original_termios.?;
-
-    // termios flags for 'raw' mode.
-    new_termios.iflag.IGNBRK = false;
-    new_termios.iflag.BRKINT = false;
-    new_termios.iflag.PARMRK = false;
-    new_termios.iflag.ISTRIP = false;
-    new_termios.iflag.INLCR = false;
-    new_termios.iflag.IGNCR = false;
-    new_termios.iflag.ICRNL = false;
-    new_termios.iflag.IXON = false;
-
-    new_termios.lflag.ICANON = false;
-    new_termios.lflag.ECHO = false;
-    new_termios.lflag.ECHONL = false;
-    new_termios.lflag.IEXTEN = false;
-    new_termios.lflag.ISIG = false;
-
-    new_termios.oflag.OPOST = false;
-
-    new_termios.cflag.CSIZE = .CS8;
-
-    try posix.tcsetattr(tty.handle, .FLUSH, new_termios);
-    errdefer posix.tcsetattr(tty.handle, .FLUSH, original_termios.?) catch {};
-
-    try tty.writeAll(
-        // enter alt screen
-        "\x1B[s\x1B[?47h\x1B[?1049h" ++
-            // dislable wrapping mode
-            "\x1B[?7l" ++
-            //  disable insert mode (replaces text)
-            "\x1B[4l" ++
-            // hide the cursor
-            "\x1B[?25l" ++
-            // mouse mode
-            "\x1B[?1000h",
-    );
-    errdefer restoreModes();
-
-    // resize handler
-    std.posix.sigaction(std.posix.SIG.WINCH, &std.posix.Sigaction{
-        .handler = .{ .handler = winchHandler },
-        .mask = switch (builtin.os.tag) {
-            .macos => 0,
-            .linux => std.posix.empty_sigset,
-            .windows => @compileError("TODO: SIGWINCH support for windows"),
-            else => @compileError("os not supported"),
-        },
-        .flags = 0,
-    }, null);
-
-    size = getTermSize();
     elements = try gpa.alloc(InteractiveElement, size.rows + 1);
-
-    const input_thread = try std.Thread.spawn(.{}, readInput, .{});
-    input_thread.detach();
     const ticker_thread = try std.Thread.spawn(.{}, tick, .{});
     ticker_thread.detach();
-}
 
-// handles window resize
-fn winchHandler(_: c_int) callconv(.C) void {
-    ch.tryPut(.{ .display = .size_changed }) catch {};
+    try loop.vaxis.setMouseMode(loop.tty.anyWriter(), true);
+    try loop.tty.anyWriter().writeAll(
+    // enter alt screen
+    // "\x1B[s\x1B[?47h\x1B[?1049h" ++
+    // dislable wrapping mode
+    // "\x1B[?7l" ++
+    //  disable insert mode (replaces text)
+    // "\x1B[4l" ++
+    // hide the cursor
+    "\x1B[?25l"
+    // ++
+    // mouse mode
+    // "\x1B[?1000h",
+    );
 }
 
 fn tick() void {
     while (true) {
-        ch.tryPut(.{ .display = .tick }) catch {};
+        _ = loop.tryPostEvent(.{ .display = .tick });
         std.time.sleep(250 * std.time.ns_per_ms);
     }
 }
 
 pub fn teardown() void {
     log.debug("display teardown!", .{});
-    if (original_termios) |og| {
-        restoreModes();
-        posix.tcsetattr(tty.handle, .FLUSH, og) catch std.process.exit(1);
-        message_rendering_buffer.deinit(gpa);
-        original_termios = null;
-    }
+    message_rendering_buffer.deinit(gpa);
 }
 
-fn restoreModes() void {
-    tty.writeAll(
-        // exit alt screen
-        "\x1B[u\x1B[?47l\x1B[?1049l" ++
-            // enable wrapping mode
-            "\x1B[?7h" ++
-            // show the cursor
-            "\x1B[?25h" ++
-            // disable mouse mode
-            "\x1B[?1000l" ++
-            // exit sync mode
-            "\x1B[?2026l",
-    ) catch std.process.exit(1);
-}
-
-pub fn readInput() !void {
-    var buffered_reader = std.io.bufferedReader(tty.reader());
-    const r = buffered_reader.reader();
-    while (true) {
-        const event = parseEvent(r) catch |err| {
-            log.debug("readInput errored out: {}", .{err});
-            if (err == error.NotOpenForReading) return;
-            return err;
-        };
-        log.debug("event: {any}", .{event});
-        ch.put(.{ .display = event });
-    }
-}
-
-fn moveCursor(w: Writer, row: usize, col: usize) !void {
+fn moveCursor(w: anytype, row: usize, col: usize) !void {
     try w.print("\x1B[{};{}H", .{ row, col });
 }
-const Writer = std.io.BufferedWriter(4096, std.fs.File.Writer).Writer;
 const Size = struct {
     rows: usize,
     cols: usize,
@@ -229,27 +145,13 @@ const Size = struct {
     }
 };
 
-fn getTermSize() Size {
-    var winsize = std.mem.zeroes(std.posix.system.winsize);
-
-    const err = posix.system.ioctl(tty.handle, std.posix.T.IOCGWINSZ, @intFromPtr(&winsize));
-    if (posix.errno(err) == .SUCCESS) {
-        return Size{ .rows = winsize.row, .cols = winsize.col };
-    }
-
-    log.err("updateTermSize failed!", .{});
-    std.process.exit(1);
-}
-
-pub fn sizeChanged() bool {
-    const new = getTermSize();
-
+pub fn sizeChanged(new: Size) bool {
     log.debug("size changed! {} {}", .{ new, size });
 
     if (new.eql(size)) return false;
 
-    if (size.rows > elements.len) {
-        elements = gpa.realloc(elements, size.rows + 1) catch
+    if (new.rows > elements.len) {
+        elements = gpa.realloc(elements, new.rows + 1) catch
             @panic("oom");
     }
     size = new;
@@ -274,7 +176,7 @@ pub fn render() !void {
     placement_id = 0;
     log.debug("RENDER!\n {?any}", .{chat.last_message});
 
-    var buffered_writer = std.io.bufferedWriter(tty.writer());
+    var buffered_writer = loop.tty.bufferedWriter();
     var w = buffered_writer.writer();
 
     // enter sync mode
@@ -350,7 +252,7 @@ pub fn render() !void {
         // central lines
         try w.writeAll("║");
         {
-            const width = dw.strWidth(a.title);
+            const width = strWidth(a.title);
             const padding = (size.cols -| width) / 2;
             for (0..padding -| 1) |_| try w.writeAll(" ");
             try w.print("{s}", .{a.title});
@@ -380,7 +282,7 @@ pub fn render() !void {
         try w.writeAll("║\r\n");
         try w.writeAll("║");
         {
-            const width = dw.strWidth(a.reason);
+            const width = strWidth(a.reason);
             const padding = (size.cols -| width) / 2;
             for (0..padding -| 1) |_| try w.writeAll(" ");
             try w.print("{s}", .{a.reason});
@@ -460,6 +362,11 @@ pub fn render() !void {
             try moveCursor(w, row, 1);
             try w.writeAll(msg_bytes);
             if (heading_style == .nick and msg.kind == .chat) {
+                log.debug(" elements.len = {} row = {} name = {s}", .{
+                    elements.len,
+                    row,
+                    msg.login_name,
+                });
                 elements[row] = .{ .nick = msg.login_name };
             } else {
                 elements[row] = .{ .message = msg };
@@ -602,7 +509,7 @@ fn renderMessage(
                     .sub_gift => .{x.sender_display_name},
                     else => .{x.display_name},
                 };
-                const width = dw.strWidth(args[0]) + 2;
+                const width = strWidth(args[0]) + 2;
                 const padding = (size.cols -| width) / 2;
                 for (0..padding) |_| try w.writeAll(" ");
                 try w.print(fmt, args);
@@ -654,7 +561,7 @@ fn renderMessage(
                     .sub_gift => std.fmt.count(fmt, .{
                         x.tier.name(),
                         "",
-                    }) + dw.strWidth(x.recipient_display_name),
+                    }) + strWidth(x.recipient_display_name),
                     else => std.fmt.count(fmt, args) + (emoji_width * 2),
                 };
                 const padding = (size.cols -| width) / 2;
@@ -693,9 +600,9 @@ fn printWrap(
     while (it.next()) |word| : (cp += 1) {
         cp += try std.unicode.utf8CountCodepoints(word);
 
-        const word_width: usize = @intCast(dw.strWidth(word));
+        const word_width: usize = @intCast(strWidth(word));
 
-        if (emulator_supports_emotes and emote_array_idx < emotes.len and
+        if (loop.vaxis.caps.kitty_graphics and emote_array_idx < emotes.len and
             emotes[emote_array_idx].end == cp - 1)
         {
             const emote_idx = emotes[emote_array_idx].idx;
@@ -745,12 +652,12 @@ fn printWrap(
                     current_col += 1;
                 }
 
-                var git = grapheme.Iterator.init(link, &gd);
+                var git = loop.vaxis.unicode.graphemeIterator(link);
                 var url_is_off = true;
                 while (git.next()) |gh| {
                     const bytes = gh.bytes(link);
                     const remaining = cols -| current_col;
-                    const grapheme_cols = dw.strWidth(bytes);
+                    const grapheme_cols = strWidth(bytes);
                     if (grapheme_cols > remaining) {
                         if (!url_is_off) {
                             url_is_off = true;
@@ -797,11 +704,11 @@ fn printWrap(
                     current_col += 1;
                 }
             } else {
-                var git = grapheme.Iterator.init(word, &gd);
+                var git = loop.vaxis.unicode.graphemeIterator(word);
                 while (git.next()) |gh| {
                     const bytes = gh.bytes(word);
                     const remaining = cols -| current_col;
-                    const grapheme_cols = dw.strWidth(bytes);
+                    const grapheme_cols = strWidth(bytes);
                     if (grapheme_cols > remaining) {
                         if (hl) {
                             for (0..remaining) |_| try w.writeAll(" ");
@@ -871,6 +778,11 @@ pub fn showCtrlCMessage() !bool {
 pub fn handleClick(row: usize, col: usize) !bool {
     log.debug("click {},{}!", .{ row, col });
 
+    if (row > size.rows or col > size.cols) {
+        log.debug("ignoring out of bounds click", .{});
+        return false;
+    }
+
     var new = elements[row];
 
     switch (new) {
@@ -881,7 +793,7 @@ pub fn handleClick(row: usize, col: usize) !bool {
             return true;
         },
         .nick => |n| {
-            if (col < 6 or col > 6 + 1 + dw.strWidth(n) + 1) {
+            if (col < 6 or col > 6 + 1 + strWidth(n) + 1) {
                 new = .none;
             }
         },
@@ -923,6 +835,10 @@ pub fn panic() void {
     //     t.currently_rendering = false;
     //     t.deinit();
     // }
+}
+
+pub fn strWidth(str: []const u8) u16 {
+    return vaxis.gwidth.gwidth(str, loop.vaxis.caps.unicode, &loop.vaxis.unicode.width_data);
 }
 
 pub const Style = struct {

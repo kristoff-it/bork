@@ -18,7 +18,8 @@ pub fn get(gpa: std.mem.Allocator, config_base: std.fs.Dir) !Auth {
             switch (err) {
                 else => return err,
                 error.FileNotFound => {
-                    break :blk try oauth.createToken(gpa, config_base, .twitch, false);
+                    const t = try oauth.createToken(gpa, config_base, .twitch, false);
+                    break :blk t.twitch;
                 },
             }
         };
@@ -33,7 +34,7 @@ pub fn get(gpa: std.mem.Allocator, config_base: std.fs.Dir) !Auth {
         error.TokenExpired => {
             const new_token = try oauth.createToken(gpa, config_base, .twitch, true);
 
-            const auth = authenticateToken(gpa, new_token) catch |new_err| {
+            const auth = authenticateToken(gpa, new_token.twitch) catch |new_err| {
                 std.debug.print("\nCould not validate the token with Twitch: {s}\n", .{
                     @errorName(new_err),
                 });
