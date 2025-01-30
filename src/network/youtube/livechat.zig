@@ -130,7 +130,7 @@ pub fn poll(n: *Network) !void {
                     });
                 }
 
-                const delay = @max(3500, messages.pollingIntervalMillis) * std.time.ns_per_ms;
+                const delay = @max(5000, messages.pollingIntervalMillis) * std.time.ns_per_ms;
 
                 log.debug("YT POLLING sleep for {}", .{delay});
                 std.time.sleep(delay);

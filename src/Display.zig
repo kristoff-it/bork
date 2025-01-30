@@ -50,22 +50,7 @@ const InteractiveElement = union(enum) {
 };
 
 pub const Event = union(enum) {
-    size_changed,
     tick,
-
-    // user I/O
-    ctrl_c,
-    up,
-    down,
-    left,
-    right,
-    wheel_up,
-    wheel_down,
-    page_up,
-    page_down,
-    left_click: Position,
-
-    pub const Position = struct { row: usize, col: usize };
 };
 
 pub fn setup(
@@ -88,11 +73,11 @@ pub fn setup(
     // enter alt screen
     // "\x1B[s\x1B[?47h\x1B[?1049h" ++
     // dislable wrapping mode
-    // "\x1B[?7l" ++
-    //  disable insert mode (replaces text)
-    // "\x1B[4l" ++
-    // hide the cursor
-    "\x1B[?25l"
+    "\x1B[?7l" ++
+        //  disable insert mode (replaces text)
+        // "\x1B[4l" ++
+        // hide the cursor
+        "\x1B[?25l"
     // ++
     // mouse mode
     // "\x1B[?1000h",
@@ -168,13 +153,22 @@ pub fn render() !void {
     @memset(elements, .none);
 
     try writeStyle(w, .{ .bg = .blue, .fg = .white });
-    if (window_title_width < size.cols) {
-        const padding = (size.cols -| window_title_width) / 2;
-        for (0..padding) |_| try w.writeAll(" ");
+    if (window_title_width <= size.cols) {
+        const padding = (size.cols -| (window_title_width + 1));
+        const left_padding = @divFloor(padding, 2);
+        const right_padding = std.math.divCeil(usize, padding, 2) catch unreachable;
+
+        for (0..left_padding) |_| try w.writeAll(" ");
         try w.writeAll(window_title);
-        for (0..padding + 1) |_| try w.writeAll(" ");
+        for (0..right_padding) |_| try w.writeAll(" ");
     } else {
-        try w.writeAll(window_title);
+        switch (size.cols) {
+            else => try w.writeAll("bork"),
+            3 => try w.writeAll("brk"),
+            2 => try w.writeAll("bk"),
+            1 => try w.writeAll("b"),
+            0 => {},
+        }
     }
 
     if (size.rows > 1) {
@@ -188,26 +182,32 @@ pub fn render() !void {
         if (showing_quit_message != null) {
             const msg = "run `bork quit`";
             try writeStyle(w, .{ .bg = .white, .fg = .red });
-            const padding = (size.cols -| msg.len) / 2;
-            for (0..padding) |_| try w.writeAll(" ");
+            const padding = (size.cols -| msg.len);
+            const left_padding = @divFloor(padding, 2);
+            const right_padding = std.math.divCeil(usize, padding, 2) catch unreachable;
+            for (0..left_padding) |_| try w.writeAll(" ");
             try w.writeAll(msg);
-            for (0..padding + 1) |_| try w.writeAll(" ");
+            for (0..right_padding) |_| try w.writeAll(" ");
         } else if (chat.disconnected) {
             const msg = "DISCONNECTED";
             try writeStyle(w, .{ .bg = .red, .fg = .black });
-            const padding = (size.cols -| msg.len) / 2;
-            for (0..padding) |_| try w.writeAll(" ");
+            const padding = (size.cols -| msg.len);
+            const left_padding = @divFloor(padding, 2);
+            const right_padding = std.math.divCeil(usize, padding, 2) catch unreachable;
+            for (0..left_padding) |_| try w.writeAll(" ");
             try w.writeAll(msg);
-            for (0..padding + 1) |_| try w.writeAll(" ");
+            for (0..right_padding) |_| try w.writeAll(" ");
         } else if (last_is_bottom and chat.scroll_offset == 0) {
             for (0..size.cols) |_| try w.writeAll(" ");
         } else {
             const msg = "DETACHED";
             try writeStyle(w, .{ .bg = .yellow, .fg = .black });
-            const padding = (size.cols -| msg.len) / 2;
-            for (0..padding) |_| try w.writeAll(" ");
+            const padding = (size.cols -| msg.len);
+            const left_padding = @divFloor(padding, 2);
+            const right_padding = std.math.divCeil(usize, padding, 2) catch unreachable;
+            for (0..left_padding) |_| try w.writeAll(" ");
             try w.writeAll(msg);
-            for (0..padding + 1) |_| try w.writeAll(" ");
+            for (0..right_padding) |_| try w.writeAll(" ");
         }
     }
 
@@ -231,10 +231,12 @@ pub fn render() !void {
         try w.writeAll("║");
         {
             const width = strWidth(a.title);
-            const padding = (size.cols -| width) / 2;
-            for (0..padding -| 1) |_| try w.writeAll(" ");
+            const padding = (size.cols -| width);
+            const left_padding = @divFloor(padding, 2);
+            const right_padding = std.math.divCeil(usize, padding, 2) catch unreachable;
+            for (0..left_padding) |_| try w.writeAll(" ");
             try w.print("{s}", .{a.title});
-            for (0..padding) |_| try w.writeAll(" ");
+            for (0..right_padding) |_| try w.writeAll(" ");
         }
         try w.writeAll("║\r\n");
         try w.writeAll("║");
@@ -252,19 +254,23 @@ pub fn render() !void {
                 }) catch unreachable; // we know we have the space
             }
             const width = timer.len + 8;
-            const padding = (size.cols -| width) / 2;
-            for (0..padding -| 1) |_| try w.writeAll(" ");
+            const padding = (size.cols -| width);
+            const left_padding = @divFloor(padding, 2);
+            const right_padding = std.math.divCeil(usize, padding, 2) catch unreachable;
+            for (0..left_padding) |_| try w.writeAll(" ");
             try w.print("--- {s} ---", .{timer});
-            for (0..padding) |_| try w.writeAll(" ");
+            for (0..right_padding) |_| try w.writeAll(" ");
         }
         try w.writeAll("║\r\n");
         try w.writeAll("║");
         {
             const width = strWidth(a.reason);
-            const padding = (size.cols -| width) / 2;
-            for (0..padding -| 1) |_| try w.writeAll(" ");
+            const padding = (size.cols -| width);
+            const left_padding = @divFloor(padding, 2);
+            const right_padding = std.math.divCeil(usize, padding, 2) catch unreachable;
+            for (0..left_padding) |_| try w.writeAll(" ");
             try w.print("{s}", .{a.reason});
-            for (0..padding) |_| try w.writeAll(" ");
+            for (0..right_padding) |_| try w.writeAll(" ");
         }
         try w.writeAll("║\r\n");
 
@@ -488,10 +494,12 @@ fn renderMessage(
                     else => .{x.display_name},
                 };
                 const width = strWidth(args[0]) + 2;
-                const padding = (size.cols -| width) / 2;
-                for (0..padding) |_| try w.writeAll(" ");
+                const padding = (size.cols -| width);
+                const left_padding = @divFloor(padding, 2);
+                const right_padding = std.math.divCeil(usize, padding, 2) catch unreachable;
+                for (0..left_padding) |_| try w.writeAll(" ");
                 try w.print(fmt, args);
-                for (0..padding + 1) |_| try w.writeAll(" ");
+                for (0..right_padding) |_| try w.writeAll(" ");
             }
 
             try w.writeAll("\r\n");
@@ -542,12 +550,14 @@ fn renderMessage(
                     }) + strWidth(x.recipient_display_name),
                     else => std.fmt.count(fmt, args) + (emoji_width * 2),
                 };
-                const padding = (size.cols -| width) / 2;
-                for (0..padding) |_| try w.writeAll(" ");
+                const padding = (size.cols -| width);
+                const left_padding = @divFloor(padding, 2);
+                const right_padding = std.math.divCeil(usize, padding, 2) catch unreachable;
+                for (0..left_padding) |_| try w.writeAll(" ");
                 try w.writeAll(emoji);
                 try w.print(fmt, args);
                 try w.writeAll(emoji);
-                for (0..padding + 1) |_| try w.writeAll(" ");
+                for (0..right_padding) |_| try w.writeAll(" ");
             }
             try writeStyle(w, .{});
             return .{
@@ -592,7 +602,7 @@ fn printWrap(
                 if (hl) try writeStyle(w, .{});
                 try w.writeAll("\r\n      ");
                 if (hl) try writeStyle(w, .{ .reverse = true });
-                current_col = 6;
+                current_col = 6 + 2;
                 total_rows += 1;
             }
             try w.print(
@@ -600,8 +610,7 @@ fn printWrap(
                 .{ emote_idx, placement_id },
             );
             placement_id += 1;
-            current_col += 2;
-        } else if (word_width >= cols) {
+        } else if (word_width >= cols - 6) {
             // a link or a very big word
             const is_link = url.sense(word);
             if (is_link) {

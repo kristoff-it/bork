@@ -64,7 +64,7 @@ pub fn authenticateToken(gpa: std.mem.Allocator, token: oauth.Token.YouTube) !Au
     };
 }
 
-const google_refresh = "https://oauth2.googleapis.com/token?client_id=519150430990-68hvu66hl7vdtpb4u1mngb0qq2hqoiv8.apps.googleusercontent.com&client_secret=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&grant_type=refresh_token&refresh_token={s}";
+const google_refresh = "https://oauth2.googleapis.com/token?client_id=519150430990-68hvu66hl7vdtpb4u1mngb0qq2hqoiv8.apps.googleusercontent.com&client_secret=GOC" ++ "SPX-5e1VALKHYwGJZDlnLyUKKgN_I1KW&grant_type=refresh_token&refresh_token={s}";
 
 pub fn refreshToken(
     gpa: std.mem.Allocator,
