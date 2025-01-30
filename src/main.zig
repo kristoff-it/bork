@@ -188,12 +188,16 @@ fn borkStart(gpa: std.mem.Allocator) !void {
                     .cols = ws.cols,
                 });
 
+                // We don't call resize directly because we
+                // don't want libvaxis to allocate any memory
+                // for its internal cell grid, since we render
+                // everything manually.
+                //
+                // try vx.resize(gpa, tty.anyWriter(), ws),
                 vx.screen.width = ws.cols;
                 vx.screen.height = ws.rows;
                 vx.screen.width_pix = ws.x_pixel;
                 vx.screen.height_pix = ws.y_pixel;
-
-                // try vx.resize(gpa, tty.anyWriter(), ws),
             },
 
             .key_press => |key| {
@@ -235,7 +239,6 @@ fn borkStart(gpa: std.mem.Allocator) !void {
             },
             .display => |de| {
                 switch (de) {
-                    else => {},
                     .tick => {
                         need_repaint = display.wantTick();
                     },

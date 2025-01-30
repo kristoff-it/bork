@@ -7,10 +7,12 @@ pub fn build(b: *std.Build) !void {
     const optimize = b.standardOptimizeOption(.{});
 
     const local = b.option(bool, "local", "not using real data and testing locally") orelse false;
+
     const options = b.addOptions();
-    options.addOption(bool, "local", local);
+
     const version = "0.5.0";
     options.addOption([:0]const u8, "version", try b.allocator.dupeZ(u8, version));
+    options.addOption(bool, "local", local);
 
     const exe = b.addExecutable(.{
         .name = "bork",
@@ -24,9 +26,6 @@ pub fn build(b: *std.Build) !void {
 
     const known_folders = b.dependency("known-folders", .{});
     const zeit = b.dependency("zeit", .{});
-    const zg = b.dependency("zg", .{
-        // .cjk = true,
-    });
     const ziggy = b.dependency("ziggy", .{});
     const clap = b.dependency("clap", .{});
     const ws = b.dependency("ws", .{});
@@ -34,8 +33,6 @@ pub fn build(b: *std.Build) !void {
     exe.root_module.addImport("vaxis", vaxis.module("vaxis"));
     exe.root_module.addImport("known-folders", known_folders.module("known-folders"));
     exe.root_module.addImport("zeit", zeit.module("zeit"));
-    exe.root_module.addImport("grapheme", zg.module("grapheme"));
-    exe.root_module.addImport("DisplayWidth", zg.module("DisplayWidth"));
     exe.root_module.addImport("ziggy", ziggy.module("ziggy"));
     exe.root_module.addImport("clap", clap.module("clap"));
     exe.root_module.addImport("ws", ws.module("websocket"));

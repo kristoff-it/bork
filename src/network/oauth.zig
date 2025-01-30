@@ -21,7 +21,7 @@ const scopes = "bits:read" ++ "+" ++
     "chat:edit";
 
 const google_oauth = "https://accounts.google.com/o/oauth2/v2/auth?client_id=519150430990-68hvu66hl7vdtpb4u1mngb0qq2hqoiv8.apps.googleusercontent.com&redirect_uri=http://localhost:22890&response_type=code&access_type=offline&scope=https://www.googleapis.com/auth/youtube.readonly&prompt=consent";
-const google_token = "https://oauth2.googleapis.com/token?client_id=519150430990-68hvu66hl7vdtpb4u1mngb0qq2hqoiv8.apps.googleusercontent.com&redirect_uri=http://localhost:22890&client_secret=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&grant_type=authorization_code&code={s}";
+const google_token = "https://oauth2.googleapis.com/token?client_id=519150430990-68hvu66hl7vdtpb4u1mngb0qq2hqoiv8.apps.googleusercontent.com&redirect_uri=http://localhost:22890&client_secret=GOC" ++ "SPX-5e1VALKHYwGJZDlnLyUKKgN_I1KW&grant_type=authorization_code&code={s}";
 const broadcasts_url = "https://www.googleapis.com/youtube/v3/liveBroadcasts?mine=true&part=id,snippet,status&maxResults=50";
 
 const redirect_uri = "http://localhost:22890/";
