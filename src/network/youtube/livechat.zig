@@ -41,11 +41,21 @@ pub fn poll(n: *Network) !void {
             page_token.len = 0;
         }
 
+        const now = std.time.timestamp();
+        log.debug("YT token expires at: {} now: {} delta: {}", .{
+            token.expires_at_seconds,
+            now,
+            token.expires_at_seconds -| now,
+        });
         // Refresh the token once it's about to expire
-        if (token.expires_at_seconds -| std.time.timestamp() < 60 * 10) { // <10mins
+        if (token.expires_at_seconds -| now < 60 * 10) { // <10mins
             log.debug("youtube refreshing token", .{});
             token = try auth.refreshToken(n.gpa, token.refresh);
             log.debug("youtube token refresh succeeded", .{});
+        } else {
+            log.debug("Not refreshing YT token as expiry >= {}", .{
+                60 * 10,
+            });
         }
 
         switch (state) {
@@ -65,14 +75,20 @@ pub fn poll(n: *Network) !void {
                 }
 
                 log.debug("YT SEARCHING for active broadcast, sleeping", .{});
-                std.time.sleep(3 * std.time.ns_per_s);
+                std.time.sleep(10 * std.time.ns_per_s);
             },
             .attached => |chat_id| {
                 livechat.len = 0;
-                try livechat.writer().print(livechat_url, .{ chat_id, page_token.slice() });
+                try livechat.writer().print(livechat_url, .{
+                    chat_id,
+                    page_token.slice(),
+                });
                 // std.debug.print("polling {s}\n", .{url_buf.items});
 
-                log.debug("YT POLLING for messages", .{});
+                log.debug("YT POLLING for messages,  url: {s}  token: {s}", .{
+                    livechat.slice(),
+                    token.access,
+                });
                 var buf = std.ArrayList(u8).init(arena);
                 const chat_res = yt.fetch(.{
                     .location = .{ .url = livechat.slice() },
@@ -81,7 +97,8 @@ pub fn poll(n: *Network) !void {
                     .extra_headers = &.{
                         .{ .name = "Authorization", .value = token.access },
                     },
-                }) catch {
+                }) catch |err| {
+                    log.err("error fetching chat from youtube: {}", .{err});
                     state = .err;
                     continue;
                 };
@@ -97,6 +114,10 @@ pub fn poll(n: *Network) !void {
                 const messages = std.json.parseFromSliceLeaky(Messages, arena, buf.items, .{
                     .ignore_unknown_fields = true,
                 }) catch {
+                    log.err("bad chat json: {s}\n{s}\n", .{
+                        livechat.slice(),
+                        buf.items,
+                    });
                     state = .err;
                     continue;
                 };

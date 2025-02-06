@@ -254,17 +254,10 @@ const Handler = struct {
             .allocator = gpa,
         };
 
-        const header_oauth = try std.fmt.allocPrint(
-            gpa,
-            "Bearer {s}",
-            .{token},
-        );
-        defer gpa.free(header_oauth);
-
         const headers: []const std.http.Header = &.{
             .{
                 .name = "Authorization",
-                .value = header_oauth,
+                .value = token,
             },
             .{
                 .name = "Client-Id",

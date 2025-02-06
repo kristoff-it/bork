@@ -30,6 +30,10 @@
             .url = "git+https://codeberg.org/utkarshmalik/zg#7ca90b6f8796cd6615ddc61e12cd292ea26662ce",
             .hash = "1220f3e29bc40856bfc06e0ee133f814b0011c76de987d8a6a458c2f34d82708899a",
         },
+        .websocket = .{
+            .url = "git+https://github.com/karlseguin/websocket.zig#69ac58551be9ff5f41689198bb57e29f8436cf39",
+            .hash = "1220dba3f6cb8c7a2be0f29243176b44b7d6bbdb45735fcaf5cfb3d1e0fa71cb9031",
+        },
     },
     .paths = .{"."},
 }

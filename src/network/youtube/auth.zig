@@ -27,7 +27,18 @@ pub fn get(gpa: std.mem.Allocator, config_base: std.fs.Dir) !Auth {
         defer file.close();
         const token_raw = try file.reader().readAllAlloc(gpa, 4096);
         const refresh_token = std.mem.trimRight(u8, token_raw, " \n");
-        break :blk try refreshToken(gpa, refresh_token);
+        break :blk refreshToken(gpa, refresh_token) catch |err| switch (err) {
+            error.InvalidToken => ct: {
+                const t = try oauth.createToken(
+                    gpa,
+                    config_base,
+                    .youtube,
+                    true,
+                );
+                break :ct t.youtube;
+            },
+            else => return err,
+        };
     };
 
     return authenticateToken(gpa, token) catch |err| switch (err) {
@@ -66,6 +77,8 @@ pub fn authenticateToken(gpa: std.mem.Allocator, token: oauth.Token.YouTube) !Au
 
 const google_refresh = "https://oauth2.googleapis.com/token?client_id=519150430990-68hvu66hl7vdtpb4u1mngb0qq2hqoiv8.apps.googleusercontent.com&client_secret=GOC" ++ "SPX-5e1VALKHYwGJZDlnLyUKKgN_I1KW&grant_type=refresh_token&refresh_token={s}";
 
+var not_first = false;
+
 pub fn refreshToken(
     gpa: std.mem.Allocator,
     refresh_token: []const u8,
@@ -74,6 +87,9 @@ pub fn refreshToken(
     defer arena_impl.deinit();
 
     const arena = arena_impl.allocator();
+
+    // if (not_first) @breakpoint();
+    // not_first = true;
 
     var yt: std.http.Client = .{ .allocator = arena };
     defer yt.deinit();
@@ -84,19 +100,27 @@ pub fn refreshToken(
 
     var buf = std.ArrayList(u8).init(arena);
 
-    log.debug("YT REQUEST: refresh 2 access token", .{});
+    log.debug("YT REQUEST: refresh access token url: {s}", .{refresh_url});
 
     const res = yt.fetch(.{
         .location = .{ .url = refresh_url },
         .method = .POST,
         .response_storage = .{ .dynamic = &buf },
         .extra_headers = &.{.{ .name = "Content-Length", .value = "0" }},
-    }) catch {
+    }) catch |err| {
+        log.debug("refresh url request failed: {}, url: {s}", .{
+            err,
+            refresh_url,
+        });
         return error.YouTubeRefreshTokenFailed;
     };
 
     log.debug("yt token refresh = {}", .{res});
     log.debug("data = {s}", .{buf.items});
+
+    if (res.status != .ok) {
+        return error.InvalidToken;
+    }
 
     const payload = std.json.parseFromSliceLeaky(struct {
         access_token: []const u8,
