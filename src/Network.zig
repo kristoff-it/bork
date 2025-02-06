@@ -14,8 +14,8 @@ const livechat = @import("network/youtube/livechat.zig");
 const irc_parser = @import("network/twitch/irc_parser.zig");
 const event_parser = @import("network/twitch/event_parser.zig");
 const EmoteCache = @import("network/twitch/EmoteCache.zig");
-pub const TwitchAuth = @import("network/twitch/Auth.zig");
-pub const YouTubeAuth = @import("network/youtube/Auth.zig");
+pub const TwitchAuth = @import("network/twitch/auth.zig");
+pub const YouTubeAuth = @import("network/youtube/auth.zig");
 
 pub const Auth = struct {
     twitch: TwitchAuth,
