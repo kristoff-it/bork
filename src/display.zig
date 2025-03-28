@@ -70,17 +70,17 @@ pub fn setup(
 
     try loop.vaxis.setMouseMode(loop.tty.anyWriter(), true);
     try loop.tty.anyWriter().writeAll(
-    // enter alt screen
-    // "\x1B[s\x1B[?47h\x1B[?1049h" ++
-    // dislable wrapping mode
-    "\x1B[?7l" ++
-        //  disable insert mode (replaces text)
-        // "\x1B[4l" ++
-        // hide the cursor
-        "\x1B[?25l"
-    // ++
-    // mouse mode
-    // "\x1B[?1000h",
+        // enter alt screen
+        // "\x1B[s\x1B[?47h\x1B[?1049h" ++
+        // dislable wrapping mode
+        "\x1B[?7l" ++
+            //  disable insert mode (replaces text)
+            // "\x1B[4l" ++
+            // hide the cursor
+            "\x1B[?25l"
+            // ++
+            // mouse mode
+            // "\x1B[?1000h",
     );
 }
 
@@ -334,10 +334,11 @@ pub fn render() !void {
         if (msg_rows + 1 >= row) {
             var it = std.mem.splitScalar(u8, msg_bytes, '\n');
             const skip = (msg_rows + 2) -| row;
+            row = 2;
             for (0..skip) |_| _ = it.next();
             try moveCursor(w, 2, 1);
             try w.writeAll(it.rest());
-            for (0..msg_rows -| skip + 1) |idx| {
+            for (0..msg_rows -| skip) |idx| {
                 elements[row + idx] = .{ .message = msg };
             }
             break;
