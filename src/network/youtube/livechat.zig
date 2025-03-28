@@ -2,7 +2,7 @@ const std = @import("std");
 const build_opts = @import("build_options");
 const Network = @import("../../Network.zig");
 const oauth = @import("../oauth.zig");
-const auth = @import("auth.zig");
+const auth = @import("Auth.zig");
 
 const log = std.log.scoped(.livechat);
 
