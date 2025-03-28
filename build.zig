@@ -24,7 +24,7 @@ pub fn build(b: *std.Build) !void {
 
     const vaxis = b.dependency("vaxis", .{});
 
-    const known_folders = b.dependency("known-folders", .{});
+    const known_folders = b.dependency("known_folders", .{});
     const zeit = b.dependency("zeit", .{});
     const ziggy = b.dependency("ziggy", .{});
     const clap = b.dependency("clap", .{});
