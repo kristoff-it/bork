@@ -67,11 +67,19 @@ pub fn init(
 
 pub fn start(self: *Server) !void {
     defer self.listener.deinit();
+    var buf: [100]u8 = undefined;
 
     while (true) {
         const conn = try self.listener.accept();
-        defer conn.stream.close();
-        self.handle(conn.stream) catch |err| {
+
+        const cmd = conn.stream.reader().readUntilDelimiter(&buf, '\n') catch |err| {
+            std.log.debug("remote could not read: {}", .{err});
+            return;
+        };
+
+        defer if (!std.mem.eql(u8, cmd, "LINKS")) conn.stream.close();
+
+        self.handle(conn.stream, cmd) catch |err| {
             log.err("Error while handling remote command: {s}", .{@errorName(err)});
         };
     }
@@ -85,13 +93,7 @@ pub fn deinit(self: *Server) void {
     std.log.debug("deinit done", .{});
 }
 
-fn handle(self: *Server, stream: std.net.Stream) !void {
-    var buf: [100]u8 = undefined;
-
-    const cmd = stream.reader().readUntilDelimiter(&buf, '\n') catch |err| {
-        std.log.debug("remote could read: {}", .{err});
-        return;
-    };
+fn handle(self: *Server, stream: std.net.Stream, cmd: []const u8) !void {
     defer std.log.debug("remote cmd: {s}", .{cmd});
 
     if (std.mem.eql(u8, cmd, "SEND")) {
