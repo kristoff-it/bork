@@ -2,4 +2,6 @@
 .DS_Store
 *.log
 zig-out/
+zig-pkg/
 release/
+tags
