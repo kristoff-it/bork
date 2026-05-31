@@ -9,20 +9,17 @@ notifications: struct {
     charity: bool = true,
 } = .{},
 
-pub fn get(gpa: std.mem.Allocator, config_base: std.fs.Dir) !Config {
-    const bytes = config_base.readFileAllocOptions(gpa, "bork/config.ziggy", ziggy.max_size, null, 1, 0) catch |err| switch (err) {
+pub fn get(io: std.Io, gpa: std.mem.Allocator, config_base: std.Io.Dir, stdin: *std.Io.File.Reader) !Config {
+    const bytes = config_base.readFileAllocOptions(io, "bork/config.ziggy", gpa, .limited(ziggy.max_size), .fromByteUnits(1), 0) catch |err| switch (err) {
         else => return err,
-        error.FileNotFound => return create(config_base),
+        error.FileNotFound => return create(io, config_base, stdin),
     };
     defer gpa.free(bytes);
 
     return ziggy.parseLeaky(Config, gpa, bytes, .{});
 }
 
-pub fn create(config_base: std.fs.Dir) !Config {
-    const in = std.io.getStdIn();
-    const in_reader = in.reader();
-
+pub fn create(io: std.Io, config_base: std.Io.Dir, stdin: *std.Io.File.Reader) !Config {
     std.debug.print(
         \\
         \\Hi, welcome to Bork!
