@@ -26,21 +26,27 @@ pub fn logFn(
     writer.print(prefix ++ format ++ "\n", args) catch return;
 }
 
-pub fn setup(gpa: std.mem.Allocator) void {
-    std.debug.lockStdErr();
-    defer std.debug.unlockStdErr();
+pub fn setup(
+    io: std.Io,
+    gpa: std.mem.Allocator,
+    environ: *const std.process.Environ.Map,
+    ) void {
+    var buffer: [64]u8 = undefined;
+    _ = std.debug.lockStderr(&buffer);
+    defer std.debug.unlockStderr();
 
-    log_file = std.io.getStdErr();
+    log_file = std.Io.File.stderr();
+    log_io = io;
 
-    setup_internal(gpa) catch {
+    setup_internal(io, gpa, environ) catch {
         log_file = null;
     };
 }
 
-fn setup_internal(gpa: std.mem.Allocator) !void {
-    const cache_base = try folders.open(gpa, .cache, .{}) orelse
-        try folders.open(gpa, .home, .{}) orelse
-        try folders.open(gpa, .executable_dir, .{}) orelse
+fn setup_internal(io: std.Io, gpa: std.mem.Allocator, environ: *const std.process.Environ.Map) !void {
+    const cache_base = try folders.open(io, gpa, environ, .cache, .{}) orelse
+        try folders.open(gpa, environ, .home, .{}) orelse
+        try folders.open(gpa, environ, .executable_dir, .{}) orelse
         std.fs.cwd();
 
     try cache_base.makePath("bork");
