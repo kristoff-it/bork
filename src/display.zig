@@ -18,7 +18,7 @@ var config: Config = undefined;
 var loop: *vaxis.Loop(GlobalEventUnion) = undefined;
 
 var size: Size = .{ .rows = 0, .cols = 0 };
-var message_rendering_buffer: std.ArrayListUnmanaged(u8) = .{};
+var message_rendering_buffer: std.ArrayList(u8) = .empty;
 var emote_cache: std.AutoHashMapUnmanaged(u32, void) = .{};
 var chat: *Chat = undefined;
 var elements: []InteractiveElement = &.{};
