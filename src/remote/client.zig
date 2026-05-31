@@ -6,8 +6,8 @@ const Event = @import("../remote.zig").Event;
 const Config = @import("../Config.zig");
 const parseTime = @import("./utils.zig").parseTime;
 
-fn connect(gpa: std.mem.Allocator) std.net.Stream {
-    const tmp_dir_path = (folders.getPath(gpa, .cache) catch @panic("oom")) orelse "/tmp";
+fn connect(io: Io, gpa: std.mem.Allocator, environ: *std.process.Environ.Map) Io.net.Stream {
+    const tmp_dir_path = folders.getPath(io, gpa, environ, .cache) catch @panic("oom") orelse "/tmp";
     defer gpa.free(tmp_dir_path);
 
     const socket_path = std.fmt.allocPrint(
@@ -36,13 +36,18 @@ fn connect(gpa: std.mem.Allocator) std.net.Stream {
     };
 }
 
-pub fn send(gpa: std.mem.Allocator, it: *std.process.ArgIterator) !void {
+pub fn send(
+    io: Io,
+    gpa: std.mem.Allocator,
+    environ: *std.process.Environ.Map,
+    it: *std.process.Args.Iterator,
+) !void {
     const message = it.next() orelse {
         std.debug.print("Usage ./bork send \"my message Kappa\"\n", .{});
         return;
     };
 
-    const conn = connect(gpa);
+    const conn = connect(io, gpa, environ);
     defer conn.close();
 
     try conn.writer().writeAll("SEND\n");
@@ -50,15 +55,19 @@ pub fn send(gpa: std.mem.Allocator, it: *std.process.ArgIterator) !void {
     try conn.writer().writeAll("\n");
 }
 
-pub fn quit(gpa: std.mem.Allocator, it: *std.process.ArgIterator) !void {
-    _ = it;
-    const conn = connect(gpa);
-    defer conn.close();
+pub fn quit(io: Io, gpa: std.mem.Allocator, environ: *std.process.Environ.Map) !void {
+    const conn = connect(io, gpa, environ);
+    defer conn.close(io);
 
     try conn.writer().writeAll("QUIT\n");
 }
 
-pub fn reconnect(gpa: std.mem.Allocator, it: *std.process.ArgIterator) !void {
+pub fn reconnect(
+    io: Io,
+    gpa: std.mem.Allocator,
+    environ: *std.process.Environ.Map,
+    it: *std.process.Args.Iterator,
+) !void {
     // TODO: validation
     _ = it;
 
@@ -68,7 +77,13 @@ pub fn reconnect(gpa: std.mem.Allocator, it: *std.process.ArgIterator) !void {
     try conn.writer().writeAll("RECONNECT\n");
 }
 
-pub fn links(gpa: std.mem.Allocator, it: *std.process.ArgIterator) !void {
+pub fn links(
+    io: Io,
+    gpa: std.mem.Allocator,
+    environ: *std.process.Environ.Map,
+    it: *std.process.Args.Iterator,
+    stdout: *Io.Writer,
+) !void {
     // TODO: validation
     _ = it;
 
@@ -88,7 +103,13 @@ pub fn links(gpa: std.mem.Allocator, it: *std.process.ArgIterator) !void {
     }
 }
 
-pub fn youtube(gpa: std.mem.Allocator, it: *std.process.ArgIterator) !void {
+pub fn youtube(
+    io: Io,
+    gpa: std.mem.Allocator,
+    environ: *std.process.Environ.Map,
+    it: *std.process.Args.Iterator,
+    stdout: *Io.Writer,
+) !void {
     const video_url_or_id = it.next() orelse {
         std.debug.print("Usage ./bork youtube video_url_or_id\n", .{});
         return;
@@ -152,7 +173,13 @@ pub fn unban(gpa: std.mem.Allocator, it: *std.process.ArgIterator) !void {
     try conn.writer().writeAll("\n");
 }
 
-pub fn afk(gpa: std.mem.Allocator, it: *std.process.ArgIterator) !void {
+pub fn afk(
+    io: Io,
+    gpa: std.mem.Allocator,
+    environ: *std.process.Environ.Map,
+    it: *std.process.Args.Iterator,
+    stderr: *Io.Writer,
+) !void {
     const summary =
         \\Creates an AFK message with a countdown.
         \\Click on the message to dismiss it.

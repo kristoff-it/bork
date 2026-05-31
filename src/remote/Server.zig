@@ -35,6 +35,7 @@ thread: std.Thread,
 pub fn init(
     self: *Server,
     alloc: std.mem.Allocator,
+    environ: *std.process.Environ.Map,
     auth: Network.Auth,
     ch: *vaxis.Loop(GlobalEventUnion),
 ) !void {
