@@ -16,7 +16,8 @@ pub fn get(io: std.Io, gpa: std.mem.Allocator, config_base: std.Io.Dir, stdin: *
     };
     defer gpa.free(bytes);
 
-    return ziggy.parseLeaky(Config, gpa, bytes, .{});
+    var meta: ziggy.Deserializer.Meta = .init;
+    return ziggy.deserializeLeaky(Config, gpa, bytes, &meta, .{});
 }
 
 pub fn create(io: std.Io, config_base: std.Io.Dir, stdin: *std.Io.File.Reader) !Config {
