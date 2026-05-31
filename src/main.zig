@@ -26,20 +26,21 @@ pub const std_options: std.Options = .{
     .logFn = logging.logFn,
 };
 
-pub fn panic(
-    msg: []const u8,
-    error_return_trace: ?*std.builtin.StackTrace,
-    ret_addr: ?usize,
-) noreturn {
-    display.teardown();
-    vaxis.recover();
-    std.log.err("{s}\n\n", .{msg});
-    if (error_return_trace) |t| std.debug.dumpStackTrace(t.*);
-    std.debug.dumpCurrentStackTrace(ret_addr orelse @returnAddress());
-
-    if (builtin.mode == .Debug) @breakpoint();
-    std.process.exit(1);
-}
+// TODO: handle panic
+// pub fn panic(
+//     msg: []const u8,
+//     error_return_trace: ?*std.builtin.StackTrace,
+//     ret_addr: ?usize,
+// ) noreturn {
+//     display.teardown();
+//     vaxis.recover();
+//     std.log.err("{s}\n\n", .{msg});
+//     if (error_return_trace) |t| std.debug.dumpStackTrace(t.*);
+//     std.debug.dumpCurrentStackTrace(ret_addr orelse @returnAddress());
+//
+//     if (builtin.mode == .Debug) @breakpoint();
+//     std.process.exit(1);
+// }
 
 pub const Event = union(enum) {
     display: display.Event,
