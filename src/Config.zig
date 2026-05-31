@@ -67,7 +67,7 @@ pub fn create(io: std.Io, config_base: std.Io.Dir, stdin: *std.Io.File.Reader) !
                 \\
             , .{});
 
-            _ = try in_reader.readByte();
+            _ = try stdin.interface.discard(.limited(1));
 
             std.debug.print(
                 \\
@@ -84,7 +84,7 @@ pub fn create(io: std.Io, config_base: std.Io.Dir, stdin: *std.Io.File.Reader) !
                 \\Enable YouTube support? [y/N]
             , .{});
 
-            config.youtube = switch (try in_reader.readByte()) {
+            config.youtube = switch (try stdin.interface.takeByte()) {
                 else => false,
                 'y', 'Y' => true,
             };
@@ -105,7 +105,7 @@ pub fn create(io: std.Io, config_base: std.Io.Dir, stdin: *std.Io.File.Reader) !
                 \\Enable CTRL+C protection? [Y/n]
             , .{});
 
-            config.ctrl_c_protection = switch (try in_reader.readByte()) {
+            config.ctrl_c_protection = switch (try stdin.interface.takeByte()) {
                 else => false,
                 'y', 'Y', '\n' => true,
             };
@@ -113,16 +113,26 @@ pub fn create(io: std.Io, config_base: std.Io.Dir, stdin: *std.Io.File.Reader) !
         break :blk config;
     };
 
-    // create the config file
-    var file = try config_base.createFile("bork/config.ziggy", .{});
-    defer file.close();
-    try file.writer().print(".ctrl_c_protection = {},\n", .{config.ctrl_c_protection});
-    try file.writer().print(".youtube = {},\n", .{config.youtube});
+    {
+        // create the config file
+        var file = try config_base.createFile(io, "bork/config.ziggy", .{});
+        defer file.close(io);
+        var buffer: [128]u8 = undefined;
+        var w = file.writer(io, &buffer);
+        try w.interface.print(".ctrl_c_protection = {},\n", .{config.ctrl_c_protection});
+        try w.interface.print(".youtube = {},\n", .{config.youtube});
+        try w.flush();
+    }
 
-    // ensure presence of the schema file
-    var schema_file = try config_base.createFile("bork/config.ziggy-schema", .{});
-    defer schema_file.close();
-    try schema_file.writeAll(@embedFile("config.ziggy-schema"));
+    {
+        // ensure presence of the schema file
+        var schema_file = try config_base.createFile(io, "bork/config.ziggy-schema", .{});
+        defer schema_file.close(io);
+        var buffer: [128]u8 = undefined;
+        var w = schema_file.writer(io, &buffer);
+        try w.interface.writeAll(@embedFile("config.ziggy-schema"));
+        try w.flush();
+    }
 
     return config;
 }
