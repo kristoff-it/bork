@@ -1,6 +1,7 @@
 const Server = @This();
 
 const std = @import("std");
+const Io = std.Io;
 const builtin = @import("builtin");
 const folders = @import("known-folders");
 const vaxis = @import("vaxis");
@@ -17,23 +18,25 @@ const log = std.log.scoped(.server);
 pub const Event = union(enum) {
     quit,
     reconnect,
-    links: std.net.Stream,
+    links: std.Io.net.Stream,
     send: []const u8,
     afk: struct {
         title: []const u8,
-        target_time: i64,
+        target_time: Io.Timestamp,
         reason: []const u8,
     },
 };
 
 auth: Network.Auth,
-listener: std.net.Server,
+listener: std.Io.net.Server,
+io: Io,
 gpa: std.mem.Allocator,
 ch: *vaxis.Loop(GlobalEventUnion),
 thread: std.Thread,
 
 pub fn init(
     self: *Server,
+    io: std.Io,
     alloc: std.mem.Allocator,
     environ: *std.process.Environ.Map,
     auth: Network.Auth,
@@ -43,42 +46,41 @@ pub fn init(
     self.auth = auth;
     self.ch = ch;
 
-    const tmp_dir_path = try folders.getPath(alloc, .cache) orelse "/tmp";
+    const tmp_dir_path = try folders.getPath(io, alloc, environ, .cache) orelse "/tmp";
     const socket_path = try std.fmt.allocPrint(
         alloc,
         "{s}/bork.sock",
         .{tmp_dir_path},
     );
 
-    std.fs.cwd().deleteFile(socket_path) catch |err| switch (err) {
+    std.Io.Dir.cwd().deleteFile(io, socket_path) catch |err| switch (err) {
         error.FileNotFound => {},
         else => return err,
     };
 
-    const address = try std.net.Address.initUnix(socket_path);
-    self.listener = try address.listen(.{
-        .reuse_address = builtin.target.os.tag != .windows,
-        .reuse_port = builtin.target.os.tag != .windows,
-    });
+    const address: std.Io.net.UnixAddress = try .init(socket_path);
+    self.listener = try address.listen(io, .{});
 
-    errdefer self.listener.deinit();
+    errdefer self.listener.deinit(io);
 
     self.thread = try std.Thread.spawn(.{}, start, .{self});
 }
 
 pub fn start(self: *Server) !void {
-    defer self.listener.deinit();
     var buf: [100]u8 = undefined;
+    const io = self.io;
+    defer self.listener.deinit(io);
 
     while (true) {
-        const conn = try self.listener.accept();
+        const conn = try self.listener.accept(io);
+        var r = conn.reader(io, &buf);
 
         const cmd = conn.stream.reader().readUntilDelimiter(&buf, '\n') catch |err| {
             std.log.debug("remote could not read: {}", .{err});
             return;
         };
 
-        defer if (!std.mem.eql(u8, cmd, "LINKS")) conn.stream.close();
+        defer if (!std.mem.eql(u8, cmd, "LINKS")) conn.close(io);
 
         self.handle(conn.stream, cmd) catch |err| {
             log.err("Error while handling remote command: {s}", .{@errorName(err)});
@@ -87,15 +89,16 @@ pub fn start(self: *Server) !void {
 }
 
 pub fn deinit(self: *Server) void {
+    const io = self.io;
     std.log.debug("deiniting Remote Server", .{});
-    std.posix.shutdown(self.listener.stream.handle, .both) catch |err| {
-        std.log.debug("remote shutdown encountered an error: {}", .{err});
-    };
+    self.listener.deinit(io);
     std.log.debug("deinit done", .{});
 }
 
-fn handle(self: *Server, stream: std.net.Stream, cmd: []const u8) !void {
+fn handle(self: *Server, stream: Io.net.Stream, cmd: []const u8) !void {
     defer std.log.debug("remote cmd: {s}", .{cmd});
+
+    const io = self.io;
 
     if (std.mem.eql(u8, cmd, "SEND")) {
         const msg = stream.reader().readUntilDelimiterAlloc(self.gpa, '\n', 4096) catch |err| {
@@ -112,7 +115,7 @@ fn handle(self: *Server, stream: std.net.Stream, cmd: []const u8) !void {
         // This way we don't have to implement locally emote
         // parsing.
         var twitch_conn = Network.connect(
-            self.gpa,
+            io,
             self.auth.twitch.login,
             self.auth.twitch.token,
         ) catch return;
@@ -151,7 +154,7 @@ fn handle(self: *Server, stream: std.net.Stream, cmd: []const u8) !void {
         // This way we don't have to implement locally emote
         // parsing.
         var twitch_conn = Network.connect(
-            self.gpa,
+            io,
             self.auth.twitch.login,
             self.auth.twitch.token,
         ) catch return;
@@ -172,6 +175,7 @@ fn handle(self: *Server, stream: std.net.Stream, cmd: []const u8) !void {
         const url_fmt = "https://www.googleapis.com/youtube/v3/liveBroadcasts?id={s}&part=id,snippet,status";
 
         var yt: std.http.Client = .{
+            .io = io,
             .allocator = self.gpa,
         };
         defer yt.deinit();
@@ -237,7 +241,7 @@ fn handle(self: *Server, stream: std.net.Stream, cmd: []const u8) !void {
         // This way we don't have to implement locally emote
         // parsing.
         var twitch_conn = Network.connect(
-            self.gpa,
+            io,
             self.auth.twitch.login,
             self.auth.twitch.token,
         ) catch return;
@@ -304,7 +308,7 @@ fn handle(self: *Server, stream: std.net.Stream, cmd: []const u8) !void {
 // NOTE: this function should only be called by
 // the thread that's also running the main control
 // loop
-pub fn replyLinks(chat: *Chat, stream: std.net.Stream) void {
+pub fn replyLinks(io: Io, chat: *Chat, stream: Io.net.Stream) void {
     var maybe_current = chat.last_link_message;
     while (maybe_current) |c| : (maybe_current = c.prev_links) {
         const text = switch (c.kind) {
@@ -325,5 +329,5 @@ pub fn replyLinks(chat: *Chat, stream: std.net.Stream) void {
         }
     }
 
-    stream.close();
+    stream.close(io);
 }
