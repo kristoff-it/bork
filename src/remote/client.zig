@@ -1,4 +1,5 @@
 const std = @import("std");
+const Io = std.Io;
 const folders = @import("known-folders");
 const ArgIterator = std.process.ArgIterator;
 const clap = @import("clap");
@@ -17,8 +18,12 @@ fn connect(io: Io, gpa: std.mem.Allocator, environ: *std.process.Environ.Map) Io
     ) catch @panic("oom");
     defer gpa.free(socket_path);
 
-    return std.net.connectUnixSocket(socket_path) catch |err| switch (err) {
-        error.ConnectionRefused => {
+    const addr = Io.net.UnixAddress.init(socket_path) catch |err| {
+        std.log.err("{}: name of your TMPDIR is too long: {s}", .{err, socket_path});
+        std.process.exit(1);
+    };
+    const stream = addr.connect(io) catch |err| switch (err) {
+        error.AccessDenied => {
             std.debug.print(
                 \\Connection refused!
                 \\Is Bork running?
@@ -34,6 +39,8 @@ fn connect(io: Io, gpa: std.mem.Allocator, environ: *std.process.Environ.Map) Io
             std.process.exit(1);
         },
     };
+
+    return stream;
 }
 
 pub fn send(
@@ -48,7 +55,7 @@ pub fn send(
     };
 
     const conn = connect(io, gpa, environ);
-    defer conn.close();
+    defer conn.close(io);
 
     try conn.writer().writeAll("SEND\n");
     try conn.writer().writeAll(message);
@@ -71,8 +78,8 @@ pub fn reconnect(
     // TODO: validation
     _ = it;
 
-    const conn = connect(gpa);
-    defer conn.close();
+    const conn = connect(io, gpa, environ);
+    defer conn.close(io);
 
     try conn.writer().writeAll("RECONNECT\n");
 }
@@ -87,8 +94,8 @@ pub fn links(
     // TODO: validation
     _ = it;
 
-    const conn = connect(gpa);
-    defer conn.close();
+    const conn = connect(io, gpa, environ);
+    defer conn.close(io);
 
     try conn.writer().writeAll("LINKS\n");
 
