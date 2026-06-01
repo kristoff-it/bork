@@ -1,4 +1,5 @@
 const std = @import("std");
+const Io = std.Io;
 const builtin = @import("builtin");
 const options = @import("build_options");
 const vaxis = @import("vaxis");
@@ -14,6 +15,7 @@ const GlobalEventUnion = main.Event;
 const log = std.log.scoped(.display);
 
 var gpa: std.mem.Allocator = undefined;
+var io: Io = undefined;
 var config: Config = undefined;
 var loop: *vaxis.Loop(GlobalEventUnion) = undefined;
 
@@ -27,7 +29,7 @@ var showing_quit_message: ?i64 = null;
 var afk: ?Afk = null;
 
 const Afk = struct {
-    target_time: i64,
+    target_time: Io.Timestamp,
     title: []const u8 = "AFK",
     reason: []const u8 = "⏰",
 };
@@ -54,11 +56,13 @@ pub const Event = union(enum) {
 };
 
 pub fn setup(
+    io_: std.Io,
     gpa_: std.mem.Allocator,
     loop_: *vaxis.Loop(GlobalEventUnion),
     config_: Config,
     chat_: *Chat,
 ) !void {
+    io = io_;
     gpa = gpa_;
     loop = loop_;
     config = config_;
@@ -84,10 +88,10 @@ pub fn setup(
     );
 }
 
-fn tick() void {
+fn tick() !void {
     while (true) {
-        _ = loop.tryPostEvent(.{ .display = .tick });
-        std.time.sleep(250 * std.time.ns_per_ms);
+        _ = try loop.tryPostEvent(.{ .display = .tick });
+        try io.sleep(.fromMilliseconds(250), .awake);
     }
 }
 
@@ -176,8 +180,8 @@ pub fn render() !void {
 
         const last_is_bottom = chat.last_message == chat.bottom_message;
         if (showing_quit_message) |timeout| {
-            const now = std.time.timestamp();
-            if (timeout <= now) showing_quit_message = null;
+            const now: Io.Timestamp = .now(io, .real);
+            if (timeout <= now.toSeconds()) showing_quit_message = null;
         }
         if (showing_quit_message != null) {
             const msg = "run `bork quit`";
@@ -241,8 +245,8 @@ pub fn render() !void {
         try w.writeAll("║\r\n");
         try w.writeAll("║");
         {
-            const now = std.time.timestamp();
-            const remaining = @max(a.target_time - now, 0);
+            const now: Io.Timestamp = .now(io, .real);
+            const remaining = @max(now.durationTo(a.target_time).toSeconds(), 0);
             var timer: [9]u8 = undefined;
             {
                 const cd = @as(usize, @intCast(remaining));
@@ -745,7 +749,7 @@ fn printWrap(
     return total_rows;
 }
 pub fn setAfkMessage(
-    target_time: i64,
+    target_time: Io.Timestamp,
     reason: []const u8,
     title: []const u8,
 ) !void {
@@ -759,7 +763,7 @@ pub fn setAfkMessage(
 
 pub fn showCtrlCMessage() !bool {
     log.debug("show ctrlc message", .{});
-    showing_quit_message = std.time.timestamp() + 3;
+    showing_quit_message = Io.Timestamp.now(io, .real).toSeconds() + 3;
     return true;
 }
 
