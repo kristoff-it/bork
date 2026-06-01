@@ -173,7 +173,7 @@ fn borkStart(io: std.Io, gpa: std.mem.Allocator, environ: *std.process.Environ.M
     // Main control loop
     while (true) {
         var need_repaint = false;
-        const event = loop.nextEvent();
+        const event = try loop.nextEvent();
         switch (event) {
             .remote => |re| {
                 switch (re) {
@@ -235,7 +235,10 @@ fn borkStart(io: std.Io, gpa: std.mem.Allocator, environ: *std.process.Environ.M
                     else => {},
                     .left => {
                         std.log.debug("click at {}:{}", .{ m.row, m.col });
-                        need_repaint = try display.handleClick(m.row + 1, m.col + 1);
+                        need_repaint = try display.handleClick(
+                            @intCast(m.row + 1),
+                            @intCast(m.col + 1),
+                        );
                     },
                     .wheel_up => {
                         chat.scroll(1);
