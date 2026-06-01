@@ -72,8 +72,9 @@ pub fn setup(
     const ticker_thread = try std.Thread.spawn(.{}, tick, .{});
     ticker_thread.detach();
 
-    try loop.vaxis.setMouseMode(loop.tty.anyWriter(), true);
-    try loop.tty.anyWriter().writeAll(
+    const w = loop.tty.writer();
+    try loop.vaxis.setMouseMode(w, true);
+    try w.writeAll(
         // enter alt screen
         // "\x1B[s\x1B[?47h\x1B[?1049h" ++
         // dislable wrapping mode
@@ -143,8 +144,7 @@ pub fn render() !void {
     placement_id = 0;
     log.debug("RENDER!\n {?any}", .{chat.last_message});
 
-    var buffered_writer = loop.tty.bufferedWriter();
-    var w = buffered_writer.writer();
+    var w = &loop.tty.tty_writer.interface;
 
     // enter sync mode
     try w.writeAll("\x1B[?2026h");
@@ -368,7 +368,7 @@ pub fn render() !void {
 
     // exit sync mode
     try w.writeAll("\x1B[?2026l");
-    try buffered_writer.flush();
+    try w.flush();
 }
 
 const RenderInfo = struct {
@@ -382,7 +382,9 @@ fn renderMessage(
     heading_style: HeadingStyle,
 ) !RenderInfo {
     message_rendering_buffer.clearRetainingCapacity();
-    const w = message_rendering_buffer.writer(gpa);
+    var aw: Io.Writer.Allocating = .init(gpa);
+    defer aw.deinit();
+    const w: *Io.Writer = &aw.writer;
     const nick_selected = switch (active) {
         .nick => |n| std.mem.eql(u8, n, msg.login_name),
         else => false,
@@ -578,7 +580,7 @@ fn renderMessage(
 
 fn printWrap(
     cols: usize,
-    w: std.ArrayListUnmanaged(u8).Writer,
+    w: *Io.Writer,
     text: []const u8,
     emotes: []const Chat.Message.Emote,
     // message is highlighted
@@ -746,6 +748,7 @@ fn printWrap(
         try writeStyle(w, .{});
     }
 
+    try w.flush();
     return total_rows;
 }
 pub fn setAfkMessage(
@@ -854,7 +857,7 @@ pub const Style = struct {
     };
 };
 
-pub fn writeStyle(w: anytype, comptime style: Style) !void {
+pub fn writeStyle(w: *Io.Writer, comptime style: Style) !void {
     try w.writeAll("\x1B[0"); // always clear
 
     switch (style.weight) {
@@ -893,6 +896,7 @@ pub fn writeStyle(w: anytype, comptime style: Style) !void {
     if (style.reverse) try w.writeAll(";7");
 
     try w.writeAll("m");
+    try w.flush();
 }
 
 fn parseEvent(
