@@ -57,16 +57,22 @@ pub fn send(
     const conn = connect(io, gpa, environ);
     defer conn.close(io);
 
-    try conn.writer().writeAll("SEND\n");
-    try conn.writer().writeAll(message);
-    try conn.writer().writeAll("\n");
+    var wbuf: [512]u8 = undefined;
+    var w = conn.writer(io, &wbuf);
+
+    try w.interface.writeAll("SEND\n");
+    try w.interface.writeAll(message);
+    try w.interface.writeAll("\n");
+    try w.interface.flush();
 }
 
 pub fn quit(io: Io, gpa: std.mem.Allocator, environ: *std.process.Environ.Map) !void {
     const conn = connect(io, gpa, environ);
     defer conn.close(io);
 
-    try conn.writer().writeAll("QUIT\n");
+    var w = conn.writer(io, &.{});
+    try w.interface.writeAll("QUIT\n");
+    try w.interface.flush();
 }
 
 pub fn reconnect(
@@ -81,7 +87,9 @@ pub fn reconnect(
     const conn = connect(io, gpa, environ);
     defer conn.close(io);
 
-    try conn.writer().writeAll("RECONNECT\n");
+    var w = conn.writer(io, &.{});
+    try w.interface.writeAll("RECONNECT\n");
+    try w.interface.flush();
 }
 
 pub fn links(
@@ -97,17 +105,18 @@ pub fn links(
     const conn = connect(io, gpa, environ);
     defer conn.close(io);
 
-    try conn.writer().writeAll("LINKS\n");
+    {
+        var buf: [12]u8 = undefined;
+        var w = conn.writer(io, &buf);
+        try w.interface.writeAll("LINKS\n");
+        try w.interface.flush();
+    }
 
     std.debug.print("Latest links (not sent by you)\n\n", .{});
 
-    var buf: [100]u8 = undefined;
-    var n = try conn.read(&buf);
-
-    const out = std.io.getStdOut();
-    while (n != 0) : (n = try conn.read(&buf)) {
-        try out.writeAll(buf[0..n]);
-    }
+    var buf: [128]u8 = undefined;
+    var r = conn.reader(io, &buf);
+    _ = try r.interface.stream(stdout, .limited(128));
 }
 
 pub fn youtube(
@@ -129,34 +138,46 @@ pub fn youtube(
         break :blk query_it.next() orelse @panic("bad url");
     } else video_url_or_id;
 
-    const conn = connect(gpa);
-    defer conn.close();
+    const conn = connect(io, gpa, environ);
+    defer conn.close(io);
 
-    try conn.writer().writeAll("YT\n");
-    try conn.writer().writeAll(video_id);
-    try conn.writer().writeAll("\n");
+    {
+        var buf: [32]u8 = undefined;
+        var w = conn.writer(io, &buf);
+        try w.interface.writeAll("YT\n");
+        try w.interface.writeAll(video_id);
+        try w.interface.writeAll("\n");
+        try w.interface.flush();
+    }
 
-    var buf: [100]u8 = undefined;
-    var n = try conn.read(&buf);
+    {
+        var buf: [100]u8 = undefined;
+        var r = conn.reader(io, &buf);
 
-    const out = std.io.getStdOut();
-    while (n != 0) : (n = try conn.read(&buf)) {
-        try out.writeAll(buf[0..n]);
+        _ = try r.interface.streamRemaining(stdout);
     }
 }
 
-pub fn ban(gpa: std.mem.Allocator, it: *std.process.ArgIterator) !void {
+pub fn ban(
+    io: Io,
+    gpa: std.mem.Allocator,
+    environ: *std.process.Environ.Map,
+    it: *std.process.Args.Iterator,
+) !void {
     const user = it.next() orelse {
         std.debug.print("Usage ./bork ban \"username\"\n", .{});
         return;
     };
 
-    const conn = connect(gpa);
-    defer conn.close();
+    const conn = connect(io, gpa, environ);
+    defer conn.close(io);
 
-    try conn.writer().writeAll("BAN\n");
-    try conn.writer().writeAll(user);
-    try conn.writer().writeAll("\n");
+    var buf: [32]u8 = undefined;
+    var w = conn.writer(io, &buf);
+    try w.interface.writeAll("BAN\n");
+    try w.interface.writeAll(user);
+    try w.interface.writeAll("\n");
+    try w.interface.flush();
 }
 
 pub fn unban(gpa: std.mem.Allocator, it: *std.process.ArgIterator) !void {
@@ -217,7 +238,7 @@ pub fn afk(
         .diagnostic = &diag,
     }) catch |err| {
         // Report any useful error and exit
-        diag.report(std.io.getStdErr().writer(), err) catch {};
+        diag.report(stderr, err) catch {};
         return err;
     };
 
@@ -225,7 +246,7 @@ pub fn afk(
     const pos_ok = positionals.len > 0 and positionals.len < 3;
     if (res.args.help != 0 or !pos_ok) {
         std.debug.print("{s}\n", .{summary});
-        clap.help(std.io.getStdErr().writer(), clap.Help, &params, .{}) catch {};
+        clap.help(stderr, clap.Help, &params, .{}) catch {};
         std.debug.print("\n", .{});
         return;
     }
@@ -268,16 +289,18 @@ pub fn afk(
         };
     }
 
-    const conn = connect(gpa);
-    defer conn.close();
+    const conn = connect(io, gpa, environ);
+    defer conn.close(io);
 
-    const w = conn.writer();
+    var buf: [32]u8 = undefined;
+    var w = conn.writer(io, &buf);
 
-    try w.writeAll("AFK\n");
-    try w.writeAll(time);
-    try w.writeAll("\n");
-    if (reason) |r| try w.writeAll(r);
-    try conn.writer().writeAll("\n");
-    if (title) |t| try w.writeAll(t);
-    try conn.writer().writeAll("\n");
+    try w.interface.writeAll("AFK\n");
+    try w.interface.writeAll(time);
+    try w.interface.writeAll("\n");
+    if (reason) |r| try w.interface.writeAll(r);
+    try w.interface.writeAll("\n");
+    if (title) |t| try w.interface.writeAll(t);
+    try w.interface.writeAll("\n");
+    try w.interface.flush();
 }
