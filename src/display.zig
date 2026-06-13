@@ -646,7 +646,7 @@ fn printWrap(
                     current_col += 1;
                 }
 
-                var git = loop.vaxis.unicode.graphemeIterator(link);
+                var git = vaxis.unicode.graphemeIterator(link);
                 var url_is_off = true;
                 while (git.next()) |gh| {
                     const bytes = gh.bytes(link);
@@ -698,7 +698,7 @@ fn printWrap(
                     current_col += 1;
                 }
             } else {
-                var git = loop.vaxis.unicode.graphemeIterator(word);
+                var git = vaxis.unicode.graphemeIterator(word);
                 while (git.next()) |gh| {
                     const bytes = gh.bytes(word);
                     const remaining = cols -| current_col;
@@ -833,7 +833,7 @@ pub fn panic() void {
 }
 
 pub fn strWidth(str: []const u8) u16 {
-    return vaxis.gwidth.gwidth(str, loop.vaxis.caps.unicode, &loop.vaxis.unicode.width_data);
+    return vaxis.gwidth.gwidth(str, .unicode);
 }
 
 pub const Style = struct {
