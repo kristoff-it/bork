@@ -47,30 +47,31 @@ const Command = union(enum) {
 config: Config,
 auth: Auth,
 tz: zeit.TimeZone,
+io: std.Io,
 gpa: std.mem.Allocator,
 ch: *vaxis.Loop(GlobalEventUnion),
 emote_cache: EmoteCache,
-socket: std.net.Stream = undefined,
-writer_lock: std.Thread.Mutex = .{},
+socket: std.Io.net.Stream = undefined,
+writer_lock: std.Io.Mutex = .init,
 
 pub fn init(
     self: *Network,
+    io: std.Io,
     gpa: std.mem.Allocator,
     ch: *vaxis.Loop(GlobalEventUnion),
     config: Config,
     auth: Auth,
 ) !void {
-    var env = try std.process.getEnvMap(gpa);
-    defer env.deinit();
-    const tz = try zeit.local(gpa, &env);
+    const tz = try zeit.local(gpa, io, .{});
 
     self.* = Network{
         .config = config,
         .auth = auth,
         .tz = tz,
+        .io = io,
         .gpa = gpa,
         .ch = ch,
-        .emote_cache = EmoteCache.init(gpa),
+        .emote_cache = EmoteCache.init(io, gpa),
     };
 
     const irc_thread = try std.Thread.spawn(.{}, ircHandler, .{self});
@@ -131,11 +132,11 @@ fn wsHandler(self: *Network) void {
             switch (retries) {
                 0...1 => {},
                 else => {
-                    const t: usize = @min(10, 2 * retries);
-                    std.time.sleep(t * std.time.ns_per_s);
+                    const t: i64 = @min(10, 2 * retries);
+                    self.io.sleep(.fromSeconds(t), .awake) catch {};
                 },
             }
-            var client = ws.Client.init(self.gpa, .{
+            var client = ws.Client.init(self.io, self.gpa, .{
                 .host = ws_host,
                 .port = 443,
                 .tls = !options.local,
@@ -168,6 +169,7 @@ const Handler = struct {
 
     var seen_follows: std.StringHashMapUnmanaged(void) = .{};
     pub fn serverMessage(self: Handler, data: []u8) !void {
+        const io = self.network.io;
         errdefer |err| {
             wslog.debug("websocket handler errored out: {s}", .{@errorName(err)});
         }
@@ -223,6 +225,7 @@ const Handler = struct {
                 const notifs = self.network.config.notifications;
                 if (notifs.follows) {
                     try self.subscribeToEvent(
+                        io,
                         session_id,
                         "channel.follow",
                         "2",
@@ -230,6 +233,7 @@ const Handler = struct {
                 }
                 if (notifs.charity) {
                     try self.subscribeToEvent(
+                        io,
                         session_id,
                         "channel.charity_campaign.donate",
                         "1",
@@ -244,6 +248,7 @@ const Handler = struct {
 
     fn subscribeToEvent(
         self: Handler,
+        io: std.Io,
         session_id: []const u8,
         event_name: []const u8,
         version: []const u8,
@@ -254,6 +259,7 @@ const Handler = struct {
         const gpa = self.network.gpa;
 
         var client: std.http.Client = .{
+            .io = io,
             .allocator = gpa,
         };
 
@@ -320,19 +326,21 @@ pub fn deinit(self: *Network) void {
 }
 
 fn ircHandler(self: *Network) void {
-    self.writer_lock.lock();
+    const io = self.io;
+    // TODO: handle error
+    self.writer_lock.lock(io) catch return;
     while (true) {
         var retries: usize = 0;
         while (true) : (retries += 1) {
             switch (retries) {
                 0...1 => {},
                 else => {
-                    const t: usize = @min(10, 2 * retries);
-                    std.time.sleep(t * std.time.ns_per_s);
+                    const t: i64 = @min(10, 2 * retries);
+                    io.sleep(.fromSeconds(t), .real) catch unreachable;
                 },
             }
             self.socket = connect(
-                self.gpa,
+                io,
                 self.auth.twitch.login,
                 self.auth.twitch.token,
             ) catch |reconnect_err| {
@@ -347,21 +355,21 @@ fn ircHandler(self: *Network) void {
             break;
         }
 
-        self.writer_lock.unlock();
+        self.writer_lock.unlock(io);
 
-        self.receiveIrcMessages() catch |err| {
+        self.receiveIrcMessages(io) catch |err| {
             log.debug("reconnecting after network error: {s}", .{@errorName(err)});
 
-            self.writer_lock.lock();
-            std.posix.shutdown(self.socket.handle, .both) catch |sherr| {
+            self.writer_lock.lock(io) catch unreachable;
+            self.socket.shutdown(io, .both) catch |sherr| {
                 log.debug("reader thread shutdown failed err: {}", .{sherr});
             };
-            self.socket.close();
+            self.socket.close(io);
         };
     }
 }
 
-fn receiveIrcMessages(self: *Network) !void {
+fn receiveIrcMessages(self: *Network, io: std.Io) !void {
     while (true) {
         const data = data: {
             const r = self.socket.reader();
@@ -375,7 +383,7 @@ fn receiveIrcMessages(self: *Network) !void {
 
         log.debug("receiveMessages succeded", .{});
 
-        const p = irc_parser.parseMessage(data, self.gpa, &self.tz) catch |err| {
+        const p = irc_parser.parseMessage(io, data, self.gpa, &self.tz) catch |err| {
             log.debug("parsing error: [{}]", .{err});
             continue;
         };
@@ -444,7 +452,8 @@ fn receiveIrcMessages(self: *Network) !void {
 // Public interface for sending commands (messages, bans, ...)
 pub fn sendCommand(self: *Network, cmd: UserCommand) void {
     self.send(Command{ .user = cmd }) catch {
-        std.posix.shutdown(self.socket.handle, .both) catch |err| {
+        const io = self.io;
+        self.socket.shutdown(io, .both) catch |err| {
             log.debug("shutdown failed, err: {}", .{err});
             @panic("");
         };
@@ -452,8 +461,9 @@ pub fn sendCommand(self: *Network, cmd: UserCommand) void {
 }
 
 fn send(self: *Network, cmd: Command) !void {
-    self.writer_lock.lock();
-    defer self.writer_lock.unlock();
+    const io = self.io;
+    try self.writer_lock.lock(io);
+    defer self.writer_lock.unlock(io);
 
     const w = self.socket.writer();
     switch (cmd) {
@@ -475,13 +485,14 @@ fn send(self: *Network, cmd: Command) !void {
     }
 }
 
-pub fn connect(gpa: std.mem.Allocator, name: []const u8, token: []const u8) !std.net.Stream {
-    var socket = if (options.local)
-        try std.net.tcpConnectToHost(gpa, "localhost", 6667)
-    else
-        try std.net.tcpConnectToHost(gpa, "irc.chat.twitch.tv", 6667);
+pub fn connect(io: std.Io, name: []const u8, token: []const u8) !std.Io.net.Stream {
+    const hostname_str: []const u8 = if (options.local) "localhost" else "irc.chat.twitch.tv";
+    const hostname: std.Io.net.HostName = try .init(hostname_str);
+    var socket = try hostname.connect(io, 6667, .{
+        .mode = .stream,
+    });
 
-    errdefer socket.close();
+    errdefer socket.close(io);
 
     const oua = if (options.local) "##SECRET##" else blk: {
         var it = std.mem.tokenizeScalar(u8, token, ' ');

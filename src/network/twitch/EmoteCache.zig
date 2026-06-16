@@ -11,6 +11,7 @@ const EmoteHashMap = std.StringHashMap(struct {
     idx: u32,
 });
 
+io: std.Io,
 gpa: std.mem.Allocator,
 idx_counter: u32 = 1,
 cache: EmoteHashMap,
@@ -20,8 +21,9 @@ read_buf: std.ArrayList(u8),
 // const path_fmt = "https://localhost:443/emoticons/v1/{s}/3.0";
 const hostname = "static-cdn.jtvnw.net";
 
-pub fn init(gpa: std.mem.Allocator) EmoteCache {
+pub fn init(io: std.Io, gpa: std.mem.Allocator) EmoteCache {
     return EmoteCache{
+        .io = io,
         .gpa = gpa,
         .cache = EmoteHashMap.init(gpa),
         .read_buf = .empty,
@@ -31,7 +33,9 @@ pub fn init(gpa: std.mem.Allocator) EmoteCache {
 // TODO: make this concurrent
 // TODO: make so failing one emote doesn't fail the whole job!
 pub fn fetch(self: *EmoteCache, emote_list: []Emote) !void {
+    const io = self.io;
     var client: std.http.Client = .{
+        .io = io,
         .allocator = self.gpa,
     };
     defer client.deinit();

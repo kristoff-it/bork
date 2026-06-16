@@ -10,7 +10,7 @@ const ParseResult = union(enum) {
 
 const log = std.log.scoped(.parser);
 
-pub fn parseMessage(data: []u8, alloc: std.mem.Allocator, tz: *zeit.TimeZone) !ParseResult {
+pub fn parseMessage(io: std.Io, data: []u8, alloc: std.mem.Allocator, tz: *zeit.TimeZone) !ParseResult {
     log.debug("data:\n{s}\n", .{data});
     if (data.len == 0) return error.NoData;
 
@@ -76,7 +76,7 @@ pub fn parseMessage(data: []u8, alloc: std.mem.Allocator, tz: *zeit.TimeZone) !P
     const cmd = cmd_and_args_it.next().?; // Calling the iterator once should never fail
 
     // Prepare fields common to multiple msg types
-    const now_utc = try zeit.instant(.{});
+    const now_utc = try zeit.instant(io, .{});
     const now = now_utc.in(tz).time();
 
     var time: [5]u8 = undefined;
