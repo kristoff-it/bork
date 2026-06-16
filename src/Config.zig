@@ -26,7 +26,7 @@ pub fn create(config_base: std.fs.Dir) !Config {
     std.debug.print(
         \\
         \\Hi, welcome to Bork!
-        \\This is the initial setup procedure that will 
+        \\This is the initial setup procedure that will
         \\help you create an initial config file.
         \\
     , .{});
@@ -43,25 +43,25 @@ pub fn create(config_base: std.fs.Dir) !Config {
             // try std.posix.tcsetattr(in.handle, .FLUSH, termios);
 
             std.debug.print(
-                \\ 
+                \\
                 \\=============================================================
                 \\
-                \\Bork allows you to interact with it in three ways: 
-                \\ 
+                \\Bork allows you to interact with it in three ways:
+                \\
                 \\- Keyboard
                 \\  Up/Down Arrows and Page Up/Down will allow you to
                 \\  scroll message history.
                 \\
-                \\- Mouse 
+                \\- Mouse
                 \\  Left click on messages to highlight them, clicking
-                \\  on the message author will toggle highlight all 
+                \\  on the message author will toggle highlight all
                 \\  messages from that same user.
                 \\  Wheel Up/Down to scroll message history.
                 \\
                 \\- Remote CLI
-                \\  By invoking the `bork` command in a shell you will 
-                \\  be able to issue various commands, from sending 
-                \\  messages to issuing bans. See the full list of 
+                \\  By invoking the `bork` command in a shell you will
+                \\  be able to issue various commands, from sending
+                \\  messages to issuing bans. See the full list of
                 \\  commands by calling `bork help`.
                 \\
                 \\Press any key to continue reading...
@@ -76,14 +76,14 @@ pub fn create(config_base: std.fs.Dir) !Config {
                 \\--- YouTube Support
                 \\
                 \\If you plan to simulcast to both Twitch and YouTube,
-                \\Bork can display live chat from both platforms in a 
+                \\Bork can display live chat from both platforms in a
                 \\unified stream.
                 \\
                 \\Enabling YouTube support will require you to authenticate
                 \\with YouTube when launching Bork. You can always enable
                 \\it later by modifiyng Bork's config file.
                 \\
-                \\Enable YouTube support? [y/N] 
+                \\Enable YouTube support? [y/N]
             , .{});
 
             config.youtube = switch (try in_reader.readByte()) {
@@ -97,14 +97,14 @@ pub fn create(config_base: std.fs.Dir) !Config {
                 \\         ======> ! IMPORTANT ! <======
                 \\To protect you from accidentally closing Bork while
                 \\streaming, with CTRL+C protection enabled, Bork will
-                \\not close when you press CTRL+C. 
+                \\not close when you press CTRL+C.
                 \\
-                \\To close it, you will instead have to execute in a 
+                \\To close it, you will instead have to execute in a
                 \\separate shell:
                 \\
                 \\                `bork quit`
-                \\ 
-                \\Enable CTRL+C protection? [Y/n] 
+                \\
+                \\Enable CTRL+C protection? [Y/n]
             , .{});
 
             config.ctrl_c_protection = switch (try in_reader.readByte()) {
