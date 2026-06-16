@@ -1,4 +1,5 @@
 const std = @import("std");
+const Io = std.Io;
 const builtin = @import("builtin");
 const options = @import("build_options");
 const datetime = @import("datetime");
@@ -110,33 +111,29 @@ fn borkStart(io: std.Io, gpa: std.mem.Allocator, environ: *std.process.Environ.M
         try folders.open(io, gpa, environ, .home, .{}) orelse
         // TODO: .executable_dir removed
         // try folders.open(io, gpa, environ, .executable_dir, .{}) orelse
-        std.fs.cwd();
+        std.Io.Dir.cwd();
 
-    try config_base.makePath("bork");
+    try config_base.createDir(io, "bork", .default_dir);
 
-    const config = try Config.get(gpa, config_base);
+    const config = try Config.get(io, gpa, config_base);
     const auth: Network.Auth = .{
-        .twitch = try TwitchAuth.get(gpa, config_base),
-        .youtube = if (config.youtube) try YouTubeAuth.get(gpa, config_base) else .{},
+        .twitch = try TwitchAuth.get(io, gpa, config_base, &stdin.interface),
+        .youtube = if (config.youtube) try YouTubeAuth.get(io, gpa, config_base) else .{},
     };
 
     var tty = try vaxis.Tty.init();
     defer tty.deinit();
 
-    var vx = try vaxis.init(gpa, .{});
+    var vx = try vaxis.init(io, gpa, .{});
     defer vx.deinit(null, tty.anyWriter());
 
-    var loop: vaxis.Loop(Event) = .{
-        .tty = &tty,
-        .vaxis = &vx,
-    };
-    try loop.init();
+    var loop: vaxis.Loop(Event) = .init(io, &tty, &vx);
 
     try loop.start();
     defer loop.stop();
 
     var remote_server: remote.Server = undefined;
-    remote_server.init(gpa, auth, &loop) catch |err| {
+    remote_server.init(io, gpa, environ, auth, &loop) catch |err| {
         std.debug.print(
             \\ Unable to listen for remote control.
             \\ Error: {}
@@ -148,7 +145,7 @@ fn borkStart(io: std.Io, gpa: std.mem.Allocator, environ: *std.process.Environ.M
     defer remote_server.deinit();
 
     var network: Network = undefined;
-    try network.init(gpa, &loop, config, auth);
+    try network.init(io, gpa, &loop, config, auth);
     defer network.deinit();
 
     var chat = Chat{ .allocator = gpa, .nick = auth.twitch.login };
@@ -157,7 +154,7 @@ fn borkStart(io: std.Io, gpa: std.mem.Allocator, environ: *std.process.Environ.M
 
     try vx.queryTerminal(tty.anyWriter(), 1 * std.time.ns_per_s);
 
-    try display.setup(gpa, &loop, config, &chat);
+    try display.setup(io, gpa, &loop, config, &chat);
     defer display.teardown();
 
     // Initial paint!
@@ -177,7 +174,7 @@ fn borkStart(io: std.Io, gpa: std.mem.Allocator, environ: *std.process.Environ.M
                         network.sendCommand(.{ .message = msg });
                     },
                     .links => |conn| {
-                        remote.Server.replyLinks(&chat, conn);
+                        remote.Server.replyLinks(io, &chat, conn);
                     },
                     .afk => |afk| {
                         try display.setAfkMessage(afk.target_time, afk.reason, afk.title);
