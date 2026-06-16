@@ -57,9 +57,12 @@ pub fn fetch(self: *EmoteCache, emote_list: []Emote) !void {
                 );
                 defer self.gpa.free(url);
 
+                var aw: std.Io.Writer.Allocating = .init(self.gpa);
+                defer aw.deinit();
+
                 const res = try client.fetch(.{
                     .location = .{ .url = url },
-                    .response_storage = .{ .dynamic = &self.read_buf },
+                    .response_writer = &aw.writer,
                 });
 
                 if (res.status != .ok) {
@@ -67,8 +70,9 @@ pub fn fetch(self: *EmoteCache, emote_list: []Emote) !void {
                     return error.HttpFailed;
                 }
 
-                break :img self.read_buf.items;
+                break :img try aw.toOwnedSlice();
             };
+            defer self.gpa.free(img);
 
             const encode_buf = try self.gpa.alloc(u8, std.base64.standard.Encoder.calcSize(img.len));
             result.value_ptr.* = .{
