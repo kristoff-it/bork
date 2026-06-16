@@ -92,8 +92,14 @@ pub fn main(init: std.process.Init) !void {
         };
     };
 
+    var stdin_buffer: [64]u8 = undefined;
+    var stdin = Io.File.stdin().reader(io, &stdin_buffer);
+    var stdout_buffer: [128]u8 = undefined;
+    var stdout = Io.File.stdout().writer(io, &stdout_buffer);
+    var stderr_buffer: [128]u8 = undefined;
+    var stderr = Io.File.stderr().writer(io, &stderr_buffer);
     switch (subcommand) {
-        .start => try borkStart(io, gpa, environ),
+        .start => try borkStart(io, gpa, environ, &stdin),
         .send => try remote.client.send(io, gpa, environ, &it),
         .quit => try remote.client.quit(io, gpa, environ),
         .reconnect => try remote.client.reconnect(io, gpa, environ, &it),
@@ -104,9 +110,11 @@ pub fn main(init: std.process.Init) !void {
         .version => printVersion(),
         .help, .@"--help", .@"-h" => printHelpFatal(),
     }
+    try stdout.flush();
+    try stderr.flush();
 }
 
-fn borkStart(io: std.Io, gpa: std.mem.Allocator, environ: *std.process.Environ.Map) !void {
+fn borkStart(io: std.Io, gpa: std.mem.Allocator, environ: *std.process.Environ.Map, stdin: *std.Io.File.Reader) !void {
     const config_base = try folders.open(io, gpa, environ, .local_configuration, .{}) orelse
         try folders.open(io, gpa, environ, .home, .{}) orelse
         // TODO: .executable_dir removed
@@ -115,17 +123,19 @@ fn borkStart(io: std.Io, gpa: std.mem.Allocator, environ: *std.process.Environ.M
 
     try config_base.createDir(io, "bork", .default_dir);
 
-    const config = try Config.get(io, gpa, config_base);
+    const config = try Config.get(io, gpa, config_base, stdin);
     const auth: Network.Auth = .{
         .twitch = try TwitchAuth.get(io, gpa, config_base, &stdin.interface),
-        .youtube = if (config.youtube) try YouTubeAuth.get(io, gpa, config_base) else .{},
+        .youtube = if (config.youtube) try YouTubeAuth.get(io, gpa, config_base, &stdin.interface) else .{},
     };
 
-    var tty = try vaxis.Tty.init();
+    var tty_buffer: [64]u8 = undefined;
+    var tty = try vaxis.Tty.init(io, &tty_buffer);
     defer tty.deinit();
 
-    var vx = try vaxis.init(io, gpa, .{});
-    defer vx.deinit(null, tty.anyWriter());
+    const tty_writer = tty.writer();
+    var vx = try vaxis.init(io, gpa, environ, .{});
+    defer vx.deinit(gpa, tty_writer);
 
     var loop: vaxis.Loop(Event) = .init(io, &tty, &vx);
 
@@ -150,9 +160,9 @@ fn borkStart(io: std.Io, gpa: std.mem.Allocator, environ: *std.process.Environ.M
 
     var chat = Chat{ .allocator = gpa, .nick = auth.twitch.login };
 
-    try vx.enterAltScreen(tty.anyWriter());
+    try vx.enterAltScreen(tty_writer);
 
-    try vx.queryTerminal(tty.anyWriter(), 1 * std.time.ns_per_s);
+    try vx.queryTerminal(tty_writer, .fromSeconds(1));
 
     try display.setup(io, gpa, &loop, config, &chat);
     defer display.teardown();
