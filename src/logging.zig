@@ -3,10 +3,13 @@ const builtin = @import("builtin");
 const options = @import("build_options");
 const folders = @import("known-folders");
 
-var log_file: ?std.fs.File = switch (builtin.target.os.tag) {
+// TODO: set to stderr
+var log_file: ?std.Io.File = switch (builtin.target.os.tag) {
     .windows => null,
-    else => std.io.getStdErr(),
+    else => null,
 };
+
+var log_io: std.Io = undefined;
 
 pub fn logFn(
     comptime level: std.log.Level,
@@ -45,11 +48,12 @@ pub fn setup(
 
 fn setup_internal(io: std.Io, gpa: std.mem.Allocator, environ: *const std.process.Environ.Map) !void {
     const cache_base = try folders.open(io, gpa, environ, .cache, .{}) orelse
-        try folders.open(gpa, environ, .home, .{}) orelse
-        try folders.open(gpa, environ, .executable_dir, .{}) orelse
-        std.fs.cwd();
+        try folders.open(io, gpa, environ, .home, .{}) orelse
+        // TODO: executable_dir is not exist anymore
+        // try folders.open(io, gpa, environ, .executable_dir, .{}) orelse
+        std.Io.Dir.cwd();
 
-    try cache_base.makePath("bork");
+    try cache_base.createDir(io, "bork", .default_dir);
 
     const log_name = if (options.local) "bork-local.log" else "bork.log";
     const log_path = try std.fmt.allocPrint(gpa, "bork/{s}", .{log_name});
