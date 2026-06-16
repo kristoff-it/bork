@@ -80,16 +80,18 @@ pub fn authenticateToken(gpa: std.mem.Allocator, token: []const u8) !Auth {
         },
     });
 
-    defer {
-        gpa.free(result.stdout);
-        gpa.free(result.stderr);
+    var arr: std.ArrayList(u8) = .empty;
+    defer arr.deinit(gpa);
+    {
+        var buffer: [256]u8 = undefined;
+        var reader = result.stdout.?.reader(io, &buffer);
+        try reader.interface.appendRemaining(gpa, &arr, .unlimited);
     }
-
-    if (result.stdout.len == 0) {
+    if (arr.items.len == 0) {
         return error.TokenExpired;
     }
 
-    var auth = std.json.parseFromSliceLeaky(Auth, gpa, result.stdout, .{
+    var auth = std.json.parseFromSliceLeaky(Auth, gpa, arr.items, .{
         .allocate = .alloc_always,
         .ignore_unknown_fields = true,
     }) catch {

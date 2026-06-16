@@ -25,8 +25,10 @@ pub fn poll(n: *Network) !void {
         err,
     } = .searching;
 
-    var livechat: std.BoundedArray(u8, 4096) = .{};
-    var page_token: std.BoundedArray(u8, 128) = .{};
+    var livechat_buffer: [4096]u8 = undefined;
+    var livechat: std.ArrayList(u8) = .initBuffer(&livechat_buffer);
+    var page_token_buffer: [128]u8 = undefined;
+    var page_token: std.ArrayList(u8) = .initBuffer(&page_token_buffer);
     var token = n.auth.youtube.token;
     while (true) : (_ = arena_impl.reset(.retain_capacity)) {
         if (@atomicRmw(?[*:0]const u8, &new_chat_id, .Xchg, null, .acq_rel)) |nc| {

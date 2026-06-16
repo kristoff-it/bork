@@ -98,7 +98,7 @@ pub fn refreshToken(
         refresh_token,
     });
 
-    var buf = std.ArrayList(u8).init(arena);
+    var buf: std.ArrayList(u8) = .empty;
 
     log.debug("YT REQUEST: refresh access token url: {s}", .{refresh_url});
 
