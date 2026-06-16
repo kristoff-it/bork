@@ -93,7 +93,8 @@ fn wsHandler(self: *Network) void {
     const have_sigpipe_support = switch (@import("builtin").os.tag) {
         .linux,
         .plan9,
-        .solaris,
+        // TODO: tag removed?
+        // .solaris,
         .netbsd,
         .openbsd,
         .haiku,
@@ -108,7 +109,9 @@ fn wsHandler(self: *Network) void {
         else => false,
     };
 
-    if (have_sigpipe_support and !std.options.keep_sigpipe) {
+    // TODO: std.options.keep_sigpipe is removed
+    _ = have_sigpipe_support;
+    // if (have_sigpipe_support and !std.options.keep_sigpipe) {
         // const posix = std.posix;
         // const act: posix.Sigaction = .{
         //     // Set handler to a noop function instead of `SIG.IGN` to prevent
@@ -119,7 +122,7 @@ fn wsHandler(self: *Network) void {
         // };
         // posix.sigaction(posix.SIG.PIPE, &act, null) catch |err|
         //     std.debug.panic("failed to set noop SIGPIPE handler: {s}", .{@errorName(err)});
-    }
+    // }
 
     const h: Handler = .{ .network = self };
     while (true) {
@@ -179,7 +182,7 @@ const Handler = struct {
                 wslog.debug("event: {s}", .{@tagName(event)});
             },
             .charity => |c| {
-                self.network.ch.postEvent(GlobalEventUnion{
+                try self.network.ch.postEvent(GlobalEventUnion{
                     .network = .{
                         .message = Chat.Message{
                             .login_name = c.login_name,
@@ -200,7 +203,7 @@ const Handler = struct {
                     f.login_name,
                 );
                 if (!gop.found_existing) {
-                    self.network.ch.postEvent(GlobalEventUnion{
+                    try self.network.ch.postEvent(GlobalEventUnion{
                         .network = .{
                             .message = Chat.Message{
                                 .login_name = f.login_name,
@@ -277,7 +280,7 @@ const Handler = struct {
             \\        "method": "websocket",
             \\        "session_id": "{s}"
             \\    }}
-            \\}}                        
+            \\}}
         ;
 
         const body = try std.fmt.allocPrint(gpa, body_fmt, .{
@@ -381,7 +384,7 @@ fn receiveIrcMessages(self: *Network) !void {
                 try self.send(.pong);
             },
             .clear => |c| {
-                self.ch.postEvent(GlobalEventUnion{ .network = .{ .clear = c } });
+                try self.ch.postEvent(GlobalEventUnion{ .network = .{ .clear = c } });
             },
             .message => |msg| {
                 switch (msg.kind) {
@@ -400,7 +403,7 @@ fn receiveIrcMessages(self: *Network) !void {
                     },
                 }
 
-                self.ch.postEvent(GlobalEventUnion{ .network = .{ .message = msg } });
+                try self.ch.postEvent(GlobalEventUnion{ .network = .{ .message = msg } });
 
                 // Hack: when receiving resub events, we generate a fake chat message
                 //       to display the resub message. In the future this should be
@@ -410,7 +413,7 @@ fn receiveIrcMessages(self: *Network) !void {
                 switch (msg.kind) {
                     .resub => |r| {
                         if (r.resub_message.len > 0) {
-                            self.ch.postEvent(GlobalEventUnion{
+                            try self.ch.postEvent(GlobalEventUnion{
                                 .network = .{
                                     .message = Chat.Message{
                                         .login_name = msg.login_name,

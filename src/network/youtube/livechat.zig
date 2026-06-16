@@ -38,7 +38,7 @@ pub fn poll(n: *Network) !void {
                 },
             }
             state = .{ .attached = new };
-            page_token.len = 0;
+            page_token.clearRetainingCapacity();
         }
 
         const now = std.time.timestamp();
@@ -78,8 +78,8 @@ pub fn poll(n: *Network) !void {
                 std.time.sleep(10 * std.time.ns_per_s);
             },
             .attached => |chat_id| {
-                livechat.len = 0;
-                try livechat.writer().print(livechat_url, .{
+                livechat.clearRetainingCapacity();
+                try livechat.print(gpa, livechat_url, .{
                     chat_id,
                     page_token.slice(),
                 });
@@ -122,8 +122,8 @@ pub fn poll(n: *Network) !void {
                     continue;
                 };
 
-                page_token.len = 0;
-                page_token.appendSlice(messages.nextPageToken) catch {
+                page_token.clearRetainingCapacity();
+                page_token.appendSliceBounded(messages.nextPageToken) catch {
                     @panic("increase pageToken buffer");
                 };
 
@@ -133,7 +133,7 @@ pub fn poll(n: *Network) !void {
 
                     log.debug("{s}\n{s}\n\n", .{ name, msg });
 
-                    n.ch.postEvent(.{
+                    try n.ch.postEvent(.{
                         .network = .{
                             .message = .{
                                 .login_name = name,
