@@ -16,9 +16,11 @@ pub fn build(b: *std.Build) !void {
 
     const exe = b.addExecutable(.{
         .name = "bork",
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
         // .strip = true,
     });
 
@@ -49,7 +51,8 @@ pub fn build(b: *std.Build) !void {
 
     // Release
 
-    const release_step = b.step("release", "Create releases for bork");
+    // TODO: rework on this
+    // const release_step = b.step("release", "Create releases for bork");
     const targets: []const std.Target.Query = &.{
         .{ .cpu_arch = .aarch64, .os_tag = .macos },
         .{ .cpu_arch = .aarch64, .os_tag = .linux },
@@ -61,9 +64,11 @@ pub fn build(b: *std.Build) !void {
     for (targets) |t| {
         const release_exe = b.addExecutable(.{
             .name = "bork",
-            .root_source_file = b.path("src/main.zig"),
-            .target = b.resolveTargetQuery(t),
-            .optimize = .ReleaseSafe,
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/main.zig"),
+                .target = b.resolveTargetQuery(t),
+                .optimize = .ReleaseSafe,
+            }),
         });
         // release_exe.root_module.addImport("known-folders", known_folders.module("known-folders"));
         // release_exe.root_module.addImport("datetime", datetime.module("zig-datetime"));
@@ -74,14 +79,14 @@ pub fn build(b: *std.Build) !void {
 
         release_exe.root_module.addOptions("build_options", options);
 
-        const target_output = b.addInstallArtifact(release_exe, .{
-            .dest_dir = .{
-                .override = .{
-                    .custom = try t.zigTriple(b.allocator),
-                },
-            },
-        });
-
-        release_step.dependOn(&target_output.step);
+        // const target_output = b.addInstallArtifact(release_exe, .{
+        //     .dest_dir = .{
+        //         .override = .{
+        //             .custom = try t.zigTriple(b.allocator),
+        //         },
+        //     },
+        // });
+        //
+        // release_step.dependOn(&target_output.step);
     }
 }

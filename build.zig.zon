@@ -4,36 +4,32 @@
     .fingerprint = 0x3489cf2d5a811ca2,
     .dependencies = .{
         .vaxis = .{
-            .url = "git+https://github.com/rockorager/libvaxis#0c2b8046e4f657710ef02b77e070c116852b3a2c",
-            .hash = "vaxis-0.1.0-BWNV_FUICQBW4jXUsQoUlEpd_7454reqJuxeYTqxrbys",
-        },
-        .zeit = .{
-            .url = "git+https://github.com/rockorager/zeit#175cf91a641790799e9d676878a9fe814aaed134",
-            .hash = "zeit-0.6.0-5I6bk5daAgC-P60TjxRqW0bYknfCGxJp-03eS9UjGrO7",
+            .url = "git+https://github.com/rockorager/libvaxis.git#60a507c25b5335e222eb12320aa7514db684d4a4",
+            .hash = "vaxis-0.6.0-BWNV_HHwCQCy33z_jb0RHLjoinqQ8tgQVZI9z2e5Yqdd",
         },
         .ziggy = .{
-            .url = "git+https://github.com/kristoff-it/ziggy#8a29017169f43dc2c3526817e98142eb9a335087",
-            .hash = "ziggy-0.1.0-kTg8vwkbBgAOHreabwZtDDtNDi3U_RAiOMvuRDTJiy0I",
+            .url = "git+https://github.com/kristoff-it/ziggy#0b61581980d6905dd4108a618d602f5778593122",
+            .hash = "ziggy-0.1.0-kTg8v0NWBgAyFtS5awtOlKnC7ddvefR_I0Xh3XQyi7p1",
         },
         .clap = .{
-            .url = "git+https://github.com/Hejsil/zig-clap#a4e784da8399c51d5eeb5783e6a485b960d5c1f9",
-            .hash = "clap-0.10.0-oBajB8fkAQB0JvsrWLar4YZrseSZ9irFxHB7Hvy_bvxb",
+            .url = "https://github.com/Hejsil/zig-clap/archive/refs/tags/0.12.0.tar.gz",
+            .hash = "clap-0.12.0-oBajB7foAQDqlSwaSG5g0yq7xGbQARUsBk5T64gAOqP5",
         },
         .ws = .{
-            .url = "git+https://github.com/karlseguin/websocket.zig#4e8fb28b680d22e633541e810e8e6190e7748651",
-            .hash = "websocket-0.1.0-ZPISdXNIAwCXG7oHBj4zc1CfmZcDeyR6hfTEOo8_YI4r",
+            .url = "git+https://github.com/karlseguin/websocket.zig?ref=master#d823a7d8cb3e43b3789208ae499bfe1d077de8ee",
+            .hash = "websocket-0.1.0-ZPISdUQ6BAAuDI1LbcOpeUAMHk5sIvvWmcSl1wFSFL62",
         },
         .zg = .{
-            .url = "git+https://codeberg.org/utkarshmalik/zg#7ca90b6f8796cd6615ddc61e12cd292ea26662ce",
-            .hash = "zg-0.13.4-AAAAAGiZ7QLz4pvECFa_wG4O4TP4FLABHHbemH2KakWM",
-        },
-        .websocket = .{
-            .url = "git+https://github.com/karlseguin/websocket.zig#69ac58551be9ff5f41689198bb57e29f8436cf39",
-            .hash = "1220dba3f6cb8c7a2be0f29243176b44b7d6bbdb45735fcaf5cfb3d1e0fa71cb9031",
+            .url = "https://codeberg.org/atman/zg/archive/v0.16.0-rc2.tar.gz",
+            .hash = "zg-0.15.3-oGqU3FiRtgK0opvZMF5fuWoeqYiCfUTfkfwGozC-b9dv",
         },
         .known_folders = .{
-            .url = "git+https://github.com/ziglibs/known-folders#aa24df42183ad415d10bc0a33e6238c437fc0f59",
-            .hash = "known_folders-0.0.0-Fy-PJtLDAADGDOwYwMkVydMSTp_aN-nfjCZw6qPQ2ECL",
+            .url = "git+https://github.com/ziglibs/known-folders.git#207c34a16e4365edc20d92c7892f962b3bed46e8",
+            .hash = "known_folders-0.0.0-Fy-PJsbKAACbDh9bBxR0MMThxZSS6A9RH4apWphNHY70",
+        },
+        .zeit = .{
+            .url = "git+https://github.com/rockorager/zeit?ref=v0.8.0#2a79678e05e4e82cd4efd4fd6b754dcf029c3a64",
+            .hash = "zeit-0.6.0-5I6bk7q6AgBdMJxze3D4l9ylQhkviQ_BX9FigDt13MFn",
         },
     },
     .paths = .{"."},
