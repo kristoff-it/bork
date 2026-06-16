@@ -127,24 +127,16 @@ fn handle(self: *Server, stream: Io.net.Stream, cmd: []const u8) !void {
     }
 
     if (std.mem.eql(u8, cmd, "QUIT")) {
-        self.ch.postEvent(GlobalEventUnion{ .remote = .quit });
-    }
-
-    if (std.mem.eql(u8, cmd, "RECONNECT")) {
-        self.ch.postEvent(GlobalEventUnion{ .remote = .reconnect });
-    }
-
-    if (std.mem.eql(u8, cmd, "LINKS")) {
-        self.ch.postEvent(GlobalEventUnion{ .remote = .{ .links = stream } });
-    }
-
-    if (std.mem.eql(u8, cmd, "BAN")) {
-        const user = stream.reader().readUntilDelimiterAlloc(self.gpa, '\n', 4096) catch |err| {
+        try self.ch.postEvent(GlobalEventUnion{ .remote = .quit });
+    } else if (std.mem.eql(u8, cmd, "RECONNECT")) {
+        try self.ch.postEvent(GlobalEventUnion{ .remote = .reconnect });
+    } else if (std.mem.eql(u8, cmd, "LINKS")) {
+        try self.ch.postEvent(GlobalEventUnion{ .remote = .{ .links = stream } });
+    } else if (std.mem.eql(u8, cmd, "BAN")) {
+        const user = stream_reader.interface.takeDelimiterExclusive('\n') catch |err| {
             std.log.debug("remote could read: {}", .{err});
             return;
         };
-
-        defer self.gpa.free(user);
 
         std.log.debug("remote msg: {s}", .{user});
 
@@ -293,7 +285,7 @@ fn handle(self: *Server, stream: Io.net.Stream, cmd: []const u8) !void {
             '\n', '\r', '\t' => return error.BadReason,
         };
 
-        self.ch.postEvent(GlobalEventUnion{
+        try self.ch.postEvent(GlobalEventUnion{
             .remote = .{
                 .afk = .{
                     .target_time = target_time,
