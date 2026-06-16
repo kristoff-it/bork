@@ -70,13 +70,14 @@ const Subcommand = enum {
     youtube,
 };
 
-pub fn main() !void {
-    var gpa_impl = std.heap.GeneralPurposeAllocator(.{}){};
-    const gpa = gpa_impl.allocator();
+pub fn main(init: std.process.Init) !void {
+    const io = init.io;
+    const gpa = init.gpa;
+    const environ = init.environ_map;
 
-    logging.setup(gpa);
+    logging.setup(io, gpa, environ);
 
-    var it = try std.process.ArgIterator.initWithAllocator(gpa);
+    var it = try init.minimal.args.iterateAllocator(gpa);
     defer it.deinit();
 
     _ = it.skip(); // exe name
@@ -91,23 +92,24 @@ pub fn main() !void {
     };
 
     switch (subcommand) {
-        .start => try borkStart(gpa),
-        .send => try remote.client.send(gpa, &it),
-        .quit => try remote.client.quit(gpa, &it),
-        .reconnect => try remote.client.reconnect(gpa, &it),
-        .links => try remote.client.links(gpa, &it),
-        .afk => try remote.client.afk(gpa, &it),
-        .ban => try remote.client.ban(gpa, &it),
-        .youtube, .yt => try remote.client.youtube(gpa, &it),
+        .start => try borkStart(io, gpa, environ),
+        .send => try remote.client.send(io, gpa, environ, &it),
+        .quit => try remote.client.quit(io, gpa, environ),
+        .reconnect => try remote.client.reconnect(io, gpa, environ, &it),
+        .links => try remote.client.links(io, gpa, environ, &it, &stdout.interface),
+        .afk => try remote.client.afk(io, gpa, environ, &it, &stderr.interface),
+        .ban => try remote.client.ban(io, gpa, environ, &it),
+        .youtube, .yt => try remote.client.youtube(io, gpa, environ, &it, &stdout.interface),
         .version => printVersion(),
         .help, .@"--help", .@"-h" => printHelpFatal(),
     }
 }
 
-fn borkStart(gpa: std.mem.Allocator) !void {
-    const config_base = try folders.open(gpa, .local_configuration, .{}) orelse
-        try folders.open(gpa, .home, .{}) orelse
-        try folders.open(gpa, .executable_dir, .{}) orelse
+fn borkStart(io: std.Io, gpa: std.mem.Allocator, environ: *std.process.Environ.Map) !void {
+    const config_base = try folders.open(io, gpa, environ, .local_configuration, .{}) orelse
+        try folders.open(io, gpa, environ, .home, .{}) orelse
+        // TODO: .executable_dir removed
+        // try folders.open(io, gpa, environ, .executable_dir, .{}) orelse
         std.fs.cwd();
 
     try config_base.makePath("bork");
