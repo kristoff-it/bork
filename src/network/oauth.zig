@@ -64,7 +64,7 @@ pub fn createToken(
         std.debug.print(
             \\
             \\Please authenticate with the platform by navigating to the
-            \\following URL: 
+            \\following URL:
             \\
             \\
         , .{});
@@ -72,7 +72,7 @@ pub fn createToken(
         std.debug.print(
             \\
             \\The OAuth token expired, we must refresh it.
-            \\Please re-authenticate: 
+            \\Please re-authenticate:
             \\
             \\
         , .{});
