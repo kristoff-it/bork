@@ -22,11 +22,15 @@ pub fn logFn(
     const l = log_file orelse return;
     const scope_prefix = "(" ++ @tagName(scope) ++ "): ";
     const prefix = "[" ++ @tagName(level) ++ "] " ++ scope_prefix;
-    std.debug.lockStdErr();
-    defer std.debug.unlockStdErr();
+    var buffer: [64]u8 = undefined;
+    // TODO: handle value
+    _ = std.debug.lockStderr(&buffer);
+    defer std.debug.unlockStderr();
 
-    const writer = l.writer();
-    writer.print(prefix ++ format ++ "\n", args) catch return;
+    var writer_buffer: [64]u8 = undefined;
+    var writer = l.writer(log_io, &writer_buffer);
+    writer.interface.print(prefix ++ format ++ "\n", args) catch return;
+    writer.flush() catch return;
 }
 
 pub fn setup(
@@ -59,9 +63,10 @@ fn setup_internal(io: std.Io, gpa: std.mem.Allocator, environ: *const std.proces
     const log_path = try std.fmt.allocPrint(gpa, "bork/{s}", .{log_name});
     defer gpa.free(log_path);
 
-    const file = try cache_base.createFile(log_path, .{ .truncate = false });
-    const end = try file.getEndPos();
-    try file.seekTo(end);
-
-    log_file = file;
+    // TODO: we need to set writer so we can set seek position
+    // const file = try cache_base.createFile(io, log_path, .{ .truncate = false });
+    // const end = try file.length(io);
+    // try file.seekFromEnd(0);
+    //
+    // log_file = file;
 }
