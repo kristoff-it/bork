@@ -43,6 +43,7 @@ pub fn createToken(
     config_base: std.Io.Dir,
     platform: Platform,
     renew: bool,
+    stdin: *std.Io.Reader,
 ) !Token {
     switch (platform) {
         .youtube => {
@@ -104,19 +105,23 @@ pub fn createToken(
         .twitch => "bork/twitch-token.secret",
     };
 
-    var token_file = try config_base.createFile(path, .{ .truncate = true });
-    defer token_file.close();
+    {
+        var token_file = try config_base.createFile(io, path, .{ .truncate = true });
+        defer token_file.close(io);
+        var buffer: [64]u8 = undefined;
+        var w = token_file.writer(io, &buffer);
 
-    switch (platform) {
-        .twitch => {
-            try token_file.writer().print("{s}\n", .{token.twitch});
-        },
-        .youtube => {
-            try token_file.writer().print("{s}\n", .{token.youtube.refresh});
-        },
+        switch (platform) {
+            .twitch => {
+                try w.interface.print("{s}\n", .{token.twitch});
+            },
+            .youtube => {
+                try w.interface.print("{s}\n", .{token.youtube.refresh});
+            },
+        }
+        try w.flush();
     }
 
-    const in = std.io.getStdIn();
     // const original_termios = try std.posix.tcgetattr(in.handle);
     {
         // defer std.posix.tcsetattr(in.handle, .FLUSH, original_termios) catch {};
@@ -135,7 +140,7 @@ pub fn createToken(
             \\
         , .{});
 
-        _ = try in.reader().readByte();
+        _ = try stdin.takeByte();
     }
 
     return token;
@@ -151,12 +156,15 @@ fn waitForToken(io: std.Io, gpa: std.mem.Allocator, platform: Platform) !Token {
     defer tcp_server.deinit(io);
 
     accept: while (true) {
-        var conn = try tcp_server.accept();
-        defer conn.stream.close();
+        var conn = try tcp_server.accept(io);
+        defer conn.close(io);
 
-        var read_buffer: [8000]u8 = undefined;
-        var server = std.http.Server.init(conn, &read_buffer);
-        while (server.state == .ready) {
+        var read_buffer: [8 * 1024]u8 = undefined;
+        var write_buffer: [1024]u8 = undefined;
+        var reader = conn.reader(io, &read_buffer);
+        var writer = conn.writer(io, &write_buffer);
+        var server: std.http.Server = .init(&reader.interface, &writer.interface);
+        while (server.reader.state == .ready) {
             var request = server.receiveHead() catch |err| {
                 std.debug.print("error: {s}\n", .{@errorName(err)});
                 continue :accept;
@@ -226,19 +234,19 @@ fn handleRequest(
                             .{code},
                         );
 
-                        var buf = std.ArrayList(u8).init(arena);
+                        var aw: std.Io.Writer.Allocating = .init(gpa);
 
                         const res = yt.fetch(.{
                             .location = .{ .url = access_exchange_url },
                             .method = .POST,
-                            .response_storage = .{ .dynamic = &buf },
+                            .response_writer = &aw.writer,
                             .extra_headers = &.{.{ .name = "Content-Length", .value = "0" }},
                         }) catch {
                             return error.AccessTokenToRefreshTokenFailed;
                         };
 
                         log.debug("yt access code exchange result = {}", .{res});
-                        log.debug("data = {s}", .{buf.items});
+                        log.debug("data = {s}", .{aw.written()});
 
                         const payload = std.json.parseFromSliceLeaky(struct {
                             access_token: []const u8,
@@ -246,8 +254,8 @@ fn handleRequest(
                             refresh_token: []const u8,
                             scope: []const u8,
                             token_type: []const u8,
-                        }, arena, buf.items, .{}) catch {
-                            log.err("Error while parsing YouTube auth payoload: {s}", .{buf.items});
+                        }, arena, aw.written(), .{}) catch {
+                            log.err("Error while parsing YouTube auth payoload: {s}", .{aw.written()});
                             return error.BadYouTubeAuthData;
                         };
 

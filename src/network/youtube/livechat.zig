@@ -16,6 +16,7 @@ pub var new_chat_id: ?[*:0]const u8 = null;
 
 pub fn poll(n: *Network) !void {
     const io = n.io;
+    const gpa = n.gpa;
     var arena_impl = std.heap.ArenaAllocator.init(n.gpa);
     const arena = arena_impl.allocator();
 
@@ -88,19 +89,20 @@ pub fn poll(n: *Network) !void {
                 livechat.clearRetainingCapacity();
                 try livechat.print(gpa, livechat_url, .{
                     chat_id,
-                    page_token.slice(),
+                    page_token.items,
                 });
                 // std.debug.print("polling {s}\n", .{url_buf.items});
 
                 log.debug("YT POLLING for messages,  url: {s}  token: {s}", .{
-                    livechat.slice(),
+                    livechat.items,
                     token.access,
                 });
-                var buf = std.ArrayList(u8).init(arena);
+                var response_writer: Io.Writer.Allocating = .init(gpa);
+                const buf = response_writer.toArrayList();
                 const chat_res = yt.fetch(.{
-                    .location = .{ .url = livechat.slice() },
+                    .location = .{ .url = livechat.items, },
                     .method = .GET,
-                    .response_storage = .{ .dynamic = &buf },
+                    .response_writer = &response_writer.writer,
                     .extra_headers = &.{
                         .{ .name = "Authorization", .value = token.access },
                     },
@@ -112,7 +114,7 @@ pub fn poll(n: *Network) !void {
 
                 if (chat_res.status != .ok) {
                     log.err("bad reply: {s}\n{s}\n", .{
-                        livechat.slice(),
+                        livechat.items,
                         buf.items,
                     });
                     state = .err;
@@ -122,7 +124,7 @@ pub fn poll(n: *Network) !void {
                     .ignore_unknown_fields = true,
                 }) catch {
                     log.err("bad chat json: {s}\n{s}\n", .{
-                        livechat.slice(),
+                        livechat.items,
                         buf.items,
                     });
                     state = .err;
@@ -130,7 +132,11 @@ pub fn poll(n: *Network) !void {
                 };
 
                 page_token.clearRetainingCapacity();
+<<<<<<< HEAD
                 page_token.appendSliceBounded(messages.nextPageToken) catch {
+=======
+                page_token.appendSlice(gpa, messages.nextPageToken) catch {
+>>>>>>> 25ac86e (network: adapt Writergate)
                     @panic("increase pageToken buffer");
                 };
 
@@ -176,19 +182,22 @@ pub fn findLive(io: std.Io, gpa: std.mem.Allocator, token: oauth.Token.YouTube) 
     };
     defer yt.deinit();
 
-    var buf = std.ArrayList(u8).init(gpa);
-    defer buf.deinit();
+    var aw: std.Io.Writer.Allocating = .init(gpa);
+    defer aw.deinit();
 
     log.debug("YT REQUEST: find live broadcast", .{});
 
     const res = try yt.fetch(.{
         .location = .{ .url = broadcasts_url },
         .method = .GET,
-        .response_storage = .{ .dynamic = &buf },
+        .response_writer = &aw.writer,
         .extra_headers = &.{
             .{ .name = "Authorization", .value = token.access },
         },
     });
+
+    var buf: std.ArrayList(u8) = aw.toArrayList();
+    defer buf.deinit(gpa);
 
     if (res.status != .ok) {
         log.debug("yt broadcast api error = {s}", .{buf.items});

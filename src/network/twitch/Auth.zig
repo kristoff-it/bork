@@ -12,13 +12,13 @@ user_id: []const u8,
 login: []const u8,
 token: []const u8 = "",
 
-pub fn get(io: std.Io, gpa: std.mem.Allocator, config_base: std.Io.Dir) !Auth {
+pub fn get(io: std.Io, gpa: std.mem.Allocator, config_base: std.Io.Dir, stdin: *std.Io.Reader) !Auth {
     const token = blk: {
         const file = config_base.openFile(io, "bork/twitch-token.secret", .{}) catch |err| {
             switch (err) {
                 else => return err,
                 error.FileNotFound => {
-                    const t = try oauth.createToken(io, gpa, config_base, .twitch, false);
+                    const t = try oauth.createToken(io, gpa, config_base, .twitch, false, stdin);
                     break :blk t.twitch;
                 },
             }
@@ -34,7 +34,7 @@ pub fn get(io: std.Io, gpa: std.mem.Allocator, config_base: std.Io.Dir) !Auth {
     return authenticateToken(io, gpa, token) catch |err| switch (err) {
         // Twitch token needs to be renewed
         error.TokenExpired => {
-            const new_token = try oauth.createToken(io, gpa, config_base, .twitch, true);
+            const new_token = try oauth.createToken(io, gpa, config_base, .twitch, true, stdin);
 
             const auth = authenticateToken(io, gpa, new_token.twitch) catch |new_err| {
                 std.debug.print("\nCould not validate the token with Twitch: {s}\n", .{

@@ -372,13 +372,16 @@ fn ircHandler(self: *Network) void {
 fn receiveIrcMessages(self: *Network, io: std.Io) !void {
     while (true) {
         const data = data: {
-            const r = self.socket.reader();
-            const d = try r.readUntilDelimiterAlloc(self.gpa, '\n', 4096);
-            if (d.len >= 1 and d[d.len - 1] == '\r') {
-                break :data d[0 .. d.len - 1];
+            var rb: [1024]u8 = undefined;
+            var r = self.socket.reader(io, &rb);
+            var w: std.Io.Writer.Allocating = .init(self.gpa);
+            defer w.deinit();
+            _ = try r.interface.streamDelimiterLimit(&w.writer, '\n', .limited(4096));
+            if (try r.interface.peekByte() != '\n') {
+                return error.StreamTooLong;
             }
 
-            break :data d;
+            break :data try w.toOwnedSlice();
         };
 
         log.debug("receiveMessages succeded", .{});
@@ -465,17 +468,18 @@ fn send(self: *Network, cmd: Command) !void {
     try self.writer_lock.lock(io);
     defer self.writer_lock.unlock(io);
 
-    const w = self.socket.writer();
+    var buffer: [1024]u8 = undefined;
+    var w = self.socket.writer(io, &buffer);
     switch (cmd) {
         .pong => {
             log.debug("PONG!", .{});
-            try w.print("PONG :tmi.twitch.tv\n", .{});
+            try w.interface.print("PONG :tmi.twitch.tv\n", .{});
         },
         .user => |uc| {
             switch (uc) {
                 .message => |msg| {
                     log.debug("SEND MESSAGE!", .{});
-                    try w.print("PRIVMSG #{s} :{s}\n", .{
+                    try w.interface.print("PRIVMSG #{s} :{s}\n", .{
                         self.auth.twitch.login,
                         msg,
                     });
@@ -483,6 +487,7 @@ fn send(self: *Network, cmd: Command) !void {
             }
         },
     }
+    try w.interface.flush();
 }
 
 pub fn connect(io: std.Io, name: []const u8, token: []const u8) !std.Io.net.Stream {
@@ -500,14 +505,21 @@ pub fn connect(io: std.Io, name: []const u8, token: []const u8) !std.Io.net.Stre
         break :blk it.next().?;
     };
 
-    try socket.writer().print(
-        \\PASS oauth:{0s}
-        \\NICK {1s}
-        \\CAP REQ :twitch.tv/tags
-        \\CAP REQ :twitch.tv/commands
-        \\JOIN #{1s}
-        \\
-    , .{ oua, name });
+    {
+        var buffer: [128]u8 = undefined;
+        var w = socket.writer(io, &buffer);
+        try w.interface.print(
+            \\PASS oauth:{0s}
+            \\NICK {1s}
+            \\CAP REQ :twitch.tv/tags
+            \\CAP REQ :twitch.tv/commands
+            \\JOIN #{1s}
+            \\
+            ,
+            .{ oua, name },
+        );
+        try w.interface.flush();
+    }
 
     // TODO: read what we got back, instead of assuming that
     //       all went well just because the bytes were shipped.

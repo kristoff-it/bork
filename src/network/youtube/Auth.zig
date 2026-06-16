@@ -13,21 +13,23 @@ token: oauth.Token.YouTube = undefined,
 
 const google_oauth = "https://accounts.google.com/o/oauth2/v2/auth?client_id=519150430990-68hvu66hl7vdtpb4u1mngb0qq2hqoiv8.apps.googleusercontent.com&redirect_uri=http://localhost:22890&response_type=token&scope=https://www.googleapis.com/auth/youtube.readonly";
 
-pub fn get(io: std.Io, gpa: std.mem.Allocator, config_base: std.Io.Dir) !Auth {
+pub fn get(io: std.Io, gpa: std.mem.Allocator, config_base: std.Io.Dir, stdin: *std.Io.Reader) !Auth {
     const token: oauth.Token.YouTube = blk: {
         const file = config_base.openFile(io, "bork/youtube-token.secret", .{}) catch |err| {
             switch (err) {
                 else => return err,
                 error.FileNotFound => {
-                    const t = try oauth.createToken(io, gpa, config_base, .youtube, false);
+                    const t = try oauth.createToken(io, gpa, config_base, .youtube, false, stdin);
                     break :blk t.youtube;
                 },
             }
         };
-        const token_raw = try file.reader().readAllAlloc(gpa, 4096);
-        const refresh_token = std.mem.trimRight(u8, token_raw, " \n");
-        break :blk refreshToken(gpa, refresh_token) catch |err| switch (err) {
         defer file.close(io);
+        var buffer: [1024]u8 = undefined;
+        var reader = file.reader(io, &buffer);
+        const token_raw = try reader.interface.readAlloc(gpa, 4096);
+        const refresh_token = std.mem.trimEnd(u8, token_raw, " \n");
+        break :blk refreshToken(io, gpa, refresh_token) catch |err| switch (err) {
             error.InvalidToken => ct: {
                 const t = try oauth.createToken(
                     io,
@@ -35,6 +37,7 @@ pub fn get(io: std.Io, gpa: std.mem.Allocator, config_base: std.Io.Dir) !Auth {
                     config_base,
                     .youtube,
                     true,
+                    stdin,
                 );
                 break :ct t.youtube;
             },
@@ -103,14 +106,14 @@ pub fn refreshToken(
         refresh_token,
     });
 
-    var buf: std.ArrayList(u8) = .empty;
-
     log.debug("YT REQUEST: refresh access token url: {s}", .{refresh_url});
 
+    var aw: std.Io.Writer.Allocating = .init(arena);
+    defer aw.deinit();
     const res = yt.fetch(.{
         .location = .{ .url = refresh_url },
         .method = .POST,
-        .response_storage = .{ .dynamic = &buf },
+        .response_writer = &aw.writer,
         .extra_headers = &.{.{ .name = "Content-Length", .value = "0" }},
     }) catch |err| {
         log.debug("refresh url request failed: {}, url: {s}", .{
@@ -121,7 +124,9 @@ pub fn refreshToken(
     };
 
     log.debug("yt token refresh = {}", .{res});
-    log.debug("data = {s}", .{buf.items});
+    const items = try aw.toOwnedSlice();
+    defer arena.free(items);
+    log.debug("data = {s}", .{items});
 
     if (res.status != .ok) {
         return error.InvalidToken;
@@ -132,8 +137,8 @@ pub fn refreshToken(
         expires_in: i64,
         scope: []const u8,
         token_type: []const u8,
-    }, arena, buf.items, .{}) catch {
-        log.err("Error while parsing YouTube token refresh payoload: {s}", .{buf.items});
+    }, arena, items, .{}) catch {
+        log.err("Error while parsing YouTube token refresh payoload: {s}", .{items});
         return error.BadYouTubeRefreshData;
     };
 
