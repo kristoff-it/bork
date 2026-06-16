@@ -24,7 +24,7 @@ pub fn init(gpa: std.mem.Allocator) EmoteCache {
     return EmoteCache{
         .gpa = gpa,
         .cache = EmoteHashMap.init(gpa),
-        .read_buf = std.ArrayList(u8).init(gpa),
+        .read_buf = .empty,
     };
 }
 
