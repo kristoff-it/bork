@@ -13,23 +13,24 @@ token: oauth.Token.YouTube = undefined,
 
 const google_oauth = "https://accounts.google.com/o/oauth2/v2/auth?client_id=519150430990-68hvu66hl7vdtpb4u1mngb0qq2hqoiv8.apps.googleusercontent.com&redirect_uri=http://localhost:22890&response_type=token&scope=https://www.googleapis.com/auth/youtube.readonly";
 
-pub fn get(gpa: std.mem.Allocator, config_base: std.fs.Dir) !Auth {
+pub fn get(io: std.Io, gpa: std.mem.Allocator, config_base: std.Io.Dir) !Auth {
     const token: oauth.Token.YouTube = blk: {
-        const file = config_base.openFile("bork/youtube-token.secret", .{}) catch |err| {
+        const file = config_base.openFile(io, "bork/youtube-token.secret", .{}) catch |err| {
             switch (err) {
                 else => return err,
                 error.FileNotFound => {
-                    const t = try oauth.createToken(gpa, config_base, .youtube, false);
+                    const t = try oauth.createToken(io, gpa, config_base, .youtube, false);
                     break :blk t.youtube;
                 },
             }
         };
-        defer file.close();
         const token_raw = try file.reader().readAllAlloc(gpa, 4096);
         const refresh_token = std.mem.trimRight(u8, token_raw, " \n");
         break :blk refreshToken(gpa, refresh_token) catch |err| switch (err) {
+        defer file.close(io);
             error.InvalidToken => ct: {
                 const t = try oauth.createToken(
+                    io,
                     gpa,
                     config_base,
                     .youtube,
@@ -41,12 +42,12 @@ pub fn get(gpa: std.mem.Allocator, config_base: std.fs.Dir) !Auth {
         };
     };
 
-    return authenticateToken(gpa, token) catch |err| switch (err) {
+    return authenticateToken(io, gpa, token) catch |err| switch (err) {
         // Twitch token needs to be renewed
         error.InvalidToken => {
-            const new_token = try oauth.createToken(gpa, config_base, .youtube, true);
+            const new_token = try oauth.createToken(io, gpa, config_base, .youtube, true, stdin);
 
-            const auth = authenticateToken(gpa, new_token.youtube) catch |new_err| {
+            const auth = authenticateToken(io, gpa, new_token.youtube) catch |new_err| {
                 std.debug.print("\nCould not validate the token with YouTube: {s}\n", .{
                     @errorName(new_err),
                 });
@@ -65,9 +66,9 @@ pub fn get(gpa: std.mem.Allocator, config_base: std.fs.Dir) !Auth {
     };
 }
 
-pub fn authenticateToken(gpa: std.mem.Allocator, token: oauth.Token.YouTube) !Auth {
+pub fn authenticateToken(io: std.Io, gpa: std.mem.Allocator, token: oauth.Token.YouTube) !Auth {
     std.debug.print("YouTube auth... \n", .{});
-    const chat_id = try livechat.findLive(gpa, token);
+    const chat_id = try livechat.findLive(io, gpa, token);
     return .{
         .enabled = true,
         .token = token,
@@ -80,6 +81,7 @@ const google_refresh = "https://oauth2.googleapis.com/token?client_id=5191504309
 var not_first = false;
 
 pub fn refreshToken(
+    io: std.Io,
     gpa: std.mem.Allocator,
     refresh_token: []const u8,
 ) !oauth.Token.YouTube {
@@ -91,7 +93,10 @@ pub fn refreshToken(
     // if (not_first) @breakpoint();
     // not_first = true;
 
-    var yt: std.http.Client = .{ .allocator = arena };
+    var yt: std.http.Client = .{
+        .io = io,
+        .allocator = arena,
+    };
     defer yt.deinit();
 
     const refresh_url = try std.fmt.allocPrint(arena, google_refresh, .{
@@ -139,6 +144,6 @@ pub fn refreshToken(
             "Bearer {s}",
             .{payload.access_token},
         ),
-        .expires_at_seconds = std.time.timestamp() + payload.expires_in,
+        .expires_at_seconds = std.Io.Timestamp.now(io, .real).toSeconds() + payload.expires_in,
     };
 }

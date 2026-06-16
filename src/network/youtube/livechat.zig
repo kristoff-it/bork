@@ -1,4 +1,5 @@
 const std = @import("std");
+const Io = std.Io;
 const build_opts = @import("build_options");
 const Network = @import("../../Network.zig");
 const oauth = @import("../oauth.zig");
@@ -14,10 +15,14 @@ const livechat_url = "https://www.googleapis.com/youtube/v3/liveChat/messages?pa
 pub var new_chat_id: ?[*:0]const u8 = null;
 
 pub fn poll(n: *Network) !void {
+    const io = n.io;
     var arena_impl = std.heap.ArenaAllocator.init(n.gpa);
     const arena = arena_impl.allocator();
 
-    var yt: std.http.Client = .{ .allocator = n.gpa };
+    var yt: std.http.Client = .{
+        .io = n.io,
+        .allocator = n.gpa,
+    };
 
     var state: union(enum) {
         searching,
@@ -43,16 +48,16 @@ pub fn poll(n: *Network) !void {
             page_token.clearRetainingCapacity();
         }
 
-        const now = std.time.timestamp();
+        const now: Io.Timestamp = .now(io, .real);
         log.debug("YT token expires at: {} now: {} delta: {}", .{
             token.expires_at_seconds,
             now,
-            token.expires_at_seconds -| now,
+            token.expires_at_seconds -| now.toSeconds(),
         });
         // Refresh the token once it's about to expire
-        if (token.expires_at_seconds -| now < 60 * 10) { // <10mins
+        if (token.expires_at_seconds -| now.toSeconds() < 60 * 10) { // <10mins
             log.debug("youtube refreshing token", .{});
-            token = try auth.refreshToken(n.gpa, token.refresh);
+            token = try auth.refreshToken(io, gpa, token.refresh);
             log.debug("youtube token refresh succeeded", .{});
         } else {
             log.debug("Not refreshing YT token as expiry >= {}", .{
@@ -63,10 +68,10 @@ pub fn poll(n: *Network) !void {
         switch (state) {
             .err => {
                 // Sleep for a bit waiting for a new remote command
-                std.time.sleep(1 * std.time.ns_per_s);
+                io.sleep(.fromSeconds(1), .awake) catch unreachable;
             },
             .searching => {
-                const maybe_chat_id = findLive(arena, token) catch {
+                const maybe_chat_id = findLive(io, arena, token) catch {
                     state = .err;
                     continue;
                 };
@@ -77,7 +82,7 @@ pub fn poll(n: *Network) !void {
                 }
 
                 log.debug("YT SEARCHING for active broadcast, sleeping", .{});
-                std.time.sleep(10 * std.time.ns_per_s);
+                io.sleep(.fromSeconds(10), .awake) catch unreachable;
             },
             .attached => |chat_id| {
                 livechat.clearRetainingCapacity();
@@ -156,7 +161,7 @@ pub fn poll(n: *Network) !void {
                 const delay = @max(5000, messages.pollingIntervalMillis) * std.time.ns_per_ms;
 
                 log.debug("YT POLLING sleep for {}", .{delay});
-                std.time.sleep(delay);
+                io.sleep(.fromSeconds(@intCast(delay)), .awake) catch unreachable;
             },
         }
     }
@@ -164,8 +169,11 @@ pub fn poll(n: *Network) !void {
 
 // Searches for an active livestream and doubles as a token validation
 // function since the call will fail if the token has expired.
-pub fn findLive(gpa: std.mem.Allocator, token: oauth.Token.YouTube) !?[]const u8 {
-    var yt: std.http.Client = .{ .allocator = gpa };
+pub fn findLive(io: std.Io, gpa: std.mem.Allocator, token: oauth.Token.YouTube) !?[]const u8 {
+    var yt: std.http.Client = .{
+        .io = io,
+        .allocator = gpa,
+    };
     defer yt.deinit();
 
     var buf = std.ArrayList(u8).init(gpa);

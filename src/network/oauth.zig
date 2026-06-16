@@ -38,8 +38,9 @@ pub const Token = union(Platform) {
     };
 };
 pub fn createToken(
+    io: std.Io,
     gpa: std.mem.Allocator,
-    config_base: std.fs.Dir,
+    config_base: std.Io.Dir,
     platform: Platform,
     renew: bool,
 ) !Token {
@@ -93,7 +94,7 @@ pub fn createToken(
 
     std.debug.print("\n\nWaiting...\n", .{});
 
-    const token = waitForToken(gpa, platform) catch |err| {
+    const token = waitForToken(io, gpa, platform) catch |err| {
         std.debug.print("\nAn error occurred while waiting for the OAuth flow to complete: {s}\n", .{@errorName(err)});
         std.process.exit(1);
     };
@@ -140,13 +141,14 @@ pub fn createToken(
     return token;
 }
 
-fn waitForToken(gpa: std.mem.Allocator, platform: Platform) !Token {
-    const address = try std.net.Address.parseIp("127.0.0.1", 22890);
-    var tcp_server = try address.listen(.{
+fn waitForToken(io: std.Io, gpa: std.mem.Allocator, platform: Platform) !Token {
+    const address = try std.Io.net.IpAddress.parseIp4("127.0.0.1", 22890);
+    var tcp_server = try address.listen(io, .{
         .reuse_address = true,
-        .reuse_port = true,
+        // TODO: seems like not needed anymore
+        // .reuse_port = true,
     });
-    defer tcp_server.deinit();
+    defer tcp_server.deinit(io);
 
     accept: while (true) {
         var conn = try tcp_server.accept();
@@ -159,7 +161,7 @@ fn waitForToken(gpa: std.mem.Allocator, platform: Platform) !Token {
                 std.debug.print("error: {s}\n", .{@errorName(err)});
                 continue :accept;
             };
-            const maybe_auth = try handleRequest(gpa, &request, platform);
+            const maybe_auth = try handleRequest(io, gpa, &request, platform);
             return maybe_auth orelse continue :accept;
         }
     }
@@ -167,6 +169,7 @@ fn waitForToken(gpa: std.mem.Allocator, platform: Platform) !Token {
 
 const collect_fragment_html = @embedFile("collect_fragment.html");
 fn handleRequest(
+    io: std.Io,
     gpa: std.mem.Allocator,
     request: *std.http.Server.Request,
     platform: Platform,
@@ -211,7 +214,10 @@ fn handleRequest(
 
                         const arena = arena_impl.allocator();
 
-                        var yt: std.http.Client = .{ .allocator = arena };
+                        var yt: std.http.Client = .{
+                            .io = io,
+                            .allocator = arena,
+                        };
                         defer yt.deinit();
 
                         const access_exchange_url = try std.fmt.allocPrint(
@@ -253,7 +259,7 @@ fn handleRequest(
                                     .{payload.access_token},
                                 ),
                                 .refresh = try gpa.dupe(u8, payload.refresh_token),
-                                .expires_at_seconds = std.time.timestamp() + payload.expires_in,
+                                .expires_at_seconds = std.Io.Timestamp.now(io, .real).toSeconds() + payload.expires_in,
                             },
                         };
                     }

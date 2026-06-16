@@ -12,29 +12,31 @@ user_id: []const u8,
 login: []const u8,
 token: []const u8 = "",
 
-pub fn get(gpa: std.mem.Allocator, config_base: std.fs.Dir) !Auth {
+pub fn get(io: std.Io, gpa: std.mem.Allocator, config_base: std.Io.Dir) !Auth {
     const token = blk: {
-        const file = config_base.openFile("bork/twitch-token.secret", .{}) catch |err| {
+        const file = config_base.openFile(io, "bork/twitch-token.secret", .{}) catch |err| {
             switch (err) {
                 else => return err,
                 error.FileNotFound => {
-                    const t = try oauth.createToken(gpa, config_base, .twitch, false);
+                    const t = try oauth.createToken(io, gpa, config_base, .twitch, false);
                     break :blk t.twitch;
                 },
             }
         };
-        defer file.close();
-        const token_raw = try file.reader().readAllAlloc(gpa, 4096);
-        const token = std.mem.trimRight(u8, token_raw, " \n");
+        defer file.close(io);
+        var buffer: [1024]u8 = undefined;
+        var reader = file.reader(io, &buffer);
+        const token_raw = try reader.interface.readAlloc(gpa, 4096);
+        const token = std.mem.trimEnd(u8, token_raw, " \n");
         break :blk token;
     };
 
-    return authenticateToken(gpa, token) catch |err| switch (err) {
+    return authenticateToken(io, gpa, token) catch |err| switch (err) {
         // Twitch token needs to be renewed
         error.TokenExpired => {
-            const new_token = try oauth.createToken(gpa, config_base, .twitch, true);
+            const new_token = try oauth.createToken(io, gpa, config_base, .twitch, true);
 
-            const auth = authenticateToken(gpa, new_token.twitch) catch |new_err| {
+            const auth = authenticateToken(io, gpa, new_token.twitch) catch |new_err| {
                 std.debug.print("\nCould not validate the token with Twitch: {s}\n", .{
                     @errorName(new_err),
                 });
@@ -53,7 +55,7 @@ pub fn get(gpa: std.mem.Allocator, config_base: std.fs.Dir) !Auth {
     };
 }
 
-pub fn authenticateToken(gpa: std.mem.Allocator, token: []const u8) !Auth {
+pub fn authenticateToken(io: std.Io, gpa: std.mem.Allocator, token: []const u8) !Auth {
     if (build_opts.local) return .{
         .user_id = "$user_id",
         .login = "$login",
@@ -69,8 +71,7 @@ pub fn authenticateToken(gpa: std.mem.Allocator, token: []const u8) !Auth {
     );
     defer gpa.free(header_oauth);
 
-    const result = try std.process.Child.run(.{
-        .allocator = gpa,
+    const result = try std.process.spawn(io, .{
         .argv = &.{
             "curl",
             "-s",
@@ -78,6 +79,8 @@ pub fn authenticateToken(gpa: std.mem.Allocator, token: []const u8) !Auth {
             header_oauth,
             url,
         },
+        .stdout = .pipe,
+        .stderr = .pipe,
     });
 
     var arr: std.ArrayList(u8) = .empty;
