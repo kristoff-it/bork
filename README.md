@@ -4,7 +4,7 @@
 <img src=".github/bork.png"  align="right" width="350px"/>
 
 ### Main features
-- Displays Twitch emotes in the terminal, **including your own custom emotes!**  
+- Displays Twitch emotes in the terminal, **including your own custom emotes!**
 - Understands Twitch-specific concepts (subcriptions, gifted subs, ...). 
 - Displays badges for your subs, mods, etc.
 - Supports clearing chat and deletes messages from banned users. 
@@ -44,7 +44,6 @@ Supported subcommands:
 - `version` prints the version
 
 ## Build
-Requires a **very** recent version of Zig, as bork development tracks Zig master.
 
 Run `zig build` to obtain a debug build of bork.
 
