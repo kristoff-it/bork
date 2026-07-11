@@ -2,6 +2,7 @@
     .name = .bork,
     .version = "0.1.0",
     .fingerprint = 0x3489cf2d5a811ca2,
+    .minimum_zig_version = "0.14.1",
     .dependencies = .{
         .vaxis = .{
             .url = "git+https://github.com/rockorager/libvaxis#0c2b8046e4f657710ef02b77e070c116852b3a2c",
