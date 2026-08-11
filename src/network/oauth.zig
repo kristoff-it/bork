@@ -240,6 +240,7 @@ fn handleRequest(
                             refresh_token: []const u8,
                             scope: []const u8,
                             token_type: []const u8,
+                            refresh_token_expires_in: i64,
                         }, arena, buf.items, .{}) catch {
                             log.err("Error while parsing YouTube auth payoload: {s}", .{buf.items});
                             return error.BadYouTubeAuthData;

@@ -127,6 +127,7 @@ pub fn refreshToken(
         expires_in: i64,
         scope: []const u8,
         token_type: []const u8,
+        refresh_token_expires_in: i64,
     }, arena, buf.items, .{}) catch {
         log.err("Error while parsing YouTube token refresh payoload: {s}", .{buf.items});
         return error.BadYouTubeRefreshData;

@@ -154,6 +154,8 @@ pub fn poll(n: *Network) !void {
                 const delay = @max(5000, messages.pollingIntervalMillis) * std.time.ns_per_ms;
 
                 log.debug("YT POLLING sleep for {}", .{delay});
+                yt.deinit();
+                yt = .{ .allocator = n.gpa };
                 std.time.sleep(delay);
             },
         }
